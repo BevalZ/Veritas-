@@ -34,11 +34,34 @@ python >= 3.10
 ```
 
 ### 2. 配置API Key
-修改 `paper_audit.py` 头部配置区：
+本工具支持所有**OpenAI兼容LLM**（OpenAI/DeepSeek/通义千问/豆包/Ollama本地部署等），采用外部配置文件避免泄露密钥：
+```bash
+# 复制配置模板
+cp config.example.py config.py
+```
+编辑`config.py`填写你的配置：
+#### LLM配置（必填，支持所有OpenAI兼容API）
 ```python
-# 仅使用本地统计检测可跳过配置
-LLM_API_KEY = "你的Mimo API Key"
-MINERU_TOKEN = "你的MinerU API Token（可选，仅大文件需要）"
+# 示例1: OpenAI官方
+LLM_API_KEY = "sk-xxxxxx"
+LLM_API_URL = "https://api.openai.com/v1/chat/completions"
+LLM_MODEL = "gpt-3.5-turbo"
+
+# 示例2: DeepSeek
+# LLM_API_KEY = "sk-xxxxxx"
+# LLM_API_URL = "https://api.deepseek.com/v1/chat/completions"
+# LLM_MODEL = "deepseek-chat"
+
+# 示例3: 本地Ollama（完全离线）
+# LLM_API_KEY = "ollama"
+# LLM_API_URL = "http://localhost:11434/v1/chat/completions"
+# LLM_MODEL = "qwen2:7b"
+```
+#### MinerU配置（可选）
+- 小文件（≤10MB/≤20页）：无需配置，自动使用内置免Token的Agent API
+- 大文件（>10MB/>20页）：到[MinerU官网](https://mineru.net/apiManage/docs)获取Token填写即可
+```python
+MINERU_TOKEN = "你的MinerU Token（可选）"
 ```
 
 ### 3. 运行检测

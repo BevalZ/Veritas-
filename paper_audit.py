@@ -23,10 +23,10 @@ try:
     LLM_MODEL = getattr(config, "LLM_MODEL", "mimo-v2.5-pro")
     MINERU_TOKEN = getattr(config, "MINERU_TOKEN", "")
 except ImportError:
-    # 未找到config.py使用空值，会自动降级到可用功能
+    # 未找到config.py使用默认OpenAI兼容配置，按实际使用修改
     LLM_API_KEY = ""
-    LLM_API_URL = "https://fufu.iqach.top/v1/chat/completions"
-    LLM_MODEL = "mimo-v2.5-pro"
+    LLM_API_URL = "https://api.openai.com/v1/chat/completions"
+    LLM_MODEL = "gpt-3.5-turbo"
     MINERU_TOKEN = ""
 
 MINERU_BASE = "https://mineru.net"
