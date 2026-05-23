@@ -1,0 +1,14 @@
+# Veritas - 学术论文自动审查工具 依赖列表
+# 安装: pip install -r requirements.txt
+
+# === 核心依赖 ===
+# Python 3.8+ (标准库: json, re, argparse, urllib, zlib, math, collections, os, mimetypes, fnmatch, csv, pathlib)
+
+# === 可选依赖（目录级多格式审查） ===
+python-docx>=0.8.11    # 读取Word文档(.docx)
+openpyxl>=3.1.0        # 读取Excel表格(.xlsx/.xlsm)
+lxml>=4.9.0            # python-docx的XML解析依赖
+pymupdf>=1.24.0        # PDF图片提取（用于--image-detect功能）
+
+# === 推荐依赖 ===
+# requests>=2.28.0     # 更稳定的HTTP请求（当前使用urllib标准库）

@@ -1,0 +1,29 @@
+# Secrets / local config
+config.py
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Paper Audit runtime outputs
+*.paper_audit.log
+*.audit.html
+*.audit.md
+*.audit.json
+.*.paper_audit_resume/
+paper_audit_path_test*/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

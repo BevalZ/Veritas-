@@ -1,0 +1,21 @@
+[project]
+name = "paper-audit"
+version = "0.1.0"
+description = "Academic paper audit tool with local checks, MinerU extraction, resume cache, and OpenAI-compatible LLM review."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Paper Audit Contributors"}]
+dependencies = [
+  "python-docx>=0.8.11",
+  "openpyxl>=3.1.0",
+  "lxml>=4.9.0",
+  "pymupdf>=1.24.0",
+]
+
+[project.scripts]
+paper-audit = "paper_audit:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
