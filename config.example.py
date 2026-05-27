@@ -16,3 +16,8 @@ LLM_RETRIES = 2
 # Optional MinerU token. Small files may work without this depending on selected mode/API.
 MINERU_TOKEN = ""
 MINERU_BASE = "https://mineru.net"
+
+# Optional GLM multimodal API for image semantic understanding.
+GLM_API_KEY = "YOUR_BIGMODEL_API_KEY"
+GLM_API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+GLM_VISION_MODEL = "glm-4.6v-flash"

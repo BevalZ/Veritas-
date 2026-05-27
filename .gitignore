@@ -13,6 +13,7 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
 
 # Paper Audit runtime outputs
 *.paper_audit.log

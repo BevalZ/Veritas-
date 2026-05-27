@@ -7,9 +7,9 @@
 输入PDF路径 → MinerU转Markdown → 本地统计检测 + LLM语义分析 → 输出md格式报告
 用法: python paper_audit.py <pdf_path> [--mineru] [--max-chars 8000] [--output report.md]
 """
-import re, json, time, argparse, urllib.request, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, builtins, hashlib
+import re, json, time, argparse, urllib.request, urllib.parse, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, builtins, hashlib, html, base64, io
 from pathlib import Path
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Any
 
 # Windows/重定向控制台默认GBK时，emoji/中文符号可能触发UnicodeEncodeError；统一兜底为UTF-8。
 try:
@@ -114,6 +114,10 @@ def resume_event(resume_dir: Path, step: str, status: str, detail: str = "", **e
         print(f"⚠️ 写入断点记录失败: {e}")
 
 
+def _allow_llm_cache_read(no_resume=False, llm_cache_only=False):
+    return (not bool(no_resume)) or bool(llm_cache_only)
+
+
 def _text_fingerprint(text: str, extra: str = ""):
     h = hashlib.sha256()
     h.update((text or "").encode("utf-8", errors="ignore"))
@@ -124,6 +128,9 @@ def _text_fingerprint(text: str, extra: str = ""):
 # LLM运行参数：由CLI覆盖。默认保守，避免一次请求无限阻塞。
 LLM_TIMEOUT = 45
 LLM_RETRIES = 1
+EXTRACT_CACHE_VERSION = 5
+MIN_IMAGE_BYTES = 5000
+IMAGE_SEMANTIC_CACHE_VERSION = 3
 
 
 def load_mykey_llm_config(provider_name: str = None, ignore_config: bool = False):
@@ -202,6 +209,10 @@ LLM_API_KEY = ""
 LLM_API_URL = "https://api.openai.com/v1/chat/completions"
 LLM_MODEL = "gpt-3.5-turbo"
 MINERU_TOKEN = ""
+MINERU_BASE = "https://mineru.net"
+GLM_API_KEY = ""
+GLM_API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+GLM_VISION_MODEL = "glm-4.6v-flash"
 
 # 优先级1: config.py
 try:
@@ -210,9 +221,17 @@ try:
     LLM_API_URL = getattr(config, "LLM_API_URL", LLM_API_URL)
     LLM_MODEL = getattr(config, "LLM_MODEL", LLM_MODEL)
     MINERU_TOKEN = getattr(config, "MINERU_TOKEN", "")
+    GLM_API_KEY = getattr(config, "GLM_API_KEY", os.environ.get("GLM_API_KEY", GLM_API_KEY))
+    GLM_API_URL = getattr(config, "GLM_API_URL", os.environ.get("GLM_API_URL", GLM_API_URL))
+    GLM_VISION_MODEL = getattr(config, "GLM_VISION_MODEL", os.environ.get("GLM_VISION_MODEL", GLM_VISION_MODEL))
+    LLM_TIMEOUT = int(getattr(config, "LLM_TIMEOUT", LLM_TIMEOUT))
+    LLM_RETRIES = int(getattr(config, "LLM_RETRIES", LLM_RETRIES))
+    MINERU_BASE = getattr(config, "MINERU_BASE", MINERU_BASE)
     print("✅ 从 config.py 加载配置")
 except ImportError:
     pass
+except (TypeError, ValueError) as e:
+    print(f"⚠️ config.py 中的数值配置无效，已使用默认值: {e}")
 
 # 优先级2: mykey.py（兼容本地开发环境）
 if not LLM_API_KEY:
@@ -233,6 +252,8 @@ if not LLM_API_KEY:
         # 加载 MinerU token
         if not MINERU_TOKEN:
             MINERU_TOKEN = getattr(mykey, "MINERU_TOKEN", "")
+        if not GLM_API_KEY:
+            GLM_API_KEY = getattr(mykey, "GLM_API_KEY", os.environ.get("GLM_API_KEY", ""))
         sys.path = _sys_path_backup
     except (ImportError, Exception) as e:
         sys.path = _sys_path_backup if '_sys_path_backup' in dir() else sys.path
@@ -240,8 +261,8 @@ if not LLM_API_KEY:
 
 if not LLM_API_KEY:
     print("⚠️ 未找到LLM API配置，请创建 config.py 或确保 mykey.py 可用")
-
-MINERU_BASE = "https://mineru.net"
+if not GLM_API_KEY:
+    GLM_API_KEY = os.environ.get("GLM_API_KEY", "")
 
 # ─── 欺诈模式知识库加载 ───
 FRAUD_PATTERNS_PATH = Path(__file__).parent / "fraud_patterns.json"
@@ -276,6 +297,12 @@ SYSTEM_PROMPT_TPL = """你是一个严厉的学术论文审查专家（耿同学
 ## 检查项（耿同学六式 + 7类红旗）
 - 耿同学六式：图片复用/数据造假/图片拼接/统计异常/产出异常/方法矛盾
 - 7类红旗：引用质量差/逻辑谬误/方法论缺陷/可疑结论/同行评审缺失/利益冲突未披露/语言质量差
+
+## OCR/表格噪声约束
+- 输入中可能包含由MinerU/OCR生成的结构化标记，如[[TABLE_START]]、[[TABLE_END]]、[[FIGURE]]、[[EXTRACTION_NOTE]]。
+- 不得仅因Markdown表格错位、列名断裂、OCR漏字、分页续表、表格被分块或图片转写不清晰判定为🚩红旗。
+- 表格相关红旗必须基于明确学术证据：同一指标跨正文/表格矛盾、样本量/分组不自洽、p值/置信区间/均值标准差逻辑冲突、图表结论与正文明确冲突。
+- 对提取不清晰但无明确学术矛盾的内容，应判为⚠️疑点或✅通过，并在detail中写“需人工核对原PDF/表格”，不要写成造假结论。
 
 请按以下JSON格式输出（确保JSON合法，无多余内容）：
 {{
@@ -514,19 +541,32 @@ def mineru_extract_file(file_path, model_version="vlm", language="ch",
 
 
 def _download_zip_and_extract_md(zip_url, output_dir=None, source_name=None, batch_id=None):
-    """下载zip、按输入同目录保存，并提取Markdown文件（纯标准库实现）"""
-    try:
-        zip_data, _ = _http_request(zip_url, "GET", timeout=60)
-        if output_dir or _RUN_OUTPUT_DIR:
-            save_mineru_artifacts(zip_url, zip_data, source_name or "mineru", output_dir=output_dir, batch_id=batch_id)
-    except Exception as e:
-        print(f"  ❌ 下载zip失败: {e}")
+    """下载zip、按输入同目录保存，并优先提取MinerU结构化文本。"""
+    zip_data = None
+    last_err = None
+    for attempt in range(3):
+        try:
+            if attempt:
+                print(f"  ↻ MinerU zip下载重试 {attempt}/2...")
+            zip_data, _ = _http_request(zip_url, "GET", timeout=180)
+            if output_dir or _RUN_OUTPUT_DIR:
+                save_mineru_artifacts(zip_url, zip_data, source_name or "mineru", output_dir=output_dir, batch_id=batch_id)
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(3 * (attempt + 1))
+    if zip_data is None:
+        print(f"  ❌ 下载zip失败: {last_err}")
         return None
 
     # 用 zipfile 从内存解析
     import zipfile, io
     try:
         with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            structured = _extract_mineru_structured_text(zf)
+            if structured:
+                return structured
+
             # 找到 .md 文件
             md_files = [n for n in zf.namelist() if n.endswith(".md")]
             if not md_files:
@@ -561,6 +601,111 @@ def _download_zip_and_extract_md(zip_url, output_dir=None, source_name=None, bat
             return zip_data.decode("utf-8", errors="ignore")
         except:
             return None
+
+
+def _extract_mineru_structured_text(zf):
+    """Build audit-oriented text from MinerU content_list JSON when available."""
+    names = zf.namelist()
+    candidates = sorted(
+        [n for n in names if n.endswith("_content_list_v2.json")],
+        key=lambda n: zf.getinfo(n).file_size,
+        reverse=True,
+    )
+    candidates.extend(sorted(
+        [n for n in names if n.endswith("_content_list.json")],
+        key=lambda n: zf.getinfo(n).file_size,
+        reverse=True,
+    ))
+    for name in candidates:
+        try:
+            data = json.loads(zf.read(name).decode("utf-8", errors="replace"))
+            text = _format_mineru_content_list(data)
+            if text and len(text.strip()) > 200:
+                print(f"  🧱 使用MinerU结构化内容: {Path(name).name}")
+                return text
+        except Exception as e:
+            print(f"  ⚠️ MinerU结构化内容解析失败 {name}: {e}")
+    return None
+
+
+def _format_mineru_content_list(data):
+    """Convert MinerU content_list entries to stable text blocks for audit."""
+    if isinstance(data, dict):
+        for key in ("content", "content_list", "list", "data"):
+            if isinstance(data.get(key), list):
+                data = data[key]
+                break
+    if not isinstance(data, list):
+        return None
+
+    parts = [
+        "[[EXTRACTION_NOTE]] MinerU structured extraction is used. Table layout/OCR artifacts are extraction noise; do not treat formatting defects alone as academic misconduct. [[/EXTRACTION_NOTE]]"
+    ]
+    table_idx = 0
+    figure_idx = 0
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        block_type = _mineru_block_type(item)
+        page = item.get("page_idx", item.get("page", item.get("page_no", "?")))
+        text = _mineru_block_text(item).strip()
+        if not text:
+            continue
+        if block_type == "table":
+            table_idx += 1
+            parts.append(_format_mineru_table_block(text, page, table_idx))
+        elif block_type in {"image", "figure"}:
+            figure_idx += 1
+            parts.append(f"[[FIGURE page={page} id={figure_idx}]]\n{text}\n[[/FIGURE]]")
+        else:
+            parts.append(f"[[BLOCK type={block_type} page={page}]]\n{text}\n[[/BLOCK]]")
+    return "\n\n".join(parts)
+
+
+def _mineru_block_type(item):
+    raw = str(item.get("type") or item.get("category") or item.get("block_type") or "").lower()
+    if "table" in raw:
+        return "table"
+    if raw in {"image", "figure"} or "image" in raw or "figure" in raw:
+        return "figure"
+    if "title" in raw:
+        return "title"
+    if "equation" in raw or "formula" in raw:
+        return "formula"
+    return raw or "text"
+
+
+def _mineru_block_text(item):
+    for key in ("text", "md", "content", "html", "table_body", "latex", "caption"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    texts = []
+    for key in ("table_caption", "image_caption", "img_caption"):
+        value = item.get(key)
+        if isinstance(value, list):
+            texts.extend(str(v) for v in value if str(v).strip())
+        elif isinstance(value, str) and value.strip():
+            texts.append(value)
+    return "\n".join(texts)
+
+
+def _format_mineru_table_block(text, page, table_idx):
+    text = _normalize_markdown_table(text)
+    return (
+        f"[[TABLE_START page={page} id={table_idx}]]\n"
+        "[[EXTRACTION_NOTE]] This table was extracted by MinerU/OCR. Broken alignment, merged cells, or missing separators are extraction artifacts unless numeric contradictions are explicit. [[/EXTRACTION_NOTE]]\n"
+        f"{text}\n"
+        "[[TABLE_END]]"
+    )
+
+
+def _normalize_markdown_table(text):
+    lines = [re.sub(r"\s+", " ", line).strip() for line in str(text).splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        return ""
+    return "\n".join(lines)
 
 
 def mineru_extract(file_path, language="ch", output_dir=None):
@@ -673,28 +818,38 @@ def find_project_files(root_path: Path) -> Tuple[Dict, List[Path]]:
     """
     SUPPORTED_EXTS = {".pdf", ".docx", ".xlsx", ".xlsm", ".csv", ".txt", ".md"}
     SUPPLEMENT_KEYWORDS = {"supplement", "supp", "补充材料", "原始数据", "data", "source", "appendix"}
+    REFERENCE_KEYWORDS = {"reference", "references", "bibliography", "参考文献", "参考资料"}
+    GENERATED_MARKERS = (".audit.", ".paper_audit.", ".mineru.", ".mineru_")
     
     file_categories = {
         "main_paper": None,
         "supplements": [],
         "data_files": [],
+        "references": [],
         "other": []
     }
     all_files = []
     
-    for root, _, files in os.walk(root_path):
+    for root, dirs, files in os.walk(root_path):
+        dirs[:] = [d for d in dirs if ".paper_audit_resume" not in d and "__pycache__" not in d]
         for file in files:
             fpath = Path(root) / file
             ext = fpath.suffix.lower()
             if ext not in SUPPORTED_EXTS:
                 continue
+            lower_name = fpath.name.lower()
+            if any(marker in lower_name for marker in GENERATED_MARKERS):
+                continue
             
-            fname = fpath.name.lower()
+            fname = lower_name
             all_files.append(fpath)
             
-            # 分类
-            if ext == ".pdf" and (file_categories["main_paper"] is None or 
-                                 ("main" in fname or "paper" in fname or "article" in fname)):
+            # 分类。PDF文件名里的reference常见于文章下载名/DOI附件名，不能仅凭文件名
+            # 把PDF排除出主体审查；参考文献PDF若不是主文，会在主文选择后再移入other/refs。
+            if ext != ".pdf" and any(kw in fname for kw in REFERENCE_KEYWORDS):
+                file_categories["references"].append(fpath)
+            elif ext == ".pdf" and (file_categories["main_paper"] is None or 
+                                 _main_paper_score(fpath) > _main_paper_score(file_categories["main_paper"])):
                 file_categories["main_paper"] = fpath
             elif any(kw in fname for kw in SUPPLEMENT_KEYWORDS):
                 file_categories["supplements"].append(fpath)
@@ -703,13 +858,85 @@ def find_project_files(root_path: Path) -> Tuple[Dict, List[Path]]:
             else:
                 file_categories["other"].append(fpath)
     
-    # 未找到明确主论文则取最大的PDF
-    if file_categories["main_paper"] is None:
-        pdf_files = [f for f in all_files if f.suffix.lower() == ".pdf"]
-        if pdf_files:
-            file_categories["main_paper"] = sorted(pdf_files, key=lambda x: x.stat().st_size, reverse=True)[0]
+    # 未找到明确主论文则取评分最高的PDF
+    pdf_files = [f for f in all_files if f.suffix.lower() == ".pdf"]
+    if file_categories["main_paper"] is None and pdf_files:
+        file_categories["main_paper"] = max(pdf_files, key=_main_paper_score)
+
+    # 主文PDF之外的PDF不要因为文件名含reference被剥离到参考文献审查；保留在主体审查中，
+    # 让后续参考文献剥离逻辑只处理正文里的References段落。
+    for pdf in pdf_files:
+        if pdf == file_categories["main_paper"]:
+            continue
+        if pdf not in file_categories["supplements"] and pdf not in file_categories["other"]:
+            file_categories["other"].append(pdf)
     
     return file_categories, all_files
+
+
+def _main_paper_score(path: Path):
+    name = path.name.lower()
+    stem = path.stem.lower()
+    score = 0
+    try:
+        score += min(path.stat().st_size / 1024 / 1024, 20)
+    except Exception:
+        pass
+    if any(token in stem for token in ("article", "paper", "main", "manuscript")):
+        score += 12
+    if re.search(r"(?:^|[_\-.])s(?:upp)?\d{1,3}(?:$|[_\-.])|supp|supplement|moesm|esm|appendix|附录|补充", stem):
+        score -= 25
+    if "reference" in stem or "references" in stem:
+        score -= 2
+    if re.search(r"\b(?:doi|s?10\.|s\d{5})", stem):
+        score += 1
+    return score
+
+
+def _is_missing_meta_value(value):
+    return value is None or value == "" or value == "N/A"
+
+
+def normalize_run_meta(meta, input_path=None, full_text=None):
+    """Fill display/report metadata that may be missing from older resume caches."""
+    normalized = dict(meta or {})
+    if full_text is not None and _is_missing_meta_value(normalized.get("total_chars")):
+        normalized["total_chars"] = len(full_text or "")
+
+    if input_path is None:
+        return normalized
+
+    try:
+        path = Path(input_path)
+    except TypeError:
+        return normalized
+    if not path.exists():
+        return normalized
+
+    if path.is_dir():
+        normalized.setdefault("input_type", "directory")
+        if _is_missing_meta_value(normalized.get("extractor")):
+            normalized["extractor"] = "directory_multi_format"
+        if _is_missing_meta_value(normalized.get("extraction_method")):
+            normalized["extraction_method"] = normalized.get("extractor") or "directory_multi_format"
+        need_size = _is_missing_meta_value(normalized.get("size_mb"))
+        need_count = _is_missing_meta_value(normalized.get("total_files"))
+        if need_size or need_count:
+            try:
+                _, all_files = find_project_files(path)
+                if need_size:
+                    normalized["size_mb"] = round(sum(p.stat().st_size for p in all_files if p.exists()) / 1024 / 1024, 2)
+                if need_count:
+                    normalized["total_files"] = len(all_files)
+            except Exception:
+                pass
+    else:
+        if _is_missing_meta_value(normalized.get("size_mb")):
+            normalized["size_mb"] = round(path.stat().st_size / 1024 / 1024, 2)
+        if _is_missing_meta_value(normalized.get("extraction_method")):
+            normalized["extraction_method"] = normalized.get("source") or normalized.get("extractor") or f"{path.suffix.lower().lstrip('.') or 'file'}_text"
+
+    return normalized
 
 
 def extract_text_from_file(file_path: Path, max_chars_per_file=None, use_mineru=False, mineru_lang="ch", output_dir=None) -> str:
@@ -810,10 +1037,10 @@ def extract_pdf_text(filepath, max_chars=8000):
 # ══════════════════════════════════════════════════════════════
 
 def smart_chunk_text(text, chunk_size=8000, overlap=1000):
-    """智能分块：按段落边界切割，保留重叠区确保上下文连贯。
+    """智能分块：按结构边界切割，保留重叠区确保上下文连贯。
 
-    关键保证：任何返回块都不会超过 chunk_size。MinerU Markdown 中常出现超长表格/图片
-    JSON/参考文献段落，旧实现会把单个超长段落直接塞进一个块，导致 LLM 网关 504。
+    带 [[TABLE_START]] 标记的表格作为原子块处理；超长表格按行拆分并重复表头和
+    提取提示，避免半张表被LLM误判为数据异常。
     返回: [(chunk_text, chunk_index, total_chunks), ...]
     """
     if chunk_size <= 0:
@@ -821,7 +1048,6 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
     overlap = max(0, min(overlap, chunk_size // 4))
 
     def hard_split(s, size):
-        """把单段硬切到 size 内，优先在换行/句号附近切。"""
         parts = []
         s = s or ""
         while len(s) > size:
@@ -837,50 +1063,88 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
             parts.append(s.strip())
         return parts
 
+    def split_structured_blocks(s):
+        blocks = []
+        pos = 0
+        pattern = re.compile(r"\[\[TABLE_START[^\]]*\]\][\s\S]*?\[\[TABLE_END\]\]", re.IGNORECASE)
+        for match in pattern.finditer(s or ""):
+            prefix = s[pos:match.start()]
+            blocks.extend(("text", p.strip()) for p in re.split(r'\n{2,}', prefix) if p.strip())
+            blocks.append(("table", match.group().strip()))
+            pos = match.end()
+        suffix = s[pos:]
+        blocks.extend(("text", p.strip()) for p in re.split(r'\n{2,}', suffix) if p.strip())
+        return blocks
+
+    def split_table_block(block, size):
+        if len(block) <= size:
+            return [block]
+        start = re.search(r"\[\[TABLE_START[^\]]*\]\]", block)
+        note = re.search(r"\[\[EXTRACTION_NOTE\]\][\s\S]*?\[\[/EXTRACTION_NOTE\]\]", block)
+        header = start.group() if start else "[[TABLE_START split=true]]"
+        if note:
+            header += "\n" + note.group()
+        body = re.sub(r"\[\[TABLE_START[^\]]*\]\]", "", block, count=1)
+        body = re.sub(r"\[\[EXTRACTION_NOTE\]\][\s\S]*?\[\[/EXTRACTION_NOTE\]\]", "", body, count=1)
+        body = body.replace("[[TABLE_END]]", "").strip()
+        rows = [r for r in body.splitlines() if r.strip()]
+        if not rows:
+            return hard_split(block, size)
+        table_header_rows = rows[:2] if len(rows) >= 2 and "|" in rows[0] else rows[:1]
+        chunks = []
+        current_rows = []
+        part = 1
+        for row in rows:
+            prefix = f"{header}\n[[TABLE_CONTINUATION part={part}]]\n" + "\n".join(table_header_rows)
+            candidate_rows = current_rows + [row]
+            candidate = prefix + "\n" + "\n".join(candidate_rows) + "\n[[TABLE_END]]"
+            if current_rows and len(candidate) > size:
+                chunk = prefix + "\n" + "\n".join(current_rows) + "\n[[TABLE_END]]"
+                chunks.extend(hard_split(chunk, size) if len(chunk) > size else [chunk])
+                current_rows = [row]
+                part += 1
+            else:
+                current_rows = candidate_rows
+        if current_rows:
+            prefix = f"{header}\n[[TABLE_CONTINUATION part={part}]]\n" + "\n".join(table_header_rows)
+            chunk = prefix + "\n" + "\n".join(current_rows) + "\n[[TABLE_END]]"
+            chunks.extend(hard_split(chunk, size) if len(chunk) > size else [chunk])
+        return chunks
+
     if len(text) <= chunk_size:
         return [(text, 0, 1)]
 
-    # 按双换行分段，并先硬切超长段落，确保后续组装不会产生超限块
-    raw_paragraphs = re.split(r'\n{2,}', text)
-    paragraphs = []
-    for p in raw_paragraphs:
-        p = p.strip()
-        if not p:
-            continue
-        if len(p) > chunk_size:
-            paragraphs.extend(hard_split(p, chunk_size))
+    blocks = []
+    for kind, block in split_structured_blocks(text):
+        if kind == "table":
+            blocks.extend(split_table_block(block, chunk_size))
+        elif len(block) > chunk_size:
+            blocks.extend(hard_split(block, chunk_size))
         else:
-            paragraphs.append(p)
+            blocks.append(block)
 
     chunks = []
     current = ""
-    for para in paragraphs:
-        # 防御：如果仍有超长段，继续硬切
-        para_parts = hard_split(para, chunk_size) if len(para) > chunk_size else [para]
-        for part in para_parts:
-            candidate = (current + "\n\n" + part).strip() if current else part
-            if current and len(candidate) > chunk_size:
-                chunks.append(current[:chunk_size])
-                prefix = current[-overlap:] + "\n\n" if overlap > 0 and len(current) > overlap else ""
-                candidate = (prefix + part).strip()
-                if len(candidate) > chunk_size:
-                    # overlap + part 仍超限时，放弃 overlap，硬切 part
-                    for sub in hard_split(part, chunk_size):
-                        if len(sub) <= chunk_size:
-                            chunks.append(sub)
-                    current = ""
-                else:
-                    current = candidate
+    for part in blocks:
+        candidate = (current + "\n\n" + part).strip() if current else part
+        if current and len(candidate) > chunk_size:
+            chunks.append(current[:chunk_size])
+            prefix = current[-overlap:] + "\n\n" if overlap > 0 and len(current) > overlap else ""
+            candidate = (prefix + part).strip()
+            if len(candidate) > chunk_size:
+                chunks.extend(split_table_block(part, chunk_size) if "[[TABLE_START" in part else hard_split(part, chunk_size))
+                current = ""
             else:
                 current = candidate
+        else:
+            current = candidate
     if current:
         chunks.append(current[:chunk_size])
 
-    # 最终保险：展开任何异常超限块
     safe_chunks = []
     for c in chunks:
         if len(c) > chunk_size:
-            safe_chunks.extend(hard_split(c, chunk_size))
+            safe_chunks.extend(split_table_block(c, chunk_size) if "[[TABLE_START" in c else hard_split(c, chunk_size))
         elif c.strip():
             safe_chunks.append(c)
 
@@ -941,6 +1205,287 @@ def call_llm(text, max_retries=None, chunk_info=None, timeout=None):
                 raise RuntimeError(f"API调用失败({attempt+1}次, timeout={timeout}s): {str(last_err)[:180]}...")
 
 
+def call_llm_messages(messages, temperature=0.2, timeout=None, max_tokens=1800):
+    if timeout is None:
+        timeout = int(globals().get("LLM_TIMEOUT", 60))
+    if not LLM_API_KEY:
+        raise RuntimeError("LLM_API_KEY未配置")
+    payload = {
+        "model": LLM_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    _BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    resp = requests.post(
+        LLM_API_URL,
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {LLM_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": _BROWSER_UA,
+        },
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    result = resp.json()
+    return result["choices"][0]["message"]["content"]
+
+
+def build_followup_prompt(kind, context):
+    context = context if isinstance(context, dict) else {}
+    kind_labels = {
+        "pubpeer_comment": "PubPeer comment",
+        "journal_letter": "letter to the journal editor",
+    }
+    if kind not in kind_labels:
+        raise ValueError(f"unsupported action kind: {kind}")
+    context_text = json.dumps(context, ensure_ascii=False, indent=2)
+    if kind == "pubpeer_comment":
+        task = (
+            "Draft a concise PubPeer comment based strictly on the audit context. "
+            "Use the main language of the paper/evidence. Be neutral, evidence-based, and non-defamatory. "
+            "Do not claim fraud or misconduct as fact. Ask clear questions and cite only the evidence in context. "
+            "Include a short title and 3-6 numbered concerns if warranted."
+        )
+    else:
+        task = (
+            "Draft a formal letter to the journal editor based strictly on the audit context. "
+            "Use the main language of the paper/evidence. Keep a professional, cautious tone. "
+            "Do not assert fraud or misconduct as fact. Request editorial assessment and list reproducible concerns. "
+            "Include subject, salutation, concise background, bullet concerns, requested actions, and closing."
+        )
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are an academic integrity writing assistant. You produce careful drafts grounded only in provided evidence. "
+                "You avoid exaggeration, legal conclusions, personal accusations, and unsupported claims."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"{task}\n\nAudit context JSON:\n{context_text}",
+        },
+    ]
+
+
+def generate_followup_draft(kind, context, timeout=None):
+    messages = build_followup_prompt(kind, context)
+    return call_llm_messages(messages, temperature=0.15, timeout=timeout, max_tokens=2200)
+
+
+def serve_report_actions(host="127.0.0.1", port=8765):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "PaperAuditActions/1.0"
+
+        def _send_json(self, payload, status=200):
+            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_OPTIONS(self):
+            self._send_json({"ok": True})
+
+        def do_GET(self):
+            if self.path.rstrip("/") == "/health":
+                self._send_json({"ok": True, "model": LLM_MODEL})
+            else:
+                self._send_json({"ok": False, "error": "not_found"}, 404)
+
+        def do_POST(self):
+            if self.path.rstrip("/") != "/generate":
+                self._send_json({"ok": False, "error": "not_found"}, 404)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                if length > 2_000_000:
+                    self._send_json({"ok": False, "error": "request_too_large"}, 413)
+                    return
+                body = self.rfile.read(length).decode("utf-8", errors="replace")
+                payload = json.loads(body or "{}")
+                kind = payload.get("kind")
+                context = payload.get("context") or {}
+                text = generate_followup_draft(kind, context, timeout=LLM_TIMEOUT)
+                self._send_json({"ok": True, "kind": kind, "model": LLM_MODEL, "text": text})
+            except Exception as e:
+                self._send_json({"ok": False, "error": f"{type(e).__name__}: {_brief_text(str(e), 300)}"}, 500)
+
+        def log_message(self, fmt, *args):
+            print(f"[report-actions] {self.address_string()} {fmt % args}")
+
+    httpd = ThreadingHTTPServer((host, int(port)), Handler)
+    print(f"🌐 报告动作服务已启动: http://{host}:{port}")
+    print("   在HTML报告中点击“生成 PubPeer Comment”或“生成期刊 Letter”即可调用本地LLM。按 Ctrl+C 停止。")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n⏹️ 报告动作服务已停止")
+    finally:
+        httpd.server_close()
+    return 0
+
+
+def _check_text_for_scoring(c):
+    return " ".join(
+        str(c.get(k, "") or "")
+        for k in ("category", "item", "source_text", "quote", "evidence", "reason", "detail", "analysis", "explanation")
+    )
+
+
+def _is_extraction_limited_check(c):
+    if c.get("_verdict_adjusted") == "extraction_red_flag_downgraded":
+        return True
+    text = _check_text_for_scoring(c)
+    extraction_terms = (
+        "OCR", "提取", "格式", "错位", "断裂", "表头缺失", "列名缺失", "行列",
+        "表格结构", "原PDF", "人工核对原", "无法判定", "不可直接用于", "不构成造假",
+    )
+    evidence_terms = (
+        "不一致", "矛盾", "冲突", "样本量", "下采样", "AUC", "p值异常",
+        "重复", "复用", "拼接", "篡改", "置信区间", "均值", "标准差",
+    )
+    if not any(term in text for term in extraction_terms):
+        return False
+    if any(term in text for term in evidence_terms):
+        return False
+    category = str(c.get("category", ""))
+    item = str(c.get("item", ""))
+    return ("表" in item) or ("OCR" in item) or ("图" in category) or ("数据" in category)
+
+
+def _should_downgrade_extraction_red_flag(c):
+    verdict = str(c.get("verdict", ""))
+    if "红旗" not in verdict:
+        return False
+    text = _check_text_for_scoring(c)
+    extraction = any(term in text for term in ("OCR", "提取", "原PDF", "MinerU", "<tr>", "<td>"))
+    uncertainty = any(term in text for term in ("可能", "疑似", "需人工核对", "确认", "错位", "格式"))
+    table_based = any(term in text for term in ("表格", "行", "列", "数字序列", "<tr>", "<td>"))
+    definitive_cross_evidence = any(term in text for term in ("正文明确矛盾", "跨正文/表格矛盾", "原文明确写明", "同一指标跨正文"))
+    return extraction and uncertainty and table_based and not definitive_cross_evidence
+
+
+def _soften_extraction_red_flag_language(text):
+    """Remove assertive red-flag language after an OCR/table finding is downgraded."""
+    softened = str(text or "")
+    replacements = {
+        "判定为红旗": "原分段审查曾判为红旗；现因证据依赖未核实的表格提取结果，仅作为疑点",
+        "构成🚩红旗": "需要升级为严重问题",
+        "构成红旗": "可能构成需复核疑点",
+        "作为红旗": "作为严重问题",
+        "标记为红旗": "标记为需复核疑点",
+        "升级为红旗": "在原PDF确认后再决定是否升级",
+        "建议退修或拒稿": "建议先核对原PDF/原始数据后再决定处理方式",
+        "建议拒稿": "建议先核对原PDF/原始数据后再决定处理方式",
+    }
+    for old, new in replacements.items():
+        softened = softened.replace(old, new)
+    return softened
+
+
+def _soften_nonfinal_red_flag_language(text):
+    softened = str(text or "")
+    replacements = {
+        "判定为红旗": "判定为严重问题",
+        "构成🚩红旗": "需要升级为严重问题",
+        "构成红旗": "需要升级为严重问题",
+        "作为红旗": "作为严重问题",
+        "升级为红旗": "升级为严重问题",
+    }
+    for old, new in replacements.items():
+        softened = softened.replace(old, new)
+    return softened
+
+
+def _downgrade_extraction_red_flags(checks):
+    for c in checks:
+        if not _should_downgrade_extraction_red_flag(c):
+            if "红旗" not in str(c.get("verdict", "")):
+                for key in ("detail", "reason", "analysis", "explanation"):
+                    if c.get(key):
+                        c[key] = _soften_nonfinal_red_flag_language(c.get(key))
+            continue
+        c["verdict"] = "⚠️疑点"
+        c["_verdict_adjusted"] = "extraction_red_flag_downgraded"
+        note = "自动降级：该项基于MinerU/OCR提取表格，且存在提取错位或需核对原PDF的不确定性；原PDF确认前不作为红旗。"
+        detail = _soften_extraction_red_flag_language(c.get("detail") or c.get("reason") or "")
+        c["detail"] = f"{note} {detail}".strip()
+    return checks
+
+
+def _risk_index(level):
+    return {"低": 0, "中": 1, "高": 2, "可疑黑产": 3}.get(str(level), 0)
+
+
+def _max_risk(*levels):
+    return max((level for level in levels if level), key=_risk_index, default="低")
+
+
+def _check_label_for_summary(c):
+    category = str(c.get("category") or "未分类")
+    item = str(c.get("item") or "未命名检查项")
+    return f"{category}/{item}"
+
+
+def _brief_check_list(checks, limit=4):
+    labels = [_check_label_for_summary(c) for c in checks[:limit]]
+    if len(checks) > limit:
+        labels.append(f"等{len(checks)}项")
+    return "、".join(labels) if labels else "无"
+
+
+def _build_merged_summary(total_reports, risk_level, red_flags, evidence_warnings, extraction_warnings):
+    parts = [
+        f"[合并{total_reports}段审查] 风险等级{risk_level}",
+        f"红旗{red_flags}项",
+        f"证据型疑点{evidence_warnings}项",
+        f"提取质量疑点{extraction_warnings}项",
+    ]
+    if red_flags == 0 and extraction_warnings:
+        parts.append("主要问题集中在需回查原PDF/原始表格的提取质量与数据自洽性线索")
+    elif red_flags == 0:
+        parts.append("未发现可直接保留为红旗的检查项")
+    return "；".join(parts) + "。"
+
+
+def _build_merged_conclusion(reports, all_checks, risk_level, red_flags, evidence_warnings, extraction_warnings, stat_adjustments):
+    valid_reports = [r for r in reports if not r.get("parse_error")]
+    warning_checks = [c for c in all_checks if "疑点" in str(c.get("verdict", ""))]
+    downgraded = [c for c in all_checks if c.get("_verdict_adjusted") == "extraction_red_flag_downgraded"]
+    extraction_checks = [c for c in warning_checks if _is_extraction_limited_check(c)]
+    evidence_checks = [c for c in warning_checks if not _is_extraction_limited_check(c)]
+    red_flag_checks = [c for c in all_checks if "红旗" in str(c.get("verdict", ""))]
+
+    parts = [
+        f"综合结论：合并{len(valid_reports) or len(reports)}段审查后，当前风险等级为{risk_level}；最终结论以合并后检查项为准，而不是逐段LLM原始措辞。",
+    ]
+    if red_flags:
+        parts.append(f"保留红旗{red_flags}项，优先核对：{_brief_check_list(red_flag_checks)}。")
+    else:
+        parts.append("未发现可直接保留为红旗的检查项；未核实的MinerU/OCR表格异常不应直接表述为学术不端。")
+    if evidence_warnings:
+        parts.append(f"证据型疑点{evidence_warnings}项，优先复核：{_brief_check_list(evidence_checks)}。")
+    if extraction_warnings:
+        parts.append(f"提取质量疑点{extraction_warnings}项，主要来自表格/OCR/MinerU结构化提取不清晰；需对照原PDF、补充材料或原始数据表确认后再升级。")
+    if downgraded:
+        parts.append(f"其中{len(downgraded)}项逐段审查中的红旗表述已自动降级，因为证据依赖表格提取结果且存在错位、截断或需人工核对的不确定性。")
+    if "benford_high_deviation" in (stat_adjustments or []):
+        parts.append("Benford分布偏差较高，仅作为批量数值复核线索；在缺少表格语义和原始数据上下文时，不单独构成造假结论。")
+    if "p_value_abnormal" in (stat_adjustments or []):
+        parts.append("p值异常计数提示需核对统计报告，但仍应回到原文方法、样本量和多重比较设置判断。")
+    parts.append("建议复核顺序：先展开可疑点详情核对原PDF表格/补充材料，再查看图像检测清单，最后检查参考文献真实性校检结果。")
+    return "\n\n".join(parts)
+
+
 def merge_chunk_reports(reports, stat_result=None):
     """合并多块审查结果：去重、合并检查项、重新评估风险等级
 
@@ -980,41 +1525,50 @@ def merge_chunk_reports(reports, stat_result=None):
                                                      f" [第{c.get('_source_chunk', i+1)}段补充: {c['evidence']}]")
                         break
 
-    # 2. 统计红旗/疑点数量
+    all_checks = _downgrade_extraction_red_flags(all_checks)
+
+    # 2. 统计红旗/疑点数量。OCR/表格提取质量问题单独计数，避免低证据噪声堆叠成高风险。
     red_flags = sum(1 for c in all_checks if "红旗" in c.get("verdict", ""))
-    warnings = sum(1 for c in all_checks if "疑点" in c.get("verdict", ""))
+    warning_checks = [c for c in all_checks if "疑点" in c.get("verdict", "")]
+    extraction_warnings = sum(1 for c in warning_checks if _is_extraction_limited_check(c))
+    evidence_warnings = len(warning_checks) - extraction_warnings
+    warnings = len(warning_checks)
 
     # 3. 重新评估风险等级
     if red_flags >= 3:
         risk_level = "高"
-    elif red_flags >= 1 or warnings >= 3:
+    elif red_flags >= 1 or evidence_warnings >= 3:
         risk_level = "中"
-    elif warnings >= 1:
+    elif evidence_warnings >= 1 or extraction_warnings >= 1:
         risk_level = "低"
     else:
         risk_level = "低"
 
     # 结合统计结果调整
+    stat_adjustments = []
     if stat_result:
         if stat_result.get("benford_deviation") and stat_result["benford_deviation"] > 0.3:
-            risk_level = "高" if risk_level == "中" else risk_level
+            stat_adjustments.append("benford_high_deviation")
+            if red_flags or evidence_warnings:
+                risk_level = _max_risk(risk_level, "中")
         if stat_result.get("p_value_abnormal", 0) > 2:
-            risk_level = max(risk_level, "中", key=["低", "中", "高", "可疑黑产"].index)
+            stat_adjustments.append("p_value_abnormal")
+            risk_level = _max_risk(risk_level, "中")
 
     # 4. 计算打假得分
-    detection_score = red_flags * 30 + warnings * 10
+    raw_detection_score = red_flags * 35 + min(evidence_warnings, 10) * 5 + min(extraction_warnings, 10)
     if stat_result and stat_result.get("benford_deviation"):
-        detection_score += int(stat_result["benford_deviation"] * 50)
+        benford_weight = 30 if (red_flags or evidence_warnings) else 12
+        raw_detection_score += int(stat_result["benford_deviation"] * benford_weight)
+    detection_score = min(100, raw_detection_score)
+    if red_flags == 0:
+        detection_score = min(detection_score, 85)
 
-    # 5. 综合所有summary
-    summaries = [r.get("summary", "") for r in reports if not r.get("parse_error")]
-    merged_summary = " | ".join(s for s in summaries if s)[:200]
-    if len(summaries) > 1:
-        merged_summary = f"[合并{len(reports)}段审查] {merged_summary}"
-
-    # 6. 综合conclusion
-    conclusions = [r.get("conclusion", "") for r in reports if not r.get("parse_error") and r.get("conclusion")]
-    merged_conclusion = "\n\n".join(conclusions) if conclusions else ""
+    # 5. 用最终合并/降级后的检查项重建summary和conclusion，避免逐段原始措辞留下误导性的红旗结论。
+    merged_summary = _build_merged_summary(len([r for r in reports if not r.get("parse_error")]) or len(reports),
+                                           risk_level, red_flags, evidence_warnings, extraction_warnings)
+    merged_conclusion = _build_merged_conclusion(reports, all_checks, risk_level, red_flags,
+                                                evidence_warnings, extraction_warnings, stat_adjustments)
 
     # 清理临时字段
     for c in all_checks:
@@ -1024,6 +1578,14 @@ def merge_chunk_reports(reports, stat_result=None):
         "summary": merged_summary,
         "risk_level": risk_level,
         "detection_score": detection_score,
+        "score_breakdown": {
+            "red_flags": red_flags,
+            "evidence_warnings": evidence_warnings,
+            "extraction_warnings": extraction_warnings,
+            "total_warnings": warnings,
+            "stat_adjustments": stat_adjustments,
+            "raw_score": raw_detection_score,
+        },
         "checks": all_checks,
         "conclusion": merged_conclusion,
         "_merged_from": len(reports),
@@ -1036,17 +1598,678 @@ def merge_chunk_reports(reports, stat_result=None):
 
 def parse_report(content):
     """解析LLM返回的JSON报告，容错处理"""
+    content = str(content or "").strip()
     try:
         return json.loads(content)
     except json.JSONDecodeError:
         pass
+    m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content, re.IGNORECASE)
+    if m:
+        fenced = m.group(1).strip()
+        try:
+            return json.loads(fenced)
+        except json.JSONDecodeError:
+            content = fenced
     m = re.search(r'\{[\s\S]*\}', content)
     if m:
         try:
             return json.loads(m.group())
         except json.JSONDecodeError:
             pass
+
+    # Some compatible gateways cut long JSON mid-object. Preserve the useful top-level
+    # fields so the chunk can still contribute a partial warning instead of failing fully.
+    summary = re.search(r'"summary"\s*:\s*"((?:\\.|[^"\\])*)"', content)
+    risk = re.search(r'"risk_level"\s*:\s*"((?:\\.|[^"\\])*)"', content)
+    score = re.search(r'"detection_score"\s*:\s*(\d+)', content)
+    verdict = re.search(r'"verdict"\s*:\s*"((?:\\.|[^"\\])*)"', content)
+    category = re.search(r'"category"\s*:\s*"((?:\\.|[^"\\])*)"', content)
+    item = re.search(r'"item"\s*:\s*"((?:\\.|[^"\\])*)"', content)
+    if summary or risk or verdict:
+        check = {
+            "category": _json_string_unescape(category.group(1)) if category else "LLM输出",
+            "item": _json_string_unescape(item.group(1)) if item else "LLM返回JSON不完整",
+            "verdict": _json_string_unescape(verdict.group(1)) if verdict else "⚠️疑点",
+            "source_text": "LLM返回内容被截断，未能提取完整原文证据",
+            "evidence": "该分块的LLM返回包含部分结构化字段，但JSON不完整；请人工复核原始输出。",
+            "reason": "兼容接口可能在长输出时截断响应，保留部分结论以避免整块审查丢失。",
+            "detail": content[:800],
+        }
+        return {
+            "summary": _json_string_unescape(summary.group(1)) if summary else "LLM返回JSON不完整，已保留部分结果",
+            "risk_level": _json_string_unescape(risk.group(1)) if risk else "中",
+            "detection_score": int(score.group(1)) if score else 0,
+            "checks": [check],
+            "conclusion": "该分块为部分解析结果，建议结合原始报告和PDF人工复核。",
+            "_partial_parse": True,
+            "raw_output": content,
+        }
     return {"raw_output": content, "parse_error": True}
+
+
+def _json_string_unescape(value):
+    try:
+        return json.loads(f'"{value}"')
+    except Exception:
+        return value
+
+
+def split_references_from_text(text):
+    """Remove reference sections from main audit text and return parsed tail text."""
+    text = str(text or "")
+    pattern = re.compile(
+        r"(?im)^(?:#+\s*)?(?:references|bibliography|参考文献|参考资料|works cited)\s*$"
+    )
+    matches = list(pattern.finditer(text))
+    if not matches:
+        return text, ""
+    start = matches[-1].start()
+    main_text = text[:start].rstrip()
+    references_text = text[start:].strip()
+    return main_text, references_text
+
+
+def audit_references(references_text, online=False, online_limit=50, timeout=10, cache=None):
+    """Reference plausibility check with optional online scholarly database verification."""
+    refs = parse_references(references_text)
+    issues = []
+    online_checked = 0
+    online_cache = cache if isinstance(cache, dict) else {}
+
+    for idx, ref in enumerate(refs, 1):
+        ref_issues = []
+        if not ref.get("year"):
+            ref_issues.append("missing_year")
+        if not ref.get("doi"):
+            ref_issues.append("missing_doi")
+        if not ref.get("has_journal_hint"):
+            ref_issues.append("missing_journal_or_source")
+        if len(ref.get("text", "")) < 25:
+            ref_issues.append("too_short")
+
+        if online and online_checked < max(0, int(online_limit or 0)):
+            cache_key = reference_cache_key(ref)
+            online_result = online_cache.get(cache_key)
+            if not online_result:
+                online_result = verify_reference_online(ref, timeout=timeout)
+                online_cache[cache_key] = online_result
+            ref["online"] = online_result
+            online_checked += 1
+            online_status = online_result.get("online_status")
+            if online_status in {"not_found", "weak", "error"}:
+                ref_issues.append(f"online_{online_status}")
+            ref_issues.extend(online_result.get("problems") or [])
+        elif online:
+            ref["online"] = {
+                "online_status": "skipped",
+                "confidence": 0.0,
+                "problems": ["online_limit_reached"],
+                "matched_sources": [],
+                "query": build_reference_query(ref),
+            }
+
+        if ref_issues:
+            issues.append({"index": idx, "issues": ref_issues, "text": ref.get("text", "")})
+    status = "ok"
+    if issues:
+        status = "needs_review" if len(issues) < max(3, len(refs) // 3) else "weak"
+    if online and refs:
+        hard_online_issues = [
+            item for item in issues
+            if any(str(issue).startswith("online_") or issue in {"doi_not_found", "no_online_match"} for issue in item.get("issues", []))
+        ]
+        if hard_online_issues:
+            status = "online_needs_review" if len(hard_online_issues) < max(3, len(refs) // 3) else "online_weak"
+    return {
+        "status": status,
+        "reference_count": len(refs),
+        "doi_count": sum(1 for r in refs if r.get("doi")),
+        "year_count": sum(1 for r in refs if r.get("year")),
+        "online_enabled": bool(online),
+        "online_checked": online_checked,
+        "issues": issues,
+        "references": refs[:200],
+        "note": (
+            "在线真实性校检：优先用DOI精确检索，再用题名/年份在Crossref、OpenAlex和PubMed进行多源核验；"
+            "结果为尽力检索证据，不等同于绝对证明。"
+            if online else
+            "离线格式/可核验性校检：检查DOI、年份、来源字段等基本信息；不代表已联网验证引用真实存在。"
+        ),
+    }
+
+
+def parse_references(references_text):
+    text = _clean_reference_text(references_text)
+    text = re.sub(r"(?im)^(?:#+\s*)?(?:references|bibliography|参考文献|参考资料|works cited)\s*$", "", text).strip()
+    if not text:
+        return []
+    raw_items = re.split(r"\n\s*(?=(?:\[\d+\]|\d+\.|\(\d+\))\s*)", text)
+    if len(raw_items) <= 1:
+        raw_items = re.split(r"\n{2,}", text)
+    refs = []
+    for item in raw_items:
+        item = re.sub(r"\s+", " ", item).strip()
+        item = re.sub(r"^(?:\[\d+\]|\d+\.|\(\d+\))\s*", "", item)
+        if len(item) < 8:
+            continue
+        if _looks_like_reference_table_noise(item):
+            continue
+        doi_match = re.search(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+\b", item, re.IGNORECASE)
+        year_match = re.search(r"\b(19|20)\d{2}\b", item)
+        has_journal_hint = bool(re.search(r"\b(?:journal|j\.|proc\.|nature|science|cell|ieee|acm|springer|elsevier|frontiers|plos|bmc|lancet)\b", item, re.IGNORECASE))
+        doi = _normalize_doi(doi_match.group(0)) if doi_match else ""
+        refs.append({
+            "text": item,
+            "doi": doi,
+            "year": year_match.group(0) if year_match else "",
+            "has_journal_hint": has_journal_hint,
+            "title_hint": extract_reference_title(item),
+            "author_hint": extract_reference_author_hint(item),
+        })
+    return refs
+
+
+def _looks_like_reference_table_noise(item):
+    """Avoid treating extracted tables as reference entries."""
+    decoded = html.unescape(str(item or "")).strip()
+    lowered = decoded.lower()
+    if "[[table_start" in lowered or "[[table_continuation" in lowered:
+        return True
+    td_count = len(re.findall(r"</?t[dh]\b", lowered))
+    tr_count = len(re.findall(r"</?tr\b", lowered))
+    if "<table" in lowered and (td_count >= 4 or tr_count >= 2):
+        return True
+    pipe_cells = sum(1 for line in decoded.splitlines() if line.count("|") >= 3)
+    if pipe_cells >= 2 and not re.search(r"\b(?:doi|pmid|arxiv|journal|volume|issue)\b", decoded, re.I):
+        return True
+    return False
+
+
+def _clean_reference_text(text):
+    text = str(text or "")
+    text = re.sub(r"\[\[EXTRACTION_NOTE\]\].*?\[\[/EXTRACTION_NOTE\]\]", "\n", text, flags=re.S)
+    text = re.sub(r"\[\[/?(?:BLOCK|FIGURE)[^\]]*\]\]", "\n", text, flags=re.I)
+    text = re.sub(r"\[\[TABLE_START[^\]]*\]\]|\[\[TABLE_END\]\]|\[\[TABLE_CONTINUATION[^\]]*\]\]", "\n", text)
+    text = re.sub(r"(?m)^===\s*文件:.*?===\s*$", "\n", text)
+    text = re.sub(r"[ \t\r\f\v]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _normalize_doi(value):
+    value = html.unescape(str(value or "")).strip()
+    value = re.sub(r"(?i)^https?://(?:dx\.)?doi\.org/", "", value)
+    value = re.sub(r"(?i)^doi\s*[:：]\s*", "", value)
+    value = value.strip().rstrip(".,;)]}")
+    return value.lower()
+
+
+def _normalize_title(value):
+    value = html.unescape(str(value or "")).lower()
+    value = re.sub(r"\bdoi\s*[:：]\s*10\.\S+", " ", value)
+    value = re.sub(r"https?://\S+", " ", value)
+    value = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _title_tokens(value):
+    normalized = _normalize_title(value)
+    stop = {
+        "the", "and", "for", "with", "from", "into", "onto", "that", "this", "using",
+        "study", "analysis", "research", "journal", "vol", "volume", "issue", "pages",
+    }
+    return {t for t in normalized.split() if len(t) >= 3 and t not in stop}
+
+
+def _token_similarity(a, b):
+    left = _title_tokens(a)
+    right = _title_tokens(b)
+    if not left or not right:
+        return 0.0
+    return len(left & right) / max(len(left), len(right))
+
+
+def _reference_year(ref):
+    if isinstance(ref, dict):
+        value = ref.get("year") or ref.get("publication_year") or ""
+    else:
+        value = str(ref or "")
+    match = re.search(r"\b(19|20)\d{2}\b", str(value))
+    return match.group(0) if match else ""
+
+
+def extract_reference_author_hint(text):
+    text = re.sub(r"^(?:\[\d+\]|\d+\.|\(\d+\))\s*", "", str(text or "")).strip()
+    before_year = re.split(r"\b(?:19|20)\d{2}\b", text, maxsplit=1)[0]
+    before_title = before_year.split(".")[0] if "." in before_year else before_year
+    names = re.findall(r"\b[A-Z][A-Za-z'’-]{2,}\b", before_title)
+    return " ".join(names[:3])
+
+
+def extract_reference_title(text):
+    text = re.sub(r"^(?:\[\d+\]|\d+\.|\(\d+\))\s*", "", str(text or "")).strip()
+    text = re.sub(r"\bdoi\s*[:：]?\s*10\.\S+", "", text, flags=re.I).strip()
+    parts = [p.strip(" .;:") for p in re.split(r"\.\s+", text) if p.strip(" .;:")]
+    if not parts:
+        return _brief_text(text, 160)
+    candidates = []
+    for part in parts:
+        lowered = part.lower()
+        if re.search(r"\b(19|20)\d{2}\b", part):
+            continue
+        if any(word in lowered for word in ("journal", "nature", "science", "cell", "proc", "plos", "bmc", "lancet")):
+            continue
+        if len(_title_tokens(part)) >= 3:
+            candidates.append(part)
+    if candidates:
+        return candidates[0][:220]
+    return parts[min(1, len(parts) - 1)][:220]
+
+
+def build_reference_query(ref):
+    title = ref.get("title_hint") or extract_reference_title(ref.get("text", ""))
+    author = ref.get("author_hint") or extract_reference_author_hint(ref.get("text", ""))
+    year = _reference_year(ref)
+    doi = _normalize_doi(ref.get("doi", ""))
+    query_parts = [p for p in (title, author, year) if p]
+    return {
+        "doi": doi,
+        "title": title,
+        "author": author,
+        "year": year,
+        "bibliographic": " ".join(query_parts) or ref.get("text", "")[:240],
+    }
+
+
+def reference_cache_key(ref):
+    query = build_reference_query(ref)
+    if query.get("doi"):
+        return "doi:" + query["doi"]
+    key = f"{_normalize_title(query.get('title'))}|{query.get('year', '')}"
+    return "title:" + hashlib.sha256(key.encode("utf-8", errors="ignore")).hexdigest()[:24]
+
+
+def _reference_get_json(url, timeout=10, headers=None):
+    data, _ = _http_request(url, "GET", headers=headers or {}, timeout=timeout)
+    return json.loads(data.decode("utf-8", errors="replace"))
+
+
+def _crossref_work_to_match(work):
+    title = " ".join(work.get("title") or []).strip()
+    year = ""
+    for key in ("published-print", "published-online", "published", "created"):
+        parts = ((work.get(key) or {}).get("date-parts") or [[]])[0]
+        if parts:
+            year = str(parts[0])
+            break
+    authors = []
+    for author in work.get("author") or []:
+        name = " ".join(p for p in (author.get("given"), author.get("family")) if p)
+        if name:
+            authors.append(name)
+    container = " ".join(work.get("container-title") or work.get("short-container-title") or [])
+    return {
+        "source": "Crossref",
+        "title": title,
+        "year": year,
+        "doi": _normalize_doi(work.get("DOI", "")),
+        "authors": authors[:5],
+        "container": container,
+        "url": work.get("URL", ""),
+        "retracted": bool(work.get("relation", {}).get("is-retracted-by")),
+    }
+
+
+def _openalex_work_to_match(work):
+    title = work.get("display_name") or work.get("title") or ""
+    authors = []
+    for authorship in work.get("authorships") or []:
+        name = ((authorship.get("author") or {}).get("display_name") or "").strip()
+        if name:
+            authors.append(name)
+    location = work.get("primary_location") or {}
+    source = location.get("source") or {}
+    return {
+        "source": "OpenAlex",
+        "title": title,
+        "year": str(work.get("publication_year") or ""),
+        "doi": _normalize_doi(work.get("doi", "")),
+        "authors": authors[:5],
+        "container": source.get("display_name", ""),
+        "url": work.get("doi") or work.get("id") or "",
+        "retracted": bool(work.get("is_retracted")),
+    }
+
+
+def _pubmed_summary_to_match(uid, item):
+    title = item.get("title") or ""
+    authors = []
+    for author in item.get("authors") or []:
+        name = (author.get("name") or "").strip()
+        if name:
+            authors.append(name)
+    pubdate = item.get("pubdate") or ""
+    year = _reference_year(pubdate)
+    doi = ""
+    for article_id in item.get("articleids") or []:
+        if str(article_id.get("idtype", "")).lower() == "doi":
+            doi = _normalize_doi(article_id.get("value", ""))
+            break
+    return {
+        "source": "PubMed",
+        "title": title,
+        "year": year,
+        "doi": doi,
+        "authors": authors[:5],
+        "container": item.get("fulljournalname") or item.get("source") or "",
+        "url": f"https://pubmed.ncbi.nlm.nih.gov/{uid}/",
+        "retracted": "retracted publication" in " ".join(item.get("pubtype") or []).lower(),
+    }
+
+
+def lookup_crossref_reference(ref, timeout=10):
+    query = build_reference_query(ref)
+    matches = []
+    if query.get("doi"):
+        url = "https://api.crossref.org/works/" + urllib.parse.quote(query["doi"], safe="")
+        data = _reference_get_json(url, timeout=timeout)
+        work = data.get("message") or {}
+        if work:
+            matches.append(_crossref_work_to_match(work))
+            return matches
+    bibliographic = urllib.parse.quote(query.get("bibliographic") or "")
+    if not bibliographic:
+        return matches
+    url = f"https://api.crossref.org/works?query.bibliographic={bibliographic}&rows=3"
+    data = _reference_get_json(url, timeout=timeout)
+    for work in (data.get("message") or {}).get("items") or []:
+        matches.append(_crossref_work_to_match(work))
+    return matches
+
+
+def lookup_openalex_reference(ref, timeout=10):
+    query = build_reference_query(ref)
+    matches = []
+    if query.get("doi"):
+        url = "https://api.openalex.org/works/doi:" + urllib.parse.quote(query["doi"], safe="")
+        data = _reference_get_json(url, timeout=timeout)
+        if data:
+            matches.append(_openalex_work_to_match(data))
+            return matches
+    search = urllib.parse.quote(query.get("bibliographic") or "")
+    if not search:
+        return matches
+    url = f"https://api.openalex.org/works?search={search}&per-page=3"
+    data = _reference_get_json(url, timeout=timeout)
+    for work in (data.get("results") or []):
+        matches.append(_openalex_work_to_match(work))
+    return matches
+
+
+def lookup_pubmed_reference(ref, timeout=10):
+    query = build_reference_query(ref)
+    term = query.get("doi") or query.get("bibliographic") or ""
+    if not term:
+        return []
+    search_url = (
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        f"?db=pubmed&retmode=json&retmax=3&term={urllib.parse.quote(term)}"
+    )
+    search = _reference_get_json(search_url, timeout=timeout)
+    ids = ((search.get("esearchresult") or {}).get("idlist") or [])[:3]
+    if not ids:
+        return []
+    summary_url = (
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+        f"?db=pubmed&retmode=json&id={','.join(ids)}"
+    )
+    summary = _reference_get_json(summary_url, timeout=timeout)
+    result = summary.get("result") or {}
+    return [_pubmed_summary_to_match(uid, result.get(uid) or {}) for uid in ids if result.get(uid)]
+
+
+def _score_reference_match(ref, match):
+    query = build_reference_query(ref)
+    problems = []
+    score = 0.0
+    ref_doi = query.get("doi")
+    match_doi = _normalize_doi(match.get("doi", ""))
+    if ref_doi:
+        if match_doi and ref_doi == match_doi:
+            score += 0.72
+        elif match_doi:
+            problems.append("doi_mismatch")
+            score -= 0.2
+        else:
+            problems.append("doi_missing_in_source")
+    title_sim = _token_similarity(query.get("title") or ref.get("text", ""), match.get("title", ""))
+    score += min(title_sim, 1.0) * 0.22
+    if title_sim < 0.45 and not ref_doi:
+        problems.append("title_low_similarity")
+    ref_year = query.get("year")
+    match_year = _reference_year(match.get("year", ""))
+    if ref_year and match_year:
+        if ref_year == match_year:
+            score += 0.06
+        elif abs(int(ref_year) - int(match_year)) <= 1:
+            score += 0.03
+            problems.append("year_near_mismatch")
+        else:
+            problems.append("year_mismatch")
+            score -= 0.1
+    elif ref_year and not match_year:
+        problems.append("year_missing_in_source")
+    if match.get("retracted"):
+        problems.append("source_marks_retracted")
+    return max(0.0, min(1.0, score)), problems
+
+
+def verify_reference_online(ref, timeout=10):
+    query = build_reference_query(ref)
+    source_errors = []
+    raw_matches = []
+    for lookup in (lookup_crossref_reference, lookup_openalex_reference, lookup_pubmed_reference):
+        try:
+            raw_matches.extend(lookup(ref, timeout=timeout))
+        except Exception as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status not in {404, 410}:
+                source_errors.append(f"{lookup.__name__.replace('lookup_', '').replace('_reference', '')}: {type(e).__name__}")
+
+    scored = []
+    all_problems = []
+    for match in raw_matches:
+        score, problems = _score_reference_match(ref, match)
+        enriched = dict(match)
+        enriched["match_score"] = round(score, 3)
+        scored.append(enriched)
+        all_problems.extend(problems)
+    scored.sort(key=lambda m: m.get("match_score", 0), reverse=True)
+
+    best = scored[0] if scored else None
+    confidence = float(best.get("match_score", 0.0)) if best else 0.0
+    problems = []
+    if not scored:
+        problems.append("doi_not_found" if query.get("doi") else "no_online_match")
+    if source_errors and not scored:
+        problems.append("all_sources_error")
+    elif source_errors:
+        problems.append("partial_source_error")
+    problems.extend(dict.fromkeys(all_problems[:8]))
+
+    if confidence >= 0.92:
+        status = "verified"
+    elif confidence >= 0.68:
+        status = "likely"
+    elif confidence >= 0.38:
+        status = "weak"
+    elif source_errors and not scored:
+        status = "error"
+    else:
+        status = "not_found"
+
+    return {
+        "online_status": status,
+        "confidence": round(confidence, 3),
+        "query": query,
+        "matched_sources": scored[:5],
+        "problems": problems,
+        "source_errors": source_errors,
+    }
+
+
+def _reference_online_summary(online):
+    if not online:
+        return "未联网检索"
+    status = online.get("online_status", "N/A")
+    confidence = online.get("confidence", 0)
+    sources = []
+    for match in online.get("matched_sources") or []:
+        label = match.get("source", "")
+        if label and label not in sources:
+            sources.append(label)
+    source_text = "/".join(sources) if sources else "无命中"
+    return f"{status} / {confidence} / {source_text}"
+
+
+REFERENCE_ISSUE_LABELS = {
+    "missing_year": "缺少年份",
+    "missing_doi": "缺少DOI",
+    "missing_journal_or_source": "缺少期刊/来源",
+    "too_short": "引用过短",
+    "online_not_found": "在线未检索到",
+    "online_weak": "在线弱匹配",
+    "online_error": "在线检索异常",
+    "doi_not_found": "DOI未命中",
+    "no_online_match": "无在线命中",
+    "all_sources_error": "外部源均异常",
+    "partial_source_error": "部分外部源异常",
+    "doi_mismatch": "DOI不一致",
+    "title_low_similarity": "题名相似度低",
+    "year_mismatch": "年份不一致",
+    "year_near_mismatch": "年份接近但不一致",
+    "source_marks_retracted": "来源标记撤稿",
+}
+
+
+def _reference_issue_text(issues):
+    labels = [REFERENCE_ISSUE_LABELS.get(str(issue), str(issue)) for issue in (issues or [])]
+    return ", ".join(dict.fromkeys(labels))
+
+
+def _reference_display_title(ref):
+    raw = ref.get("title_hint") or ref.get("text", "")
+    if _looks_like_reference_table_noise(raw):
+        return "疑似表格片段，未作为有效参考文献"
+    return _brief_text(raw, 140)
+
+
+def _reference_text_html(text):
+    if _looks_like_reference_table_noise(text):
+        table_html = _escaped_html_table_fragment_to_html(text) or render_evidence_summary_html(text)
+        return (
+            '<div class="reference-table-note">该条内容看起来是表格提取噪声，不应作为参考文献核验对象。</div>'
+            f"{table_html}"
+        )
+    return _html_escape(text)
+
+
+def _reference_query_text(ref, query):
+    raw = ref.get("text", "")
+    if _looks_like_reference_table_noise(raw):
+        return "疑似表格提取噪声，未生成参考文献检索式"
+    return query.get("doi") or query.get("bibliographic") or ""
+
+
+def format_reference_audit_markdown(reference_audit):
+    if reference_audit is None:
+        return []
+    lines = [
+        "## 📚 参考文献真实性/可核验性校检",
+        "",
+        f"**状态**: {reference_audit.get('status', 'N/A')}",
+        f"**参考文献数量**: {reference_audit.get('reference_count', 0)}",
+        f"**含 DOI 数量**: {reference_audit.get('doi_count', 0)}",
+        f"**含年份数量**: {reference_audit.get('year_count', 0)}",
+        f"**在线检索**: {'启用' if reference_audit.get('online_enabled') else '未启用'}"
+        + (f"（已检索 {reference_audit.get('online_checked', 0)} 条）" if reference_audit.get("online_enabled") else ""),
+        f"> {reference_audit.get('note', '')}",
+        "",
+    ]
+    issues = reference_audit.get("issues", [])
+    if issues:
+        lines.append("| # | 问题 | 在线证据 | 引用摘录 |")
+        lines.append("|---|------|----------|----------|")
+        refs_by_index = {i + 1: ref for i, ref in enumerate(reference_audit.get("references", []))}
+        for item in issues[:30]:
+            ref = refs_by_index.get(item.get("index"), {})
+            lines.append(
+                f"| {item.get('index')} | {_md_escape_cell(_reference_issue_text(item.get('issues', [])))} | "
+                f"{_md_escape_cell(_reference_online_summary(ref.get('online')))} | "
+                f"{_md_escape_cell(_brief_text(item.get('text', ''), 220))} |"
+            )
+    else:
+        lines.append("> 未发现明显格式缺失；仍建议对关键引用进行数据库/DOI人工核验。")
+    lines.append("")
+    return lines
+
+
+def format_reference_audit_html(reference_audit):
+    if reference_audit is None:
+        return ""
+    status_labels = {
+        "verified": "已验证",
+        "likely": "较可能真实",
+        "weak": "弱匹配",
+        "not_found": "未检索到",
+        "error": "检索异常",
+        "skipped": "未检索",
+    }
+    issue_map = {item.get("index"): item for item in reference_audit.get("issues", [])}
+    cards = ""
+    for idx, ref in enumerate(reference_audit.get("references", [])[:60], 1):
+        online = ref.get("online") or {}
+        status = online.get("online_status", "offline")
+        status_text = status_labels.get(status, status if status != "offline" else "离线检查")
+        confidence = online.get("confidence", 0)
+        issue = issue_map.get(idx, {})
+        issue_text = _reference_issue_text(issue.get("issues", [])) if issue else "未发现明显问题"
+        matches = ""
+        for match in (online.get("matched_sources") or [])[:3]:
+            title = _html_escape(_brief_text(match.get("title", ""), 150))
+            meta = _html_escape(" | ".join(str(x) for x in (match.get("source"), match.get("year"), match.get("doi")) if x))
+            url = _html_escape(match.get("url", ""))
+            link = f' <a href="{url}" target="_blank" rel="noopener">来源</a>' if url else ""
+            matches += f"<li><strong>{title or '无题名'}</strong><br><span>{meta}</span>{link}</li>"
+        if not matches:
+            matches = "<li>无在线命中记录</li>"
+        query = online.get("query") or build_reference_query(ref)
+        cards += f"""
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#{idx}</span>
+            <span class="reference-status reference-{_html_escape(status)}">{_html_escape(status_text)}</span>
+            <span class="reference-title">{_html_escape(_reference_display_title(ref))}</span>
+            <span class="reference-confidence">置信度 {confidence}</span>
+            <span class="reference-issues">{_html_escape(_brief_text(issue_text, 140))}</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: {_reference_text_html(ref.get('text', ''))}</div>
+            <p><strong>检索式</strong>: {_html_escape(_reference_query_text(ref, query))}</p>
+            <p><strong>问题</strong>: {_html_escape(issue_text)}</p>
+            <ul class="reference-matches">{matches}</ul>
+          </div>
+        </details>"""
+
+    if not cards:
+        cards = '<div class="muted">未发现可解析参考文献。</div>'
+    return f"""
+  <div class="section reference-section">
+    <h2>参考文献真实性/可核验性校检</h2>
+    <p><strong>状态</strong>: {_html_escape(reference_audit.get('status', 'N/A'))} | <strong>数量</strong>: {reference_audit.get('reference_count', 0)} | <strong>DOI</strong>: {reference_audit.get('doi_count', 0)} | <strong>年份</strong>: {reference_audit.get('year_count', 0)} | <strong>在线检索</strong>: {'启用' if reference_audit.get('online_enabled') else '未启用'}（{reference_audit.get('online_checked', 0)}条）</p>
+    <p class="section-hint">{_html_escape(reference_audit.get('note', ''))}</p>
+    <div class="reference-list">{cards}</div>
+  </div>"""
 
 
 def _md_escape_cell(text):
@@ -1063,9 +2286,258 @@ def _brief_text(text, limit=180):
     return text
 
 
+def _split_markdown_table_row(line):
+    line = str(line or "").strip()
+    if line.startswith("|"):
+        line = line[1:]
+    if line.endswith("|"):
+        line = line[:-1]
+    return [cell.replace("\\|", "|").strip() for cell in line.split("|")]
+
+
+def _is_markdown_table_separator(line):
+    cells = _split_markdown_table_row(line)
+    if len(cells) < 2:
+        return False
+    return all(cell and "-" in cell and re.fullmatch(r"[:\-\s]+", cell) for cell in cells)
+
+
+def _looks_like_markdown_table(lines, idx):
+    if idx + 1 >= len(lines):
+        return False
+    if "|" not in lines[idx]:
+        return False
+    return _is_markdown_table_separator(lines[idx + 1])
+
+
+def _clean_mineru_table_block(text):
+    text = re.sub(r"\[\[TABLE_START[^\]]*\]\]", "", str(text or ""))
+    text = re.sub(r"\[\[TABLE_END\]\]", "", text)
+    text = re.sub(r"\[\[TABLE_CONTINUATION[^\]]*\]\]", "", text)
+    text = re.sub(r"\[\[EXTRACTION_NOTE\]\].*?\[\[/EXTRACTION_NOTE\]\]", "", text, flags=re.S)
+    return text.strip()
+
+
+def _plain_table_summary_text(text):
+    text = _clean_mineru_table_block(text)
+    text = html.unescape(text)
+    text = re.sub(r"</t[dh]>\s*<t[dh]\b[^>]*>", " ", text, flags=re.I)
+    text = re.sub(r"</tr>\s*<tr\b[^>]*>", " / ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _render_data_table_html(rows, header=True, collapse_threshold_rows=12, collapse_threshold_cols=8):
+    rows = [[str(cell or "").strip() for cell in row] for row in rows if row]
+    if not rows:
+        return ""
+    max_cols = max(len(row) for row in rows)
+    normalized = [row + [""] * (max_cols - len(row)) for row in rows]
+
+    body_rows = []
+    for r_idx, row in enumerate(normalized):
+        tag = "th" if header and r_idx == 0 else "td"
+        cells = "".join(f"<{tag}>{_html_escape(cell)}</{tag}>" for cell in row)
+        body_rows.append(f"<tr>{cells}</tr>")
+
+    table_html = (
+        '<div class="data-table-wrap">'
+        '<table class="data-table">'
+        f"<tbody>{''.join(body_rows)}</tbody>"
+        "</table>"
+        "</div>"
+    )
+    is_large = len(normalized) > collapse_threshold_rows or max_cols > collapse_threshold_cols
+    if is_large:
+        return (
+            '<details class="data-table-details">'
+            f"<summary>查看完整表格（{len(normalized)}行 x {max_cols}列）</summary>"
+            f"{table_html}"
+            "</details>"
+        )
+    return table_html
+
+
+def _markdown_table_to_html(lines):
+    if isinstance(lines, str):
+        lines = [line for line in lines.splitlines() if line.strip()]
+    if len(lines) < 2 or not _is_markdown_table_separator(lines[1]):
+        return ""
+    rows = [_split_markdown_table_row(lines[0])]
+    rows.extend(_split_markdown_table_row(line) for line in lines[2:] if "|" in line)
+    return _render_data_table_html(rows, header=True)
+
+
+def _parse_html_table_rows(text):
+    decoded = html.unescape(str(text or ""))
+    row_matches = re.findall(r"<tr\b[^>]*>(.*?)</tr>", decoded, flags=re.I | re.S)
+    if not row_matches and re.search(r"<t[dh]\b", decoded, flags=re.I):
+        row_matches = [decoded]
+
+    rows = []
+    for row_html in row_matches:
+        cells = []
+        for tag, value in re.findall(r"<(td|th)\b[^>]*>(.*?)</\1>", row_html, flags=re.I | re.S):
+            value = re.sub(r"<br\s*/?>", "\n", value, flags=re.I)
+            value = re.sub(r"<[^>]+>", " ", value)
+            cells.append(html.unescape(re.sub(r"\s+", " ", value).strip()))
+        if cells:
+            rows.append(cells)
+    return rows
+
+
+def _escaped_html_table_fragment_to_html(text):
+    rows = _parse_html_table_rows(text)
+    if not rows:
+        return ""
+    first_row_is_header = bool(re.search(r"<th\b", html.unescape(str(text or "")), flags=re.I))
+    return _render_data_table_html(rows, header=first_row_is_header)
+
+
+def _render_unmarked_evidence_html(text):
+    text = _clean_mineru_table_block(text)
+    if not text:
+        return ""
+
+    html_table = _escaped_html_table_fragment_to_html(text)
+    if html_table:
+        return html_table
+
+    lines = text.splitlines()
+    parts = []
+    paragraph = []
+    i = 0
+    while i < len(lines):
+        if _looks_like_markdown_table(lines, i):
+            if paragraph:
+                paragraph_text = "\n".join(paragraph).strip()
+                parts.append(f"<blockquote>{_html_escape(paragraph_text)}</blockquote>")
+                paragraph = []
+            table_lines = [lines[i], lines[i + 1]]
+            i += 2
+            while i < len(lines) and "|" in lines[i] and lines[i].strip():
+                table_lines.append(lines[i])
+                i += 1
+            parts.append(_markdown_table_to_html(table_lines))
+            continue
+        paragraph.append(lines[i])
+        i += 1
+
+    if paragraph:
+        plain = "\n".join(paragraph).strip()
+        if plain:
+            parts.append(f"<blockquote>{_html_escape(plain)}</blockquote>")
+    return "".join(part for part in parts if part)
+
+
+def render_evidence_html(text, compact=False):
+    """将证据摘录中的表格片段渲染为可读HTML表格，普通文本仍按文本转义。"""
+    text = str(text or "").strip()
+    if not text:
+        return "<blockquote>LLM未提供明确原文摘录，请人工回查对应段落。</blockquote>"
+
+    parts = []
+    pos = 0
+    start_pattern = re.compile(r"\[\[TABLE_START[^\]]*\]\]", re.S)
+    for match in start_pattern.finditer(text):
+        if match.start() < pos:
+            continue
+        before = text[pos:match.start()].strip()
+        if before:
+            parts.append(_render_unmarked_evidence_html(before))
+        end_match = re.search(r"\[\[TABLE_END\]\]", text[match.end():], flags=re.S)
+        block_end = match.end() + end_match.end() if end_match else len(text)
+        table_block = _clean_mineru_table_block(text[match.start():block_end])
+        rendered_table = _render_unmarked_evidence_html(table_block)
+        if rendered_table:
+            parts.append(rendered_table)
+        pos = block_end
+    rest = text[pos:].strip()
+    if rest:
+        parts.append(_render_unmarked_evidence_html(rest))
+
+    rendered = "".join(part for part in parts if part)
+    return rendered or f"<blockquote>{_html_escape(_clean_mineru_table_block(text))}</blockquote>"
+
+
+def _evidence_contains_table(text):
+    raw = str(text or "")
+    if "[[TABLE_START" in raw:
+        return True
+    decoded = html.unescape(raw)
+    if re.search(r"<(?:table|tr|td|th)\b", decoded, flags=re.I):
+        return True
+    lines = raw.splitlines()
+    return any(_looks_like_markdown_table(lines, i) for i in range(len(lines)))
+
+
+def render_evidence_summary_html(text, limit=160):
+    """报告汇总表中只放简短提示，避免把大表格塞进单元格。"""
+    text = str(text or "").strip()
+    if not text:
+        return "-"
+    if _evidence_contains_table(text):
+        cleaned = _plain_table_summary_text(text)
+        excerpt = _brief_text(cleaned, 80)
+        hint = '<span class="table-hint">含表格，见下方逐条详细分析</span>'
+        return f"{hint}<span class=\"summary-excerpt\">{_html_escape(excerpt)}</span>" if excerpt else hint
+    return _html_escape(_brief_text(text, limit))
+
+
 def _is_suspicious_check(c):
     verdict = str(c.get("verdict", ""))
     return ("红旗" in verdict) or ("疑点" in verdict) or ("可疑" in verdict)
+
+
+def _check_suspicion_score(c):
+    """Higher score means the finding should be reviewed earlier."""
+    verdict = str(c.get("verdict", ""))
+    text = " ".join(
+        str(c.get(k, "") or "")
+        for k in ("category", "item", "source_text", "quote", "evidence", "reason", "detail", "analysis", "explanation")
+    )
+
+    if "红旗" in verdict:
+        score = 300
+    elif "疑点" in verdict or "可疑" in verdict:
+        score = 200
+    elif "通过" in verdict:
+        score = 0
+    else:
+        score = 100
+
+    high_terms = (
+        "造假", "伪造", "篡改", "捏造", "复制粘贴", "严重", "重大", "直接矛盾",
+        "明显矛盾", "无法复现", "不可靠", "否决", "致命", "必须公开", "数据真实性",
+    )
+    medium_terms = (
+        "矛盾", "异常", "重复", "缺失", "不一致", "过拟合", "无验证", "样本量",
+        "p值", "多重比较", "利益冲突", "方法论缺陷",
+    )
+    low_terms = (
+        "OCR", "提取", "人工核对", "原PDF", "表格结构", "暂判", "无法判定",
+        "不宜判定", "无理由认定", "可能", "需确认",
+    )
+
+    score += sum(18 for term in high_terms if term in text)
+    score += sum(8 for term in medium_terms if term in text)
+    score -= sum(10 for term in low_terms if term in text)
+
+    return max(score, 0)
+
+
+def _check_sort_key(c):
+    return (-_check_suspicion_score(c), str(c.get("category", "")), str(c.get("item", "")))
+
+
+def _check_verdict_class(verdict):
+    verdict = str(verdict or "")
+    if "红旗" in verdict:
+        return "verdict-red"
+    if "疑点" in verdict or "可疑" in verdict:
+        return "verdict-yellow"
+    return "verdict-green"
 
 
 def _check_source_text(c):
@@ -1079,17 +2551,302 @@ def _check_source_text(c):
     return ""
 
 
+def _sanitize_reason_text(text):
+    """Reason/detail fields are prose only; strip nested JSON and table markup noise."""
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+
+    extracted = []
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        parsed = None
+
+    if isinstance(parsed, dict):
+        for key in ("summary", "reason", "detail", "analysis", "explanation", "conclusion"):
+            value = parsed.get(key)
+            if isinstance(value, str) and value.strip():
+                extracted.append(value)
+        for check in parsed.get("checks", []) if isinstance(parsed.get("checks"), list) else []:
+            if not isinstance(check, dict):
+                continue
+            for key in ("reason", "detail", "analysis", "explanation"):
+                value = check.get(key)
+                if isinstance(value, str) and value.strip():
+                    extracted.append(value)
+    elif raw.lstrip().startswith("{") and ('"checks"' in raw or '"summary"' in raw):
+        for key in ("summary", "reason", "detail", "analysis", "explanation", "conclusion"):
+            for match in re.finditer(rf'"{key}"\s*:\s*"((?:\\.|[^"\\])*)"', raw):
+                extracted.append(_json_string_unescape(match.group(1)))
+
+    text = " ".join(extracted) if extracted else raw
+    had_table_noise = bool(re.search(r"\[\[TABLE_|<\s*/?\s*t[rdh]\b|&lt;\s*/?\s*t[rdh]\b", text, flags=re.I))
+    text = html.unescape(text)
+    text = _clean_mineru_table_block(text)
+    text = re.sub(r"\[\[/?(?:BLOCK|FIGURE)[^\]]*\]\]", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\b(?:source_text|evidence|checks|summary|risk_level|detection_score|verdict)\b\s*[:：]?", " ", text)
+    text = re.sub(r"\s+", " ", text).strip(" ,;，；。")
+
+    if had_table_noise:
+        prefix = "表格原文已在证据区渲染；此处仅保留文字判断。"
+        if text:
+            return prefix + " " + _brief_text(text, 520)
+        return prefix + " 请人工核对原PDF表格。"
+    return _brief_text(text, 700)
+
+
 def _check_reason(c):
     """提取可疑原因/细节，优先detail，其次reason/explanation。"""
     for k in ("detail", "reason", "analysis", "explanation", "说明"):
         v = c.get(k)
         if v:
-            return str(v)
+            return _sanitize_reason_text(v)
     return ""
+
+
+def build_audit_action_items(report, meta, stat_result, limit=8):
+    items = []
+    checks = sorted(report.get("checks", []) if isinstance(report, dict) else [], key=_check_sort_key)
+    for c in checks:
+        if not _is_suspicious_check(c):
+            continue
+        items.append({
+            "score": _check_suspicion_score(c),
+            "source": "LLM语义审查",
+            "title": f"{c.get('category', 'N/A')} / {c.get('item', 'N/A')}",
+            "detail": _brief_text(_check_reason(c) or _check_source_text(c) or "需人工复核。", 180),
+        })
+    if stat_result.get("benford_status") and "高偏差" in str(stat_result.get("benford_status")):
+        items.append({
+            "score": 260,
+            "source": "本地统计",
+            "title": "Benford分布偏差较高",
+            "detail": f"偏差={round(stat_result.get('benford_deviation') or 0, 3)}，建议核对原始数值来源和批量生成痕迹。",
+        })
+    reference_audit = meta.get("reference_audit") or {}
+    if reference_audit.get("online_enabled"):
+        bad_refs = []
+        refs_by_index = {i + 1: ref for i, ref in enumerate(reference_audit.get("references", []))}
+        for issue in reference_audit.get("issues", []):
+            ref = refs_by_index.get(issue.get("index"), {})
+            online = ref.get("online") or {}
+            if online.get("online_status") in {"not_found", "weak", "error"}:
+                bad_refs.append(issue.get("index"))
+        if bad_refs:
+            items.append({
+                "score": 240,
+                "source": "参考文献在线检索",
+                "title": f"{len(bad_refs)}条参考文献在线证据不足",
+                "detail": f"优先核对编号: {bad_refs[:10]}；检查DOI、题名、年份是否与数据库命中一致。",
+            })
+    image_audit = meta.get("image_audit") or {}
+    image_warnings = [img for img in image_audit.get("images", []) if img.get("risk") == "local_warning"]
+    semantic_warnings = []
+    detector_warnings = []
+    for img in image_audit.get("images", []):
+        sem = img.get("semantic") or {}
+        if sem.get("reasonability") in {"需人工核对", "可疑"} or sem.get("status") == "error":
+            semantic_warnings.append(img)
+        detector = img.get("detector") or {}
+        score = detector.get("score")
+        if detector.get("status") == "ok" and score is not None and score >= 50:
+            detector_warnings.append(img)
+    if image_warnings or semantic_warnings or detector_warnings:
+        items.append({
+            "score": 230,
+            "source": "图像检测",
+            "title": f"{len(image_warnings)}张本地异常 / {len(semantic_warnings)}张需语义复核 / {len(detector_warnings)}张AI概率偏高",
+            "detail": "查看 image_ai_review_manifest.html 中的自动imagedetector结果，并核对GLM语义描述是否与论文图注一致。",
+        })
+    items.sort(key=lambda item: (-item["score"], item["source"], item["title"]))
+    selected = []
+    used_sources = set()
+    for item in items:
+        if item["source"] in used_sources:
+            continue
+        selected.append(item)
+        used_sources.add(item["source"])
+        if len(selected) >= limit:
+            return selected
+    for item in items:
+        if item in selected:
+            continue
+        selected.append(item)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def format_audit_action_summary_markdown(report, meta, stat_result):
+    items = build_audit_action_items(report, meta, stat_result)
+    lines = ["## 🎯 行动优先级摘要", ""]
+    if not items:
+        lines.append("> 未形成高优先级行动项；仍建议按报告逐项抽查原文、图表和引用。")
+        lines.append("")
+        return lines
+    lines.append("| 优先级 | 来源 | 事项 | 复核建议 |")
+    lines.append("|--------|------|------|----------|")
+    for idx, item in enumerate(items, 1):
+        lines.append(
+            f"| {idx} | {_md_escape_cell(item['source'])} | {_md_escape_cell(item['title'])} | "
+            f"{_md_escape_cell(item['detail'])} |"
+        )
+    lines.append("")
+    return lines
+
+
+def format_audit_action_summary_html(report, meta, stat_result):
+    items = build_audit_action_items(report, meta, stat_result)
+    if not items:
+        content = '<p class="section-hint">未形成高优先级行动项；仍建议按报告逐项抽查原文、图表和引用。</p>'
+    else:
+        cards = ""
+        for idx, item in enumerate(items, 1):
+            cards += f"""
+            <div class="action-card">
+              <span class="action-rank">#{idx}</span>
+              <div>
+                <strong>{_html_escape(item['title'])}</strong>
+                <p>{_html_escape(item['detail'])}</p>
+              </div>
+              <span class="action-source">{_html_escape(item['source'])}</span>
+            </div>"""
+        content = f'<div class="action-list">{cards}</div>'
+    return f"""
+  <div class="section action-section">
+    <h2>行动优先级摘要</h2>
+    {content}
+  </div>"""
+
+
+def _report_action_context(report, pdf_path, meta, stat_result):
+    checks = sorted(report.get("checks", []) if isinstance(report, dict) else [], key=_check_sort_key)
+    suspicious = [c for c in checks if _is_suspicious_check(c)]
+    selected = suspicious[:10] if suspicious else checks[:8]
+    issues = []
+    for c in selected:
+        issues.append({
+            "category": c.get("category", ""),
+            "item": c.get("item", ""),
+            "verdict": c.get("verdict", ""),
+            "evidence": _brief_text(_clean_mineru_table_block(_check_source_text(c)), 900),
+            "reason": _brief_text(_check_reason(c), 900),
+        })
+    reference_audit = (meta or {}).get("reference_audit") or {}
+    ref_issues = []
+    for issue in (reference_audit.get("issues") or [])[:8]:
+        ref_issues.append({
+            "index": issue.get("index"),
+            "issues": issue.get("issues", []),
+            "text": _brief_text(_clean_reference_text(issue.get("text", "")), 500),
+        })
+    image_audit = (meta or {}).get("image_audit") or {}
+    image_issues = []
+    for img in (image_audit.get("images") or [])[:8]:
+        sem = img.get("semantic") or {}
+        detector = img.get("detector") or {}
+        if img.get("risk") == "local_warning" or sem.get("reasonability") in {"需人工核对", "可疑"} or (detector.get("score") or 0) >= 50:
+            image_issues.append({
+                "file": img.get("file"),
+                "local_issues": img.get("issues", []),
+                "semantic": _brief_text(sem.get("summary", ""), 360),
+                "detector_score": detector.get("score"),
+            })
+    return {
+        "paper": str(pdf_path),
+        "summary": _brief_text(report.get("summary", ""), 1200) if isinstance(report, dict) else "",
+        "risk_level": report.get("risk_level", "") if isinstance(report, dict) else "",
+        "detection_score": report.get("detection_score", "") if isinstance(report, dict) else "",
+        "conclusion": _brief_text(report.get("conclusion", ""), 1200) if isinstance(report, dict) else "",
+        "top_issues": issues,
+        "stat": {
+            "number_count": stat_result.get("number_count"),
+            "p_value_count": stat_result.get("p_value_count"),
+            "p_value_abnormal": stat_result.get("p_value_abnormal"),
+            "number_consistency": stat_result.get("number_consistency"),
+            "benford_status": stat_result.get("benford_status"),
+        },
+        "references": {
+            "reference_count": reference_audit.get("reference_count"),
+            "online_checked": reference_audit.get("online_checked"),
+            "issues": ref_issues,
+        },
+        "images": image_issues,
+    }
+
+
+def format_web_action_panel_html(report, pdf_path, meta, stat_result):
+    context = _report_action_context(report, pdf_path, meta or {}, stat_result or {})
+    context_json = json.dumps(context, ensure_ascii=False).replace("</", "<\\/")
+    return f"""
+  <div class="section web-action-section">
+    <h2>一键生成后续沟通草稿</h2>
+    <p class="section-hint">先启动本机动作服务，再点击按钮。草稿由本地配置的LLM生成，语言会按文献/证据主语言自动匹配，生成后仍需人工核对证据和措辞。</p>
+    <div class="web-action-toolbar">
+      <button type="button" class="action-button" data-action-kind="pubpeer_comment">生成 PubPeer Comment</button>
+      <button type="button" class="action-button" data-action-kind="journal_letter">生成期刊 Letter</button>
+      <button type="button" class="secondary-button" id="copy-generated-draft">复制草稿</button>
+    </div>
+    <div id="web-action-status" class="web-action-status">服务地址: <code>http://127.0.0.1:8765</code></div>
+    <textarea id="generated-draft" class="generated-draft" spellcheck="false" placeholder="生成的草稿会显示在这里，可直接编辑。"></textarea>
+  </div>
+  <script id="paper-audit-action-context" type="application/json">{_html_escape(context_json)}</script>
+  <script>
+  (function() {{
+    const statusEl = document.getElementById('web-action-status');
+    const outputEl = document.getElementById('generated-draft');
+    const contextEl = document.getElementById('paper-audit-action-context');
+    const actionLabels = {{
+      pubpeer_comment: 'PubPeer comment',
+      journal_letter: 'journal letter'
+    }};
+    function setStatus(text, isError) {{
+      statusEl.textContent = text;
+      statusEl.className = 'web-action-status' + (isError ? ' error' : '');
+    }}
+    async function generate(kind) {{
+      let context = {{}};
+      try {{ context = JSON.parse(contextEl.textContent || '{{}}'); }}
+      catch (err) {{ setStatus('无法读取报告上下文: ' + err.message, true); return; }}
+      setStatus('正在生成 ' + actionLabels[kind] + ' ...', false);
+      outputEl.value = '';
+      try {{
+        const resp = await fetch('http://127.0.0.1:8765/generate', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ kind, context }})
+        }});
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {{
+          throw new Error(data.error || ('HTTP ' + resp.status));
+        }}
+        outputEl.value = data.text || '';
+        setStatus('已生成 ' + actionLabels[kind] + '。请人工核对后再使用。', false);
+      }} catch (err) {{
+        setStatus('生成失败：请确认已运行 python paper_audit.py --serve-report-actions。详情: ' + err.message, true);
+      }}
+    }}
+    document.querySelectorAll('[data-action-kind]').forEach((btn) => {{
+      btn.addEventListener('click', () => generate(btn.getAttribute('data-action-kind')));
+    }});
+    document.getElementById('copy-generated-draft').addEventListener('click', async () => {{
+      try {{
+        await navigator.clipboard.writeText(outputEl.value || '');
+        setStatus('草稿已复制到剪贴板。', false);
+      }} catch (err) {{
+        outputEl.select();
+        setStatus('浏览器未允许自动复制，请手动复制文本框内容。', true);
+      }}
+    }});
+  }})();
+  </script>"""
 
 
 def format_report(report, pdf_path, meta, stat_result):
     """将审查结果格式化为Markdown报告"""
+    meta = normalize_run_meta(meta, pdf_path)
     risk_icons = {"高": "🔴", "中": "🟡", "低": "🟢", "可疑黑产": "⚫️"}
     lines = [
         f"# 📄 学术论文审查报告 [耿同学标准]",
@@ -1135,10 +2892,20 @@ def format_report(report, pdf_path, meta, stat_result):
     lines.append(f"## 总评: {report.get('summary', 'N/A')}")
     risk = report.get('risk_level', '未知')
     lines.append(f"**风险等级**: {risk_icons.get(risk, '⚪')} {risk}")
-    lines.append(f"**打假得分**: {report.get('detection_score', 0)} (越高越可疑)")
+    lines.append(f"**打假得分**: {report.get('detection_score', 0)} / 100 (越高越可疑)")
+    breakdown = report.get("score_breakdown") or {}
+    if breakdown:
+        lines.append(
+            "**计分拆解**: "
+            f"红旗 {breakdown.get('red_flags', 0)}；"
+            f"证据型疑点 {breakdown.get('evidence_warnings', 0)}；"
+            f"提取质量疑点 {breakdown.get('extraction_warnings', 0)}；"
+            f"统计调整 {', '.join(breakdown.get('stat_adjustments') or []) or '无'}"
+        )
     lines.append("")
+    lines.extend(format_audit_action_summary_markdown(report, meta, stat_result))
 
-    checks = report.get("checks", [])
+    checks = sorted(report.get("checks", []), key=_check_sort_key)
     if checks:
         suspicious = [c for c in checks if _is_suspicious_check(c)]
         lines.append("## 🚩 可疑点证据汇总表")
@@ -1182,17 +2949,22 @@ def format_report(report, pdf_path, meta, stat_result):
     if report.get("conclusion"):
         lines.append("## 📝 综合结论")
         lines.append(f"\n{report['conclusion']}")
+        lines.append("")
+
+    lines.extend(format_image_audit_markdown(meta.get("image_audit")))
+    lines.extend(format_reference_audit_markdown(meta.get("reference_audit")))
 
     return "\n".join(lines)
 
 
 def format_html_report(report, pdf_path, meta, stat_result):
-    """将审查结果格式化为美观的HTML报告"""
-    risk_colors = {"高": "#dc2626", "中": "#f59e0b", "低": "#16a34a", "可疑黑产": "#7c3aed"}
-    risk_icons = {"高": "🔴", "中": "🟡", "低": "🟢", "可疑黑产": "⚫️"}
+    """将审查结果格式化为紧凑、可审阅的HTML报告"""
+    meta = normalize_run_meta(meta, pdf_path)
+    risk_colors = {"高": "#b42318", "中": "#a16207", "低": "#166534", "可疑黑产": "#111827"}
+    risk_icons = {"高": "高风险", "中": "中风险", "低": "低风险", "可疑黑产": "可疑黑产"}
     risk = report.get('risk_level', '未知')
     risk_color = risk_colors.get(risk, "#6b7280")
-    risk_icon = risk_icons.get(risk, "⚪")
+    risk_icon = risk_icons.get(risk, "未知风险")
 
     # 统计检测状态
     benford_val = round(stat_result['benford_deviation'], 3) if stat_result['benford_deviation'] else '样本不足'
@@ -1204,9 +2976,9 @@ def format_html_report(report, pdf_path, meta, stat_result):
     chunk_info = ""
     if meta.get("chunk_count") and meta["chunk_count"] > 1:
         chunk_info = f"""
-        <div class="info-row">
-            <span class="info-label">审查方式</span>
-            <span class="info-value">分块审查 | {meta['chunk_count']}块 | 单块上限{meta['chunk_size']}字符 | 重叠{meta['overlap']}字符</span>
+        <div class="meta-item">
+            <span>审查方式</span>
+            <strong>分块审查 · {meta['chunk_count']}块 · 单块{meta['chunk_size']}字符 · 重叠{meta['overlap']}字符</strong>
         </div>"""
 
     # 数字自洽性
@@ -1226,7 +2998,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
         if meta.get("llm_partial_report") or failed_chunks:
             coverage_banner = f"""
   <div class="section coverage-warning">
-    <h2>⚠️ 部分报告：LLM覆盖不足</h2>
+    <h2>LLM覆盖不足</h2>
     <p><strong>成功审查分块</strong>: {_html_escape(meta.get('llm_coverage'))}</p>
     <p><strong>失败块</strong>: {_html_escape(failed_chunks or '无')}</p>
     <p>本报告只基于成功返回的LLM分块合并，未覆盖失败分块全文；结论只能作为阶段性结果。建议稍后使用 <code>--llm-cache-only</code> 复用成功缓存，或切换更稳定API补跑。</p>
@@ -1234,89 +3006,115 @@ def format_html_report(report, pdf_path, meta, stat_result):
         else:
             coverage_banner = f"""
   <div class="section coverage-ok">
-    <h2>✅ LLM覆盖率</h2>
+    <h2>LLM覆盖率</h2>
     <p>{_html_escape(meta.get('llm_coverage'))} 个分块全部成功。</p>
   </div>"""
+    action_summary_html = format_audit_action_summary_html(report, meta, stat_result) if not report.get("parse_error") else ""
+    reference_audit_html = format_reference_audit_html(meta.get("reference_audit"))
+    image_audit_html = format_image_audit_html(meta.get("image_audit"))
+    web_action_panel_html = format_web_action_panel_html(report, pdf_path, meta, stat_result) if not report.get("parse_error") else ""
+    breakdown = report.get("score_breakdown") or {}
+    score_breakdown_html = ""
+    if breakdown:
+        score_breakdown_html = f"""
+      <div class="score-breakdown">
+        红旗 {breakdown.get('red_flags', 0)} · 证据型疑点 {breakdown.get('evidence_warnings', 0)} · 提取质量疑点 {breakdown.get('extraction_warnings', 0)} · 统计调整 {_html_escape(', '.join(breakdown.get('stat_adjustments') or []) or '无')}
+      </div>"""
+    summary_text = _html_escape(report.get('summary', 'N/A'))
+    extracted_chars = meta.get('total_chars', meta.get('chars', 'N/A'))
+    extraction_method = meta.get('extraction_method', meta.get('source', 'N/A'))
 
     # 解析失败
     if report.get("parse_error"):
         checks_html = f"""
         <div class="section">
-            <h2>⚠️ LLM报告解析失败（原始输出）</h2>
+            <h2>LLM报告解析失败（原始输出）</h2>
             <pre class="error-block">{_html_escape(report.get('raw_output', ''))}</pre>
         </div>"""
         conclusion_html = ""
     else:
         # 可疑点证据汇总表 + 全部检查概览 + 详细分析
-        checks = report.get("checks", [])
+        checks = sorted(report.get("checks", []), key=_check_sort_key)
         suspicious = [c for c in checks if _is_suspicious_check(c)]
 
-        suspicious_rows = ""
+        suspicious_items = ""
         for i, c in enumerate(suspicious, 1):
             verdict = c.get('verdict', 'N/A')
-            verdict_class = "verdict-red" if "红旗" in verdict else ("verdict-yellow" if ("疑点" in verdict or "可疑" in verdict) else "verdict-green")
+            verdict_class = _check_verdict_class(verdict)
             cat_item = f"{c.get('category', 'N/A')} / {c.get('item', 'N/A')}"
-            suspicious_rows += f"""
-            <tr>
-                <td>{i}</td>
-                <td><span class="{verdict_class}">{_html_escape(verdict)}</span></td>
-                <td>{_html_escape(cat_item)}</td>
-                <td class="evidence-cell">{_html_escape(_brief_text(_check_source_text(c), 260) or '未提供明确原文摘录')}</td>
-                <td class="reason-cell">{_html_escape(_brief_text(_check_reason(c), 260) or '未提供详细原因')}</td>
-            </tr>"""
-        if not suspicious_rows:
-            suspicious_rows = """
-            <tr><td colspan="5" class="muted">未发现红旗/疑点项；仍建议人工核验关键数据、图表和引用。</td></tr>"""
+            source = _check_source_text(c)
+            reason = _check_reason(c)
+            brief = _brief_text(reason or source or "未提供详细原因", 120)
+            suspicion_score = _check_suspicion_score(c)
+            suspicious_items += f"""
+            <details class="suspicion-card">
+                <summary class="suspicion-summary">
+                    <span class="suspicion-rank">#{i}</span>
+                    <span class="{verdict_class} suspicion-verdict">{_html_escape(verdict)}</span>
+                    <span class="suspicion-title">{_html_escape(cat_item)}</span>
+                    <span class="suspicion-score">可疑度 {suspicion_score}</span>
+                    <span class="suspicion-brief">{_html_escape(brief)}</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="suspicion-body">
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong>{render_evidence_html(source or 'LLM未提供明确原文摘录，请人工回查对应段落。')}</div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>{_html_escape(reason or 'LLM未提供详细说明。')}</p></div>
+                </div>
+            </details>"""
+        if not suspicious_items:
+            suspicious_items = '<div class="muted">未发现红旗/疑点项；仍建议人工核验关键数据、图表和引用。</div>'
 
         checks_table_rows = ""
         for i, c in enumerate(checks, 1):
             verdict = c.get('verdict', 'N/A')
-            verdict_class = "verdict-red" if "红旗" in verdict else ("verdict-yellow" if ("疑点" in verdict or "可疑" in verdict) else "verdict-green")
+            verdict_class = _check_verdict_class(verdict)
             checks_table_rows += f"""
             <tr>
                 <td>{i}</td>
                 <td>{_html_escape(c.get('category', 'N/A'))}</td>
                 <td>{_html_escape(c.get('item', 'N/A'))}</td>
                 <td><span class="{verdict_class}">{_html_escape(verdict)}</span></td>
-                <td class="evidence-cell">{_html_escape(_brief_text(_check_source_text(c), 140) or '-')}</td>
+                <td class="evidence-cell">{render_evidence_summary_html(_check_source_text(c), 120)}</td>
             </tr>"""
 
         detail_cards = ""
         for i, c in enumerate(checks, 1):
             verdict = c.get('verdict', 'N/A')
-            verdict_class = "verdict-red" if "红旗" in verdict else ("verdict-yellow" if ("疑点" in verdict or "可疑" in verdict) else "verdict-green")
+            verdict_class = _check_verdict_class(verdict)
             source = _check_source_text(c)
             reason = _check_reason(c)
+            source_html = render_evidence_html(source or 'LLM未提供明确原文摘录，请人工回查对应段落。')
             detail_cards += f"""
-            <div class="detail-card">
-                <div class="detail-header">
+            <details class="detail-card">
+                <summary class="detail-header detail-summary">
                     <span class="detail-num">#{i}</span>
                     <span class="detail-cat">{_html_escape(c.get('category', 'N/A'))}</span>
                     <span class="detail-item">{_html_escape(c.get('item', 'N/A'))}</span>
                     <span class="{verdict_class} detail-verdict">{_html_escape(verdict)}</span>
+                    <span class="detail-brief">{_html_escape(_brief_text(reason or source or '无摘要', 120))}</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="detail-body">
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong>{source_html}</div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>{_html_escape(reason or 'LLM未提供详细说明。')}</p></div>
                 </div>
-                <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>{_html_escape(source or 'LLM未提供明确原文摘录，请人工回查对应段落。')}</blockquote></div>
-                <div class="detail-text"><strong>可疑原因/详细说明</strong><p>{_html_escape(reason or 'LLM未提供详细说明。')}</p></div>
-            </div>"""
+            </details>"""
 
         checks_html = f"""
         <div class="section evidence-summary">
-            <h2>🚩 可疑点证据汇总表</h2>
-            <p class="section-hint">优先阅读本表：每条可疑点均尽量给出原文摘录和判断理由，便于快速人工复核。</p>
-            <table class="checks-table evidence-table">
-                <thead><tr><th>#</th><th>风险判定</th><th>分类/检查项</th><th>原文证据摘录</th><th>可疑原因</th></tr></thead>
-                <tbody>{suspicious_rows}</tbody>
-            </table>
+            <h2>可疑点证据汇总</h2>
+            <p class="section-hint">按可疑程度由高到低排列；默认仅显示简要摘要，展开后查看原文证据、判断理由和完整表格。</p>
+            <div class="suspicion-list">{suspicious_items}</div>
         </div>
         <div class="section">
-            <h2>🔍 全部检查项概览</h2>
+            <h2>全部检查项概览</h2>
             <table class="checks-table">
                 <thead><tr><th>#</th><th>分类</th><th>检查项</th><th>判定</th><th>证据摘要</th></tr></thead>
                 <tbody>{checks_table_rows}</tbody>
             </table>
         </div>
         <div class="section">
-            <h2>📋 逐条详细分析（含原文支撑）</h2>
+            <h2>逐条详细分析（含原文支撑）</h2>
             {detail_cards}
         </div>"""
 
@@ -1324,7 +3122,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
         if report.get("conclusion"):
             conclusion_html = f"""
             <div class="section conclusion-section">
-                <h2>📝 综合结论</h2>
+                <h2>综合结论</h2>
                 <p class="conclusion-text">{_html_escape(report['conclusion'])}</p>
             </div>"""
 
@@ -1333,41 +3131,45 @@ def format_html_report(report, pdf_path, meta, stat_result):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>📄 学术论文审查报告</title>
+<title>学术论文审查报告</title>
 <style>
   :root {{
-    --bg: #0f172a;
-    --surface: #1e293b;
-    --surface2: #334155;
-    --text: #e2e8f0;
-    --text-muted: #94a3b8;
-    --accent: #38bdf8;
-    --border: #475569;
-    --red: #ef4444;
-    --yellow: #f59e0b;
-    --green: #22c55e;
+    --bg: #f7f3ec;
+    --paper: #fffdf8;
+    --surface: #fffaf1;
+    --surface2: #f3eadc;
+    --text: #2b241d;
+    --text-muted: #7b7065;
+    --accent: #c15f3c;
+    --accent2: #2f6f73;
+    --border: #e4d8c8;
+    --red: #b42318;
+    --yellow: #b7791f;
+    --green: #2f7d50;
+    --shadow: 0 22px 70px rgba(61, 45, 31, 0.10);
   }}
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
-    background: var(--bg);
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
+    background: #f6f6f6;
     color: var(--text);
     line-height: 1.6;
-    padding: 20px;
+    padding: 28px 20px;
   }}
-  .container {{ max-width: 960px; margin: 0 auto; }}
+  .container {{ max-width: 1120px; margin: 0 auto; }}
   .header {{
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    background: rgba(255,253,248,0.86);
     border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 32px;
-    margin-bottom: 24px;
+    border-radius: 8px;
+    padding: 36px;
+    margin-bottom: 28px;
     text-align: center;
+    box-shadow: none;
   }}
-  .header h1 {{ font-size: 28px; margin-bottom: 16px; }}
+  .header h1 {{ font-size: 32px; margin-bottom: 18px; letter-spacing: 0; }}
   .risk-badge {{
     display: inline-block;
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
     padding: 8px 24px;
     border-radius: 999px;
@@ -1386,11 +3188,12 @@ def format_html_report(report, pdf_path, meta, stat_result):
   }}
   .meta-grid strong {{ color: var(--text); }}
   .section {{
-    background: var(--surface);
+    background: rgba(255,253,248,0.88);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 24px;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
+    box-shadow: 0 10px 34px rgba(61, 45, 31, 0.06);
   }}
   .section h2 {{
     font-size: 20px;
@@ -1400,8 +3203,8 @@ def format_html_report(report, pdf_path, meta, stat_result):
   }}
   table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
   th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }}
-  th {{ background: var(--surface2); color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 12px; }}
-  tr:hover {{ background: rgba(56,189,248,0.05); }}
+  th {{ background: var(--surface2); color: var(--text-muted); font-weight: 650; text-transform: uppercase; font-size: 12px; }}
+  tr:hover {{ background: rgba(193,95,60,0.05); }}
   .status-ok {{ color: var(--green); font-weight: 600; }}
   .status-warn {{ color: var(--yellow); font-weight: 600; }}
   .verdict-red {{ color: var(--red); font-weight: 700; }}
@@ -1414,9 +3217,115 @@ def format_html_report(report, pdf_path, meta, stat_result):
     margin-bottom: 12px;
     border-left: 4px solid var(--accent);
   }}
+  .detail-card[open] {{ background: #f8efe2; }}
   .detail-header {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
+  .detail-summary {{ cursor: pointer; list-style: none; }}
+  .detail-summary::-webkit-details-marker {{ display: none; }}
+  .detail-summary::after {{
+    content: "展开详情";
+    margin-left: auto;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+  }}
+  .detail-card[open] .detail-summary::after {{ content: "收起详情"; }}
   .section-hint {{ color: var(--text-muted); margin: -6px 0 14px; font-size: 14px; }}
   .evidence-summary {{ border-left: 4px solid var(--red); }}
+  .suspicion-list {{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }}
+  .suspicion-card {{
+    background: #fff8ed;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--red);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }}
+  .suspicion-summary {{
+    cursor: pointer;
+    list-style: none;
+    display: grid;
+    grid-template-columns: 44px minmax(76px, 120px) minmax(180px, 1fr) auto;
+    gap: 8px 12px;
+    align-items: center;
+  }}
+  .suspicion-summary::-webkit-details-marker {{ display: none; }}
+  .suspicion-summary::after {{
+    content: "展开详情";
+    grid-column: 4;
+    grid-row: 2;
+    justify-self: end;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+  }}
+  .suspicion-card[open] .suspicion-summary::after {{ content: "收起详情"; }}
+  .suspicion-rank {{
+    background: rgba(248,113,113,0.16);
+    color: var(--red);
+    border-radius: 999px;
+    padding: 4px 8px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 13px;
+  }}
+  .suspicion-title {{
+    font-weight: 700;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }}
+  .suspicion-score {{
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }}
+  .suspicion-brief {{
+    grid-column: 2 / 4;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }}
+  .suspicion-body {{
+    margin-top: 12px;
+  }}
+  .action-section {{
+    border-left: 5px solid var(--accent);
+  }}
+  .action-list {{
+    display: grid;
+    gap: 10px;
+  }}
+  .action-card {{
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 140px;
+    gap: 12px;
+    align-items: start;
+    padding: 14px;
+    background: #fff8ed;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }}
+  .action-rank {{
+    background: rgba(193,95,60,0.14);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-weight: 800;
+    text-align: center;
+  }}
+  .action-card p {{
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-size: 13px;
+  }}
+  .action-source {{
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: right;
+  }}
   .checks-table {{ table-layout: fixed; }}
   .checks-table th:nth-child(1), .checks-table td:nth-child(1) {{ width: 44px; text-align: center; }}
   .checks-table th:nth-child(2), .checks-table td:nth-child(2) {{ width: 120px; }}
@@ -1440,13 +3349,75 @@ def format_html_report(report, pdf_path, meta, stat_result):
   .detail-cat {{ color: var(--accent); font-weight: 600; }}
   .detail-item {{ flex: 1; }}
   .detail-verdict {{ font-size: 14px; }}
+  .detail-brief {{
+    flex-basis: 100%;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding-left: 40px;
+  }}
+  .detail-body {{ margin-top: 12px; }}
   .detail-evidence {{
     margin-top: 10px;
     padding: 10px 14px;
-    background: rgba(245,158,11,0.1);
+    background: rgba(183,121,31,0.10);
     border-radius: 6px;
     font-size: 14px;
-    color: #fbbf24;
+    color: #6f4b12;
+  }}
+  .detail-evidence blockquote {{
+    margin-top: 8px;
+    white-space: pre-wrap;
+    color: #6f4b12;
+  }}
+  .table-hint {{
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 600;
+    margin-right: 8px;
+  }}
+  .summary-excerpt {{
+    color: var(--text-muted);
+    display: block;
+    margin-top: 4px;
+  }}
+  .data-table-details {{
+    margin-top: 8px;
+  }}
+  .data-table-details summary {{
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }}
+  .data-table-wrap {{
+    margin-top: 8px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fffdf8;
+  }}
+  .data-table {{
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }}
+  .data-table th,
+  .data-table td {{
+    min-width: 96px;
+    max-width: 320px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+    white-space: normal;
+    color: var(--text);
+  }}
+  .data-table th {{
+    position: sticky;
+    top: 0;
+    background: #efe3d3;
+    color: var(--text);
+    z-index: 1;
   }}
   .detail-text {{
     margin-top: 8px;
@@ -1458,15 +3429,15 @@ def format_html_report(report, pdf_path, meta, stat_result):
   .conclusion-text {{ font-size: 16px; white-space: pre-wrap; color: var(--text); }}
   .coverage-warning {{
     border-left: 5px solid var(--yellow);
-    background: rgba(245,158,11,0.10);
+    background: rgba(183,121,31,0.10);
   }}
   .coverage-warning code {{ background: var(--surface2); padding: 2px 6px; border-radius: 4px; }}
   .coverage-ok {{
     border-left: 5px solid var(--green);
-    background: rgba(16,185,129,0.08);
+    background: rgba(47,125,80,0.08);
   }}
   .error-block {{
-    background: rgba(239,68,68,0.1);
+    background: rgba(180,35,24,0.08);
     border: 1px solid var(--red);
     border-radius: 8px;
     padding: 16px;
@@ -1486,8 +3457,134 @@ def format_html_report(report, pdf_path, meta, stat_result):
   .score-fill {{
     height: 100%;
     border-radius: 4px;
-    background: linear-gradient(90deg, var(--green), var(--yellow), var(--red));
-    transition: width 0.5s;
+    background: var(--red);
+    transition: none;
+  }}
+  .score-breakdown {{
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }}
+  .reference-list {{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }}
+  .reference-card {{
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff8ed;
+    padding: 12px 14px;
+  }}
+  .reference-summary {{
+    cursor: pointer;
+    list-style: none;
+    display: grid;
+    grid-template-columns: 46px minmax(98px, 140px) minmax(220px, 1fr) auto;
+    gap: 8px 12px;
+    align-items: center;
+  }}
+  .reference-summary::-webkit-details-marker {{ display: none; }}
+  .reference-index {{
+    color: var(--accent);
+    font-weight: 800;
+  }}
+  .reference-status {{
+    font-weight: 800;
+    border-radius: 999px;
+    padding: 3px 8px;
+    text-align: center;
+    background: rgba(47,111,115,0.10);
+  }}
+  .reference-verified, .reference-likely {{ color: var(--green); }}
+  .reference-weak, .reference-not_found, .reference-error {{ color: var(--red); }}
+  .reference-title {{
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }}
+  .reference-confidence {{
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }}
+  .reference-issues {{
+    grid-column: 2 / 5;
+    color: var(--text-muted);
+    font-size: 13px;
+  }}
+  .reference-body {{
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-size: 14px;
+  }}
+  .reference-matches {{
+    margin-top: 8px;
+    padding-left: 22px;
+  }}
+  .reference-matches li {{
+    margin: 8px 0;
+  }}
+  .reference-matches a, .image-section a {{
+    color: var(--accent);
+    font-weight: 700;
+  }}
+  .image-table code {{
+    color: var(--text-muted);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }}
+  .detector-hint {{
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 800;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }}
+  .web-action-section {{
+    border-left: 5px solid #2563eb;
+  }}
+  .web-action-toolbar {{
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }}
+  .action-button, .secondary-button {{
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: var(--text-main);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }}
+  .action-button {{
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+  }}
+  .action-button:hover, .secondary-button:hover {{
+    filter: brightness(0.96);
+  }}
+  .web-action-status {{
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 8px 0;
+  }}
+  .web-action-status.error {{
+    color: #b42318;
+    font-weight: 700;
+  }}
+  .generated-draft {{
+    width: 100%;
+    min-height: 260px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--text-main);
+    background: #fff;
+    resize: vertical;
   }}
   .footer {{
     text-align: center;
@@ -1496,31 +3593,312 @@ def format_html_report(report, pdf_path, meta, stat_result):
     margin-top: 32px;
     padding: 16px;
   }}
+  /* Compact grayscale report skin: evidence first, decoration last. */
+  :root {{
+    --bg: #f6f6f6;
+    --paper: #ffffff;
+    --surface: #ffffff;
+    --surface2: #eeeeee;
+    --text: #171717;
+    --text-muted: #666666;
+    --accent: #111111;
+    --accent2: #3f3f46;
+    --border: #d4d4d4;
+    --red: #b42318;
+    --yellow: #8a5a00;
+    --green: #166534;
+    --shadow: none;
+  }}
+  body {{
+    background: #f6f6f6;
+    color: var(--text);
+    line-height: 1.55;
+    padding: 18px;
+  }}
+  .container {{ max-width: 1280px; }}
+  .header, .section {{
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: none;
+  }}
+  .header {{
+    padding: 18px;
+    margin-bottom: 14px;
+    text-align: left;
+  }}
+  .report-topline {{
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }}
+  .report-kicker {{
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+  }}
+  .header h1 {{
+    font-size: 24px;
+    line-height: 1.2;
+    margin: 3px 0 8px;
+    letter-spacing: 0;
+  }}
+  .report-summary {{
+    max-width: 820px;
+    color: #333333;
+    font-size: 14px;
+  }}
+  .risk-badge {{
+    border-radius: 6px;
+    padding: 7px 10px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
+  }}
+  .score-panel {{
+    display: grid;
+    grid-template-columns: 170px minmax(220px, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }}
+  .score-value {{
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 900;
+    color: {risk_color};
+  }}
+  .score-caption {{
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 4px;
+  }}
+  .score-bar {{
+    height: 7px;
+    background: #e5e5e5;
+    border-radius: 4px;
+    margin-top: 0;
+  }}
+  .score-fill {{
+    background: {risk_color};
+    border-radius: 4px;
+    transition: none;
+  }}
+  .score-breakdown {{
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }}
+  .meta-grid {{
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }}
+  .meta-grid > div, .meta-item {{
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 10px;
+    background: #fafafa;
+    color: var(--text-muted);
+    font-size: 12px;
+  }}
+  .meta-grid strong, .meta-item strong {{
+    display: block;
+    color: var(--text);
+    font-size: 13px;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+  }}
+  .section {{
+    padding: 16px;
+    margin-bottom: 14px;
+  }}
+  .section h2 {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 17px;
+    line-height: 1.25;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+  }}
+  .section-hint {{
+    margin: -4px 0 12px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }}
+  table {{ font-size: 13px; }}
+  th, td {{
+    padding: 8px 9px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }}
+  th {{
+    background: #f1f1f1;
+    color: #444444;
+    font-size: 11px;
+    letter-spacing: 0;
+  }}
+  .action-card, .suspicion-card, .detail-card, .reference-card {{
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-left: 3px solid #111111;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }}
+  .evidence-summary {{ border-left: 3px solid var(--red); }}
+  .suspicion-summary {{
+    grid-template-columns: 44px minmax(72px, 112px) minmax(180px, 1fr) 96px;
+    gap: 7px 10px;
+  }}
+  .suspicion-rank, .action-rank, .detail-num {{
+    background: #f1f1f1;
+    color: #111111;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+  }}
+  .suspicion-brief {{
+    grid-column: 2 / 4;
+    color: var(--text-muted);
+  }}
+  .summary-action {{
+    grid-column: 4;
+    grid-row: 2;
+    justify-self: end;
+    color: #111111;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }}
+  .detail-summary .summary-action {{
+    grid-column: auto;
+    grid-row: auto;
+    margin-left: auto;
+  }}
+  .detail-card[open], .suspicion-card[open] {{
+    background: #fbfbfb;
+  }}
+  .detail-summary::after, .suspicion-summary::after {{
+    content: none;
+  }}
+  .detail-body, .suspicion-body {{
+    border-top: 1px solid var(--border);
+    margin-top: 10px;
+    padding-top: 10px;
+  }}
+  .detail-evidence {{
+    background: #f7f7f7;
+    color: #222222;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }}
+  .detail-evidence blockquote {{
+    color: #222222;
+  }}
+  .detail-text {{
+    color: #4b4b4b;
+  }}
+  .data-table-wrap {{
+    background: #ffffff;
+    border-radius: 6px;
+  }}
+  .data-table th {{
+    background: #ededed;
+  }}
+  .coverage-warning, .coverage-ok, .conclusion-section, .action-section, .web-action-section {{
+    border-left-width: 3px;
+    background: #ffffff;
+  }}
+  .web-action-section {{ border-left-color: #2563eb; }}
+  .action-button, .secondary-button {{
+    border-radius: 6px;
+    padding: 8px 11px;
+    color: #111111;
+  }}
+  .action-button {{ color: #ffffff; }}
+  .generated-draft {{
+    border-radius: 6px;
+    min-height: 220px;
+    color: #111111;
+  }}
+  .image-thumb {{
+    max-width: 84px;
+    max-height: 64px;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #ffffff;
+  }}
+  .muted-inline {{
+    color: var(--text-muted);
+    font-size: 12px;
+  }}
+  @media (max-width: 900px) {{
+    body {{ padding: 10px; }}
+    .report-topline {{ flex-direction: column; }}
+    .score-panel {{ grid-template-columns: 1fr; }}
+    .meta-grid {{ grid-template-columns: 1fr 1fr; }}
+    .suspicion-summary, .reference-summary {{
+      grid-template-columns: 40px minmax(70px, 100px) 1fr;
+    }}
+    .suspicion-score, .reference-confidence, .summary-action {{
+      grid-column: 2 / 4;
+      justify-self: start;
+    }}
+    .suspicion-brief, .reference-issues {{
+      grid-column: 1 / 4;
+    }}
+  }}
+  @media (max-width: 560px) {{
+    .meta-grid {{ grid-template-columns: 1fr; }}
+    .checks-table {{ table-layout: auto; }}
+  }}
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
-    <h1>📄 学术论文审查报告</h1>
-    <div class="risk-badge">{risk_icon} {risk}</div>
-    <div style="margin-top:8px; color:var(--text-muted);">
-      打假得分: <strong style="color:{risk_color}">{report.get('detection_score', 0)}</strong>（越高越可疑）
-      <div class="score-bar"><div class="score-fill" style="width:{min(report.get('detection_score', 0), 100)}%"></div></div>
+    <div class="report-topline">
+      <div>
+        <div class="report-kicker">Paper Audit / Veritas</div>
+        <h1>学术论文审查报告</h1>
+        <div class="report-summary">{summary_text}</div>
+      </div>
+      <div class="risk-badge" style="background:{risk_color};">{risk_icon}</div>
+    </div>
+    <div class="score-panel">
+      <div>
+        <div class="score-value">{report.get('detection_score', 0)}</div>
+        <div class="score-caption">打假得分 / 100，越高越可疑</div>
+      </div>
+      <div>
+        <div class="score-bar"><div class="score-fill" style="width:{min(report.get('detection_score', 0), 100)}%; background:{risk_color};"></div></div>
+      {score_breakdown_html}
+      </div>
     </div>
     <div class="meta-grid">
-      <div><strong>文件</strong>: {_html_escape(pdf_path)}</div>
-      <div><strong>文件大小</strong>: {meta.get('size_mb', 'N/A')} MB</div>
-      <div><strong>提取字符数</strong>: {meta.get('total_chars', meta.get('chars', 'N/A'))}</div>
-      <div><strong>提取方式</strong>: {meta.get('extraction_method', meta.get('source', 'N/A'))}</div>
-      {chunk_info.replace('class="info-row"', '').replace('class="info-label"', '').replace('class="info-value"', '').strip().replace('<span>', '<div>').replace('</span>', '</div>') if chunk_info else '<div></div><div></div>'}
-      <div><strong>审查时间</strong>: {time.strftime('%Y-%m-%d %H:%M:%S')}</div>
+      <div><span>文件</span><strong>{_html_escape(pdf_path)}</strong></div>
+      <div><span>文件大小</span><strong>{meta.get('size_mb', 'N/A')} MB</strong></div>
+      <div><span>提取字符数</span><strong>{extracted_chars}</strong></div>
+      <div><span>提取方式</span><strong>{extraction_method}</strong></div>
+      {chunk_info if chunk_info else ''}
+      <div><span>审查时间</span><strong>{time.strftime('%Y-%m-%d %H:%M:%S')}</strong></div>
     </div>
   </div>
 
   {coverage_banner}
+  {action_summary_html}
 
   <div class="section">
-    <h2>📊 本地统计检测结果</h2>
+    <h2>本地统计检测结果</h2>
     <table>
       <thead><tr><th>检测项</th><th>结果</th><th>状态</th></tr></thead>
       <tbody>
@@ -1534,7 +3912,10 @@ def format_html_report(report, pdf_path, meta, stat_result):
   </div>
 
   {checks_html}
+  {web_action_panel_html}
   {conclusion_html}
+  {image_audit_html}
+  {reference_audit_html}
 
   <div class="footer">
     Generated by <strong>Veritas</strong> — 学术论文自动审查工具（耿同学标准） | {time.strftime('%Y-%m-%d %H:%M:%S')}
@@ -1692,7 +4073,7 @@ def copy_to_clipboard(text: str) -> bool:
         if system == "Windows":
             # Windows: 使用clip命令
             process = subprocess.Popen(
-                ["clip"], stdin=subprocess.PIPE, shell=True
+                ["clip.exe"], stdin=subprocess.PIPE
             )
             process.communicate(text.encode("utf-16"))
             return process.returncode == 0
@@ -1781,9 +4162,789 @@ def launch_zhuque_ai_detect(text: str):
 # ──────────────────────────────────────────────────────────────
 
 IMAGE_DETECT_URL = "https://imagedetector.com/"
+IMAGE_DETECT_UPLOAD_BASE = "https://ai-image-detector-prod.nyc3.digitaloceanspaces.com"
+GLM_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 
 # 支持的图片扩展名
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff", ".tif", ".webp"}
+
+
+def _dedupe_paths(paths):
+    seen = set()
+    result = []
+    for path in paths:
+        try:
+            resolved = str(Path(path).resolve())
+        except Exception:
+            resolved = str(path)
+        if resolved not in seen:
+            seen.add(resolved)
+            result.append(resolved)
+    return result
+
+
+def _image_output_dir(input_path: str):
+    p = Path(input_path)
+    if p.is_file():
+        return p.parent / "_paper_audit_images"
+    return p / "_paper_audit_images"
+
+
+def _extract_images_from_mineru_zip(zip_path: Path, output_dir: Path) -> List[str]:
+    images = []
+    try:
+        import zipfile
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(zip_path) as zf:
+            for name in zf.namelist():
+                suffix = Path(name).suffix.lower()
+                if suffix not in IMAGE_EXTENSIONS:
+                    continue
+                info = zf.getinfo(name)
+                if info.file_size < MIN_IMAGE_BYTES:
+                    continue
+                out_name = f"{_safe_name(zip_path.stem)}_{_safe_name(Path(name).stem)}{suffix}"
+                out_path = output_dir / out_name
+                out_path.write_bytes(zf.read(name))
+                images.append(str(out_path))
+    except Exception as e:
+        print(f"  ⚠️ MinerU图片提取失败 {zip_path}: {e}")
+    return images
+
+
+def collect_mineru_image_files(input_path: str, output_dir=None) -> List[str]:
+    """Collect images saved inside MinerU zip artifacts generated by extraction."""
+    p = Path(input_path)
+    base = Path(output_dir) if output_dir else (p.parent if p.is_file() else p)
+    zips = []
+    if base.exists():
+        zips.extend(base.glob("*.mineru.zip"))
+    if p.is_dir():
+        zips.extend(p.rglob("*.mineru.zip"))
+    zips = _latest_mineru_zips(zips)
+    images_dir = _image_output_dir(str(p))
+    images = []
+    for zip_path in _dedupe_paths(zips):
+        images.extend(_extract_images_from_mineru_zip(Path(zip_path), images_dir))
+    if images_dir.exists():
+        for ext in IMAGE_EXTENSIONS:
+            for image_path in images_dir.rglob(f"*{ext}"):
+                try:
+                    if image_path.stat().st_size >= MIN_IMAGE_BYTES:
+                        images.append(str(image_path))
+                except Exception:
+                    continue
+    return _dedupe_paths(images)
+
+
+def _latest_mineru_zips(paths):
+    latest = {}
+    for path in paths:
+        p = Path(path)
+        name = p.name
+        if not name.endswith(".mineru.zip"):
+            continue
+        key = name[:-len(".mineru.zip")]
+        key = re.sub(r"\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "", key, flags=re.I)
+        try:
+            mtime = p.stat().st_mtime
+        except Exception:
+            mtime = 0
+        current = latest.get(key)
+        if current is None or mtime > current[0]:
+            latest[key] = (mtime, str(p))
+    return [item[1] for item in latest.values()]
+
+
+def analyze_image_reasonability(image_path: str):
+    """Lightweight local image sanity checks before external AI-image review."""
+    result = {
+        "path": str(image_path),
+        "file": Path(image_path).name,
+        "size_bytes": 0,
+        "width": None,
+        "height": None,
+        "format": "",
+        "risk": "needs_online_check",
+        "issues": [],
+    }
+    try:
+        path = Path(image_path)
+        result["size_bytes"] = path.stat().st_size
+        if result["size_bytes"] < MIN_IMAGE_BYTES:
+            result["issues"].append("too_small")
+        try:
+            from PIL import Image, ImageStat
+            with Image.open(path) as img:
+                result["width"], result["height"] = img.size
+                result["format"] = img.format or path.suffix.lstrip(".")
+                if result["width"] < 120 or result["height"] < 120:
+                    result["issues"].append("low_resolution")
+                ratio = max(result["width"], result["height"]) / max(1, min(result["width"], result["height"]))
+                if ratio > 8:
+                    result["issues"].append("extreme_aspect_ratio")
+                stat = ImageStat.Stat(img.convert("L").resize((128, 128)))
+                if stat.stddev and stat.stddev[0] < 3:
+                    result["issues"].append("near_blank_or_flat")
+                if stat.stddev and stat.stddev[0] > 85:
+                    result["issues"].append("very_high_noise_or_contrast")
+        except ImportError:
+            result["issues"].append("pillow_not_installed")
+        except Exception as e:
+            result["issues"].append(f"image_parse_error:{type(e).__name__}")
+    except Exception as e:
+        result["issues"].append(f"file_error:{type(e).__name__}")
+
+    severe = {"low_resolution", "near_blank_or_flat", "image_parse_error:UnidentifiedImageError"}
+    if any(issue in severe or issue.startswith("file_error") for issue in result["issues"]):
+        result["risk"] = "local_warning"
+    elif not result["issues"]:
+        result["risk"] = "local_ok"
+    return result
+
+
+def _image_file_fingerprint(image_path: str):
+    try:
+        path = Path(image_path)
+        stat = path.stat()
+        return _text_fingerprint(str(path.resolve()), f"{stat.st_size}|{int(stat.st_mtime)}|semantic_v{IMAGE_SEMANTIC_CACHE_VERSION}")
+    except Exception:
+        return _text_fingerprint(str(image_path), f"semantic_v{IMAGE_SEMANTIC_CACHE_VERSION}")
+
+
+def _image_to_data_url(image_path: str):
+    path = Path(image_path)
+    try:
+        from PIL import Image
+        with Image.open(path) as img:
+            img = img.convert("RGB")
+            img.thumbnail((1400, 1400))
+            side = max(512, img.width, img.height)
+            side = min(side, 1600)
+            canvas = Image.new("RGB", (side, side), "white")
+            x = max(0, (side - img.width) // 2)
+            y = max(0, (side - img.height) // 2)
+            canvas.paste(img, (x, y))
+            buf = io.BytesIO()
+            canvas.save(buf, format="JPEG", quality=88, optimize=True)
+            data = base64.b64encode(buf.getvalue()).decode("ascii")
+            return f"data:image/jpeg;base64,{data}"
+    except Exception:
+        mime = mimetypes.guess_type(str(path))[0] or "image/png"
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{data}"
+
+
+def _normalize_glm_image_result(parsed, model):
+    if not isinstance(parsed, dict):
+        parsed = {}
+    risks = parsed.get("risks")
+    if isinstance(risks, str):
+        risks = [risks] if risks.strip() else []
+    elif not isinstance(risks, list):
+        risks = []
+    manual_checks = parsed.get("manual_checks")
+    if isinstance(manual_checks, str):
+        manual_checks = [manual_checks] if manual_checks.strip() else []
+    elif not isinstance(manual_checks, list):
+        manual_checks = []
+    try:
+        confidence = float(parsed.get("confidence") or 0)
+    except Exception:
+        confidence = 0
+    confidence = max(0.0, min(1.0, confidence))
+    reasonability = str(parsed.get("reasonability") or "需人工核对").strip()
+    if reasonability not in {"合理", "需人工核对", "可疑"}:
+        reasonability = "需人工核对"
+    return {
+        "status": parsed.get("status") or "ok",
+        "model": parsed.get("model") or model,
+        "summary": str(parsed.get("summary") or "GLM未返回明确摘要。").strip(),
+        "image_type": str(parsed.get("image_type") or "").strip(),
+        "scientific_context": str(parsed.get("scientific_context") or "").strip(),
+        "visible_text": str(parsed.get("visible_text") or "").strip(),
+        "reasonability": reasonability,
+        "risks": [str(r).strip() for r in risks if str(r).strip()],
+        "manual_checks": [str(c).strip() for c in manual_checks if str(c).strip()],
+        "confidence": confidence,
+    }
+
+
+def _glm_error_result(exc, model):
+    reason = type(exc).__name__
+    message = str(exc)
+    status_code = None
+    response = getattr(exc, "response", None)
+    if response is not None:
+        status_code = getattr(response, "status_code", None)
+        try:
+            payload = response.json()
+            message = (((payload.get("error") or {}).get("message")) or payload.get("message") or message)
+            code = (((payload.get("error") or {}).get("code")) or payload.get("code"))
+            if code:
+                reason = f"{reason}:{code}"
+        except Exception:
+            text = getattr(response, "text", "") or ""
+            if text:
+                message = _brief_text(text, 220)
+    if status_code == 429:
+        summary = "GLM图像语义理解被服务端限流或模型当前繁忙，建议稍后重试。"
+        risk = "glm_rate_limited"
+    else:
+        summary = "GLM暂未完成该图语义理解，建议稍后重试或人工核对图注与原图。"
+        risk = "glm_temporary_unavailable"
+    return {
+        "status": "error",
+        "model": model,
+        "summary": summary,
+        "reasonability": "需人工核对",
+        "risks": [risk],
+        "manual_checks": ["稍后重试GLM语义理解；必要时人工核对图片内容、图注、正文结论是否一致。"],
+        "confidence": 0,
+        "error_reason": reason,
+        "error_message": _brief_text(message, 220),
+        "http_status": status_code,
+    }
+
+
+def _prepare_detector_upload_file(image_path: str):
+    path = Path(image_path)
+    mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    if mime in {"image/jpeg", "image/png", "image/webp"}:
+        return path.name, mime, path.read_bytes()
+    try:
+        from PIL import Image
+        with Image.open(path) as img:
+            img = img.convert("RGB")
+            img.thumbnail((1600, 1600))
+            buf = io.BytesIO()
+            buf_name = f"{path.stem}.jpg"
+            img.save(buf, format="JPEG", quality=90, optimize=True)
+            return buf_name, "image/jpeg", buf.getvalue()
+    except Exception:
+        return path.name, mime, path.read_bytes()
+
+
+def _normalize_detector_result(data):
+    data = data if isinstance(data, dict) else {}
+    details = data.get("result_details") if isinstance(data.get("result_details"), dict) else {}
+    score = data.get("result", details.get("result"))
+    try:
+        score = float(score)
+    except Exception:
+        score = None
+    confidence = data.get("confidence", details.get("confidence"))
+    label = data.get("final_result") or details.get("final_result") or data.get("prediction")
+    if not label:
+        if data.get("isAI") is True:
+            label = "AI生成"
+        elif data.get("isAI") is False:
+            label = "真实/人工"
+        elif score is not None:
+            label = "AI生成" if score >= 50 else "真实/人工"
+        else:
+            label = "未知"
+    source = data.get("source") or details.get("source") or details.get("ml_model") or ""
+    return {
+        "status": "ok",
+        "provider": "imagedetector.com",
+        "score": score,
+        "is_ai": data.get("isAI"),
+        "label": str(label),
+        "confidence": confidence,
+        "source": source,
+        "watermark": details.get("watermark"),
+        "heatmap_url": details.get("heatmap_url"),
+        "preview_url": data.get("preview_url"),
+        "image_id": data.get("image_id"),
+        "raw": data,
+    }
+
+
+def call_imagedetector(image_path: str, timeout=60):
+    """Upload an image to imagedetector.com using the site's public web flow."""
+    try:
+        file_name, mime, content = _prepare_detector_upload_file(image_path)
+        if len(content) < 1024:
+            return {
+                "status": "skipped",
+                "provider": "imagedetector.com",
+                "reason": "too_small",
+                "summary": "图片小于imagedetector网页最小上传要求，跳过自动检测。",
+            }
+        if len(content) > 10 * 1024 * 1024:
+            return {
+                "status": "skipped",
+                "provider": "imagedetector.com",
+                "reason": "too_large",
+                "summary": "图片超过imagedetector网页10MB限制，跳过自动检测。",
+            }
+        query = urllib.parse.urlencode({"fileName": file_name, "fileType": mime})
+        headers = {
+            "Accept": "application/json",
+            "Referer": IMAGE_DETECT_URL,
+            "User-Agent": "PaperAudit/1.0",
+        }
+        data, _ = _http_request(
+            f"{IMAGE_DETECT_URL.rstrip('/')}/api/get-presigned-url?{query}",
+            "GET",
+            headers=headers,
+            timeout=timeout,
+        )
+        upload_info = json.loads(data.decode("utf-8", errors="replace"))
+        presigned_url = upload_info.get("presignedUrl")
+        file_path = upload_info.get("filePath")
+        expected_type = upload_info.get("expectedContentType") or mime
+        if not presigned_url or not file_path:
+            return {
+                "status": "error",
+                "provider": "imagedetector.com",
+                "reason": "missing_upload_url",
+                "summary": "imagedetector未返回可用上传地址。",
+            }
+        _http_request(
+            presigned_url,
+            "PUT",
+            headers={"Content-Type": expected_type, "x-amz-acl": "private"},
+            data=content,
+            timeout=timeout,
+        )
+        image_url = f"{IMAGE_DETECT_UPLOAD_BASE.rstrip('/')}/{file_path.lstrip('/')}"
+        detect_payload = json.dumps({"imageUrl": image_url}).encode("utf-8")
+        data, _ = _http_request(
+            f"{IMAGE_DETECT_URL.rstrip('/')}/api/detect",
+            "POST",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Referer": IMAGE_DETECT_URL,
+                "User-Agent": "PaperAudit/1.0",
+            },
+            data=detect_payload,
+            timeout=timeout,
+        )
+        return _normalize_detector_result(json.loads(data.decode("utf-8", errors="replace")))
+    except Exception as e:
+        return {
+            "status": "error",
+            "provider": "imagedetector.com",
+            "reason": type(e).__name__,
+            "summary": f"imagedetector自动检测失败：{type(e).__name__}",
+        }
+
+
+def _extract_json_object(text):
+    raw = str(text or "").strip()
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.I | re.S).strip()
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+    match = re.search(r"\{.*\}", raw, flags=re.S)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except Exception:
+            pass
+    return None
+
+
+def call_glm_image_semantics(image_path: str, timeout=45, api_key=None, model=None):
+    """Use GLM-4.6V-Flash to understand image semantics and flag visual reasonability risks."""
+    api_key = api_key or GLM_API_KEY
+    model = model or GLM_VISION_MODEL
+    path = Path(image_path)
+    if not api_key:
+        return {
+            "status": "skipped",
+            "model": model,
+            "summary": "GLM_API_KEY未配置，已跳过图像语义理解。",
+            "risks": ["glm_key_missing"],
+            "confidence": 0,
+        }
+    try:
+        if path.exists() and path.stat().st_size > GLM_IMAGE_MAX_BYTES:
+            return {
+                "status": "skipped",
+                "model": model,
+                "summary": "图片超过GLM语义理解的本地压缩前安全上限，已跳过。",
+                "reasonability": "需人工核对",
+                "risks": ["glm_image_too_large"],
+                "manual_checks": ["人工核对该图原图、图注和正文结论是否一致。"],
+                "confidence": 0,
+            }
+    except Exception:
+        pass
+
+    prompt = (
+        "你是科研论文图像审查助手。请只基于这张图片本身做语义理解与合理性审查，"
+        "不要把低分辨率、OCR错误、压缩噪声、表格截断或排版问题直接当作造假证据。"
+        "如果图片是表格/局部截图，请重点说明可读内容和截断风险。请返回严格JSON："
+        "{\"summary\":\"一句话描述图片内容\","
+        "\"image_type\":\"图/表/显微图/热图/流程图/照片/其他\","
+        "\"scientific_context\":\"可能对应的科研用途\","
+        "\"visible_text\":\"能读出的关键文字，读不出写空字符串\","
+        "\"reasonability\":\"合理/需人工核对/可疑\","
+        "\"risks\":[\"可疑点短语\"],"
+        "\"manual_checks\":[\"建议人工核对事项\"],"
+        "\"confidence\":0到1}"
+    )
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": _image_to_data_url(image_path)}},
+                ],
+            }
+        ],
+        "temperature": 0.1,
+        "max_tokens": 800,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        data, _ = _http_request(GLM_API_URL, "POST", headers=headers, data=json.dumps(payload).encode("utf-8"), timeout=timeout)
+        result = json.loads(data.decode("utf-8", errors="replace"))
+        content = (((result.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        parsed = _extract_json_object(content)
+        if not isinstance(parsed, dict):
+            parsed = {"summary": _brief_text(content, 260), "risks": ["glm_json_parse_failed"], "confidence": 0}
+        return _normalize_glm_image_result(parsed, model)
+    except Exception as e:
+        return _glm_error_result(e, model)
+
+
+def _image_audit_sort_key(item):
+    rank = {"local_warning": 0, "needs_online_check": 1, "local_ok": 2}
+    return (rank.get(item.get("risk"), 3), -len(item.get("issues") or []), item.get("file", ""))
+
+
+def _image_semantic_priority_key(item):
+    width = int(item.get("width") or 0)
+    height = int(item.get("height") or 0)
+    min_side = min(width, height)
+    max_side = max(width, height)
+    area = width * height
+    ratio = max_side / max(1, min_side)
+    issues = set(item.get("issues") or [])
+
+    # GLM works best on images with enough visible content. Keep tiny/strip-like
+    # figures in the manual manifest, but do not spend scarce semantic calls on
+    # them before richer figures.
+    low_information = (
+        min_side < 80
+        or area < 30_000
+        or ratio > 10
+        or "near_blank_or_flat" in issues
+        or "image_parse_error:UnidentifiedImageError" in issues
+    )
+    risk_rank = {"local_warning": 0, "needs_online_check": 1, "local_ok": 2}
+    return (
+        1 if low_information else 0,
+        risk_rank.get(item.get("risk"), 3),
+        -area,
+        item.get("file", ""),
+    )
+
+
+def _image_detector_priority_key(item):
+    width = int(item.get("width") or 0)
+    height = int(item.get("height") or 0)
+    area = width * height
+    issues = set(item.get("issues") or [])
+    local_warning = item.get("risk") == "local_warning"
+    semantic = item.get("semantic") or {}
+    semantic_attention = (semantic.get("reasonability") in {"需人工核对", "可疑"}) or bool(semantic.get("risks"))
+    low_information = "near_blank_or_flat" in issues or area < 10_000
+    return (
+        1 if low_information else 0,
+        0 if (local_warning or semantic_attention) else 1,
+        -area,
+        item.get("file", ""),
+    )
+
+
+def build_image_audit(
+    input_path: str,
+    output_dir=None,
+    limit=30,
+    semantic=True,
+    semantic_limit=12,
+    semantic_timeout=45,
+    semantic_cache=None,
+    detector=True,
+    detector_limit=12,
+    detector_timeout=60,
+    detector_cache=None,
+):
+    images = collect_image_files(input_path, include_pdf=False, include_mineru=True, output_dir=output_dir)
+    analyses = sorted((analyze_image_reasonability(path) for path in images), key=_image_audit_sort_key)
+    analyses = analyses[:max(0, int(limit or 0))]
+    semantic_cache = semantic_cache if isinstance(semantic_cache, dict) else {}
+    detector_cache = detector_cache if isinstance(detector_cache, dict) else {}
+    semantic_checked = 0
+    if semantic:
+        semantic_candidates = sorted(analyses, key=_image_semantic_priority_key)
+        for item in semantic_candidates[:max(0, int(semantic_limit or 0))]:
+            cache_key = _image_file_fingerprint(item.get("path", ""))
+            semantic_result = semantic_cache.get(cache_key)
+            if isinstance(semantic_result, dict) and semantic_result.get("status") == "error":
+                semantic_cache.pop(cache_key, None)
+                semantic_result = None
+            if not semantic_result:
+                semantic_result = call_glm_image_semantics(item.get("path", ""), timeout=semantic_timeout)
+                if semantic_result.get("status") != "error":
+                    semantic_cache[cache_key] = semantic_result
+            item["semantic"] = semantic_result
+            semantic_checked += 1
+    detector_checked = 0
+    if detector:
+        detector_candidates = sorted(analyses, key=_image_detector_priority_key)
+        for item in detector_candidates[:max(0, int(detector_limit or 0))]:
+            cache_key = _image_file_fingerprint(item.get("path", "")) + ":imagedetector_v1"
+            detector_result = detector_cache.get(cache_key)
+            if isinstance(detector_result, dict) and detector_result.get("status") == "error":
+                detector_cache.pop(cache_key, None)
+                detector_result = None
+            if not detector_result:
+                detector_result = call_imagedetector(item.get("path", ""), timeout=detector_timeout)
+                if detector_result.get("status") != "error":
+                    detector_cache[cache_key] = detector_result
+            item["detector"] = detector_result
+            detector_checked += 1
+    return {
+        "enabled": bool(analyses),
+        "site": IMAGE_DETECT_URL,
+        "semantic_enabled": bool(semantic),
+        "semantic_model": GLM_VISION_MODEL,
+        "semantic_checked": semantic_checked,
+        "detector_enabled": bool(detector),
+        "detector_checked": detector_checked,
+        "image_count": len(images),
+        "checked_count": len(analyses),
+        "images": analyses,
+        "note": "本地做尺寸、空白、噪声/对比度筛查；GLM-4.6V-Flash做图像语义理解；imagedetector.com子工具自动上传并记录AI概率。",
+    }
+
+
+def _image_semantic_display(item):
+    semantic = item.get("semantic") or {}
+    if semantic:
+        parts = [semantic.get("summary", "未返回语义摘要")]
+        if semantic.get("image_type"):
+            parts.append(f"类型: {semantic.get('image_type')}")
+        if semantic.get("scientific_context"):
+            parts.append(f"用途: {_brief_text(semantic.get('scientific_context'), 80)}")
+        if semantic.get("visible_text"):
+            parts.append(f"可读文字: {_brief_text(semantic.get('visible_text'), 100)}")
+        risks = semantic.get("risks") or []
+        if risks:
+            parts.append("风险: " + "；".join(_brief_text(risk, 60) for risk in risks[:3]))
+        manual_checks = semantic.get("manual_checks") or []
+        if manual_checks:
+            parts.append("复核: " + "；".join(_brief_text(check, 60) for check in manual_checks[:2]))
+        confidence = semantic.get("confidence")
+        try:
+            confidence_text = f"{float(confidence):.2f}"
+        except Exception:
+            confidence_text = ""
+        status = semantic.get("reasonability") or semantic.get("status", "")
+        if confidence_text:
+            status = f"{status} / 置信度 {confidence_text}" if status else f"置信度 {confidence_text}"
+        return ("；".join(str(part) for part in parts if part), status)
+    issues = set(item.get("issues") or [])
+    if item.get("risk") == "local_warning" or {"low_resolution", "extreme_aspect_ratio", "near_blank_or_flat"} & issues:
+        return (
+            "未进入GLM优先队列；该图信息量低或形态异常，优先按本地异常上传imagedetector并人工核对原图。",
+            "人工优先",
+        )
+    return (
+        "未进入本次GLM语义上限；需要时可提高 --image-semantic-limit 后重跑。",
+        "未覆盖",
+    )
+
+
+def _image_detector_display(item):
+    detector = item.get("detector") or {}
+    if not detector:
+        return ("未进入本次自动检测上限；需要时可提高 --image-detector-limit 后重跑。", "未覆盖")
+    status = detector.get("status")
+    if status == "ok":
+        score = detector.get("score")
+        label = detector.get("label") or ("AI生成" if detector.get("is_ai") else "真实/人工")
+        confidence = detector.get("confidence")
+        score_text = f"{score:.1f}" if isinstance(score, (int, float)) else "N/A"
+        parts = [f"{label}", f"AI分数 {score_text}"]
+        if confidence:
+            parts.append(f"置信度 {confidence}")
+        if detector.get("source"):
+            parts.append(f"来源 {detector.get('source')}")
+        return ("；".join(parts), "AI概率偏高" if isinstance(score, (int, float)) and score >= 50 else "未提示AI")
+    reason = detector.get("reason") or status or "unknown"
+    summary = detector.get("summary") or f"imagedetector未完成：{reason}"
+    return (summary, "自动检测未完成")
+
+
+def format_image_audit_html(image_audit):
+    if not image_audit:
+        return ""
+    rows = ""
+    for idx, item in enumerate(image_audit.get("images") or [], 1):
+        issues = ", ".join(item.get("issues") or ["local_ok"])
+        semantic_summary, semantic_reasonability = _image_semantic_display(item)
+        detector_summary, detector_status = _image_detector_display(item)
+        path = _html_escape(item.get("path", ""))
+        try:
+            img_uri = Path(item.get("path", "")).resolve().as_uri()
+        except Exception:
+            img_uri = ""
+        preview = f'<img class="image-thumb" src="{_html_escape(img_uri)}" alt="{_html_escape(item.get("file", ""))}">' if img_uri else "-"
+        rows += f"""
+        <tr>
+          <td>{idx}</td>
+          <td>{preview}</td>
+          <td>{_html_escape(item.get('file', ''))}</td>
+          <td>{_html_escape(str(item.get('width') or '?'))} x {_html_escape(str(item.get('height') or '?'))}</td>
+          <td>{_html_escape(item.get('risk', ''))}</td>
+          <td>{_html_escape(issues)}</td>
+          <td>{_html_escape(_brief_text(semantic_summary, 180))}<br><span class="muted-inline">{_html_escape(semantic_reasonability)}</span></td>
+          <td>{_html_escape(_brief_text(detector_summary, 180))}<br><span class="detector-hint">{_html_escape(detector_status)}</span><br><code>{path}</code></td>
+        </tr>"""
+    if not rows:
+        rows = '<tr><td colspan="8" class="muted">未发现可检测图片。</td></tr>'
+    return f"""
+  <div class="section image-section">
+    <h2>图像AI/合理性检测</h2>
+    <p class="section-hint">{_html_escape(image_audit.get('note', ''))}</p>
+    <p><strong>检测网站</strong>: <a href="{IMAGE_DETECT_URL}" target="_blank" rel="noopener">{IMAGE_DETECT_URL}</a> | <strong>图片</strong>: {image_audit.get('checked_count', 0)} / {image_audit.get('image_count', 0)} | <strong>语义模型</strong>: {_html_escape(image_audit.get('semantic_model', 'N/A'))}（{image_audit.get('semantic_checked', 0)}张） | <strong>imagedetector</strong>: {image_audit.get('detector_checked', 0)}张</p>
+    <table class="checks-table image-table">
+      <thead><tr><th>#</th><th>预览</th><th>文件</th><th>尺寸</th><th>本地结论</th><th>本地问题</th><th>GLM语义理解</th><th>imagedetector自动结果 / 路径</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </div>"""
+
+
+def format_image_audit_markdown(image_audit):
+    if not image_audit:
+        return []
+    lines = [
+        "## 🖼️ 图像AI/合理性检测",
+        "",
+        f"**检测网站**: {image_audit.get('site', IMAGE_DETECT_URL)}",
+        f"**语义模型**: {image_audit.get('semantic_model', 'N/A')}（{image_audit.get('semantic_checked', 0)}张）",
+        f"**imagedetector自动检测**: {image_audit.get('detector_checked', 0)}张",
+        f"**图片数量**: {image_audit.get('checked_count', 0)} / {image_audit.get('image_count', 0)}",
+        f"> {image_audit.get('note', '')}",
+        "",
+    ]
+    images = image_audit.get("images") or []
+    if images:
+        lines.append("| # | 文件 | 尺寸 | 本地结论 | GLM语义理解 | imagedetector | 本地问题 |")
+        lines.append("|---|------|------|----------|-------------|---------------|----------|")
+        for idx, item in enumerate(images[:30], 1):
+            size = f"{item.get('width') or '?'} x {item.get('height') or '?'}"
+            issues = ", ".join(item.get("issues") or ["local_ok"])
+            semantic_text, _ = _image_semantic_display(item)
+            detector_text, detector_status = _image_detector_display(item)
+            lines.append(
+                f"| {idx} | {_md_escape_cell(item.get('file', ''))} | {_md_escape_cell(size)} | "
+                f"{_md_escape_cell(item.get('risk', ''))} | {_md_escape_cell(_brief_text(semantic_text, 180))} | "
+                f"{_md_escape_cell(_brief_text(detector_text + ' / ' + detector_status, 180))} | {_md_escape_cell(issues)} |"
+            )
+    else:
+        lines.append("> 未发现可检测图片。")
+    lines.append("")
+    return lines
+
+
+def save_image_review_manifest(image_audit, output_dir):
+    if not image_audit or not image_audit.get("images"):
+        return None
+    cards = ""
+    for idx, item in enumerate(image_audit.get("images") or [], 1):
+        path = _html_escape(item.get("path", ""))
+        issues = _html_escape(", ".join(item.get("issues") or ["local_ok"]))
+        semantic_summary_raw, semantic_reasonability_raw = _image_semantic_display(item)
+        detector_summary_raw, detector_status_raw = _image_detector_display(item)
+        semantic_summary = _html_escape(semantic_summary_raw)
+        semantic_reasonability = _html_escape(semantic_reasonability_raw)
+        detector_summary = _html_escape(detector_summary_raw)
+        detector_status = _html_escape(detector_status_raw)
+        try:
+            img_uri = Path(item.get("path", "")).resolve().as_uri()
+        except Exception:
+            img_uri = ""
+        preview = f'<img src="{_html_escape(img_uri)}" alt="{_html_escape(item.get("file", ""))}">' if img_uri else '<div class="preview-empty">无预览</div>'
+        cards += f"""
+        <section class="image-card">
+          <div class="rank">#{idx}</div>
+          <div class="preview">{preview}</div>
+          <div class="image-main">
+            <h2>{_html_escape(item.get('file', ''))}</h2>
+            <div class="meta">
+              <span>本地结论: <strong>{_html_escape(item.get('risk', ''))}</strong></span>
+              <span>本地问题: <strong>{issues}</strong></span>
+            </div>
+            <p class="semantic"><strong>GLM语义理解</strong>: {semantic_summary}<br><span>{semantic_reasonability}</span></p>
+            <p class="semantic"><strong>imagedetector自动结果</strong>: {detector_summary}<br><span>{detector_status}</span></p>
+            <code>{path}</code>
+          </div>
+          <div class="result-box">
+            <label>自动检测复核</label>
+            <div class="write-space"></div>
+          </div>
+          <div class="result-box">
+            <label>复核备注</label>
+            <div class="write-space"></div>
+          </div>
+        </section>"""
+    html_doc = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>图像AI检测复核清单</title>
+<style>
+* {{ box-sizing: border-box; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f7f3ec; color:#2b241d; padding:24px; }}
+main {{ max-width: 1180px; margin: 0 auto; background:#fffdf8; border:1px solid #e4d8c8; border-radius:18px; padding:28px; box-shadow:0 20px 60px rgba(61,45,31,.09); }}
+a {{ color:#c15f3c; font-weight:700; }}
+.hint {{ color:#7b7065; max-width: 900px; }}
+.image-list {{ display:flex; flex-direction:column; gap:14px; margin-top:22px; }}
+.image-card {{ display:grid; grid-template-columns:48px 118px minmax(0,1fr) 180px 180px; gap:14px; align-items:stretch; border:1px solid #e4d8c8; border-left:4px solid #c15f3c; border-radius:14px; background:#fffaf1; padding:14px; page-break-inside:avoid; }}
+.rank {{ font-weight:800; color:#b42318; background:#fde5db; border-radius:999px; width:38px; height:28px; display:flex; align-items:center; justify-content:center; }}
+.preview {{ width:110px; min-height:96px; display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid #e4d8c8; border-radius:10px; overflow:hidden; }}
+.preview img {{ width:100%; max-height:110px; object-fit:contain; }}
+.preview-empty {{ color:#7b7065; font-size:12px; }}
+.image-main h2 {{ font-size:15px; margin:0 0 8px; overflow-wrap:anywhere; }}
+.meta {{ display:flex; gap:10px; flex-wrap:wrap; color:#7b7065; font-size:13px; margin-bottom:8px; }}
+.semantic {{ margin:8px 0; color:#2b241d; background:#fff; border:1px solid #e4d8c8; border-radius:8px; padding:8px; font-size:13px; }}
+.semantic span {{ color:#7b7065; }}
+code {{ display:block; color:#7b7065; background:#fff; border:1px solid #e4d8c8; border-radius:8px; padding:8px; overflow-wrap:anywhere; word-break:break-word; font-size:12px; }}
+.result-box {{ background:#fff; border:1px dashed #d3bda6; border-radius:10px; padding:10px; min-height:110px; }}
+.result-box label {{ display:block; color:#7b7065; font-size:12px; font-weight:700; margin-bottom:8px; }}
+.write-space {{ min-height:64px; }}
+@media (max-width: 980px) {{
+  .image-card {{ grid-template-columns:42px 100px minmax(0,1fr); }}
+  .result-box {{ grid-column: 2 / 4; }}
+}}
+</style>
+</head>
+<body>
+<main>
+<h1>图像AI检测复核清单</h1>
+<p class="hint">本清单已由子工具自动调用 <a href="{IMAGE_DETECT_URL}" target="_blank" rel="noopener">{IMAGE_DETECT_URL}</a> 的网页检测流程，右侧空栏用于人工复核自动结果、记录截图或补充说明。</p>
+<div class="image-list">{cards}</div>
+</main>
+</body>
+</html>"""
+    path = Path(output_dir) / "image_ai_review_manifest.html"
+    path.write_text(html_doc, encoding="utf-8")
+    return path
 
 
 def extract_images_from_pdf(pdf_path: str) -> List[str]:
@@ -1851,15 +5012,15 @@ def extract_images_from_pdf(pdf_path: str) -> List[str]:
     return images
 
 
-def collect_image_files(input_path: str) -> List[str]:
-    """收集论文相关图片文件（从目录扫描 + PDF提取）
-
-    返回所有图片的绝对路径列表
-    """
+def collect_image_files(input_path: str, include_pdf=True, include_mineru=True, output_dir=None) -> List[str]:
+    """收集论文相关图片文件：目录图片、PDF内嵌图，以及MinerU zip中的图片。"""
     images = []
     p = Path(input_path)
 
-    if p.is_file() and p.suffix.lower() == ".pdf":
+    if include_mineru:
+        images.extend(collect_mineru_image_files(input_path, output_dir=output_dir))
+
+    if include_pdf and p.is_file() and p.suffix.lower() == ".pdf":
         # PDF文件：提取内嵌图片
         print("  📸 从PDF中提取图片...")
         extracted = extract_images_from_pdf(str(p))
@@ -1868,83 +5029,57 @@ def collect_image_files(input_path: str) -> List[str]:
         # 目录：扫描所有图片文件
         for ext in IMAGE_EXTENSIONS:
             for f in p.rglob(f"*{ext}"):
-                if f.stat().st_size > 5000:  # 过滤小图标
+                if ".paper_audit_resume" in str(f) or "_paper_audit_images" in str(f):
+                    continue
+                if f.stat().st_size > MIN_IMAGE_BYTES:  # 过滤小图标
                     images.append(str(f))
 
-    return images
+    return _dedupe_paths(images)
 
 
-def launch_image_ai_detect(input_path: str):
-    """启动imagedetector.com图片AI检测：收集图片 → 打开浏览器 → 逐张提醒上传"""
+def launch_image_ai_detect(
+    input_path: str,
+    output_dir=None,
+    limit=30,
+    semantic=True,
+    semantic_limit=12,
+    semantic_timeout=45,
+    semantic_cache=None,
+    detector=True,
+    detector_limit=12,
+    detector_timeout=60,
+    detector_cache=None,
+):
+    """Run the automatic image audit subtool and save the review manifest."""
     print("\n" + "=" * 60)
-    print("🖼️ AI图片检测 (imagedetector.com)")
+    print("🖼️ AI图片检测子工具 (GLM + imagedetector.com)")
     print("=" * 60)
 
-    # 1) 收集图片
-    images = collect_image_files(input_path)
-
-    if not images:
+    target_output_dir = output_dir or (Path(input_path).parent if Path(input_path).is_file() else Path(input_path))
+    image_audit = build_image_audit(
+        input_path,
+        output_dir=target_output_dir,
+        limit=limit,
+        semantic=semantic,
+        semantic_limit=semantic_limit,
+        semantic_timeout=semantic_timeout,
+        semantic_cache=semantic_cache,
+        detector=detector,
+        detector_limit=detector_limit,
+        detector_timeout=detector_timeout,
+        detector_cache=detector_cache,
+    )
+    if not image_audit.get("image_count"):
         print("⚠️ 未找到可检测的图片文件")
-        print("💡 提示: 可手动访问 https://imagedetector.com/ 上传图片检测")
-        return
+        return image_audit
 
-    # 限制数量（太多图片会非常耗时）
-    MAX_IMAGES = 30
-    if len(images) > MAX_IMAGES:
-        print(f"⚠️ 图片数量过多({len(images)}张)，仅处理前{MAX_IMAGES}张（小图标已过滤）")
-        images = images[:MAX_IMAGES]
-
-    print(f"  📋 共 {len(images)} 张图片待检测")
-
-    # 2) 打开浏览器
-    print(f"🌐 正在打开 imagedetector.com 检测页面...")
-    webbrowser.open(IMAGE_DETECT_URL)
-    time.sleep(2)  # 等待浏览器加载
-
-    # 3) 逐张提醒上传
-    system = platform.system()
-    for idx, img_path in enumerate(images, 1):
-        img_name = os.path.basename(img_path)
-        msg = (
-            f"图片 [{idx}/{len(images)}]: {img_name}\n\n"
-            f"路径: {img_path}\n\n"
-            f"请在 imagedetector.com 页面中上传此图片并点击检测。\n"
-            f"检测完成后，点击确定继续下一张图片。"
-        )
-
-        print(f"\n  📸 [{idx}/{len(images)}] {img_name}")
-        print(f"     路径: {img_path}")
-
-        try:
-            if system == "Windows":
-                import ctypes
-                result = ctypes.windll.user32.MessageBoxW(
-                    0,
-                    msg,
-                    f"🖼️ AI图片检测 ({idx}/{len(images)})",
-                    0x41  # MB_OKCANCEL + MB_ICONWARNING
-                )
-                if result == 2:  # IDCANCEL
-                    print("  ⏹️ 用户取消图片检测流程")
-                    break
-            elif system == "Darwin":
-                subprocess.run([
-                    "osascript", "-e",
-                    f'display dialog "{msg}" '
-                    f'buttons {{"取消", "确定"}} default button "确定" with title "🖼️ AI图片检测 ({idx}/{len(images)})" with icon note'
-                ])
-            else:  # Linux
-                try:
-                    subprocess.run([
-                        "zenity", "--info", "--title=🖼️ AI图片检测", "--width=450",
-                        f"--text={msg}"
-                    ])
-                except FileNotFoundError:
-                    input(f"  ⏸️ 按回车继续下一张...")
-        except Exception:
-            input(f"  ⏸️ 检测完成后按回车继续下一张...")
-
-    print("✅ AI图片检测流程结束，继续后续审查...")
+    manifest_path = save_image_review_manifest(image_audit, target_output_dir)
+    if manifest_path:
+        print(f"  🧾 图片AI检测结果清单: {manifest_path}")
+    print(
+        f"✅ 图片子工具完成: 本地{image_audit.get('checked_count')}/{image_audit.get('image_count')}张；"
+        f"GLM {image_audit.get('semantic_checked')}张；imagedetector {image_audit.get('detector_checked')}张"
+    )
 
     # 清理临时提取目录
     tmp_dir = os.path.join(os.path.dirname(input_path) if os.path.isfile(input_path) else input_path, "_veritas_images_tmp")
@@ -1955,19 +5090,21 @@ def launch_image_ai_detect(input_path: str):
             print("  🧹 已清理临时图片目录")
         except Exception:
             pass
+    return image_audit
 
 
 def main():
+    global LLM_TIMEOUT, LLM_RETRIES
     parser = argparse.ArgumentParser(
         description="学术论文自动审查工具（耿同学标准 + MinerU）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # MinerU提取 + 完整审查（推荐）
-  python paper_audit.py paper.pdf --mineru
+  # 默认：PDF优先使用MinerU提取 + 完整审查
+  python paper_audit.py paper.pdf
 
   # 仅原始PDF文本提取 + 审查
-  python paper_audit.py paper.pdf
+  python paper_audit.py paper.pdf --no-mineru
 
   # 指定输出路径
   python paper_audit.py paper.pdf --mineru -o report.md --json
@@ -1975,11 +5112,15 @@ def main():
   # 更新欺诈模式知识库（从PubPeer评论自动提取新pattern）
   python paper_audit.py --update-patterns pubpeer_comments.txt
 """)
-    parser.add_argument("pdf_path", nargs='?', help="待审查的文件路径或论文目录路径（支持PDF/Word/Excel/Supplement等，更新模式下无需提供）")
+    parser.add_argument("pdf_path", nargs='?', help="待审查的文件路径或论文目录路径（支持PDF/Word/Excel/Supplement等，更新/服务模式下无需提供）")
+    parser.add_argument("--serve-report-actions", action="store_true",
+                        help="启动本机HTML报告动作服务：一键生成PubPeer comment和期刊letter")
+    parser.add_argument("--report-actions-port", type=int, default=8765,
+                        help="HTML报告动作服务端口（默认8765，仅监听127.0.0.1）")
     parser.add_argument("--update-patterns", metavar="COMMENTS_FILE", 
                         help="从PubPeer评论文本文件中自动提取新的欺诈模式，更新知识库")
     parser.add_argument("--mineru", action="store_true",
-                        help="使用MinerU API将PDF转为Markdown再审查（推荐，质量更高）")
+                        help="使用MinerU API将PDF转为Markdown再审查（PDF默认已启用，保留该参数用于兼容旧命令）")
     parser.add_argument("--mineru-model", default="vlm",
                         choices=["pipeline", "vlm", "MinerU-HTML"],
                         help="MinerU模型版本（默认vlm，仅Precision API生效）")
@@ -1992,21 +5133,43 @@ def main():
     parser.add_argument("--output", "-o", help="输出报告文件路径（默认输出到同目录）")
     parser.add_argument("--json", action="store_true", help="同时保存原始JSON结果")
     parser.add_argument("--ai-detect", action="store_true", help="开启腾讯朱雀AI文本检测：自动复制文本到剪贴板+打开检测页面")
-    parser.add_argument("--image-detect", action="store_true", help="开启AI图片检测（imagedetector.com）：自动提取图片+打开检测页面+逐张提醒上传")
+    parser.add_argument("--image-detect", action="store_true", help="兼容旧参数：图片检测已默认自动执行，不再打开网页或要求手动上传")
+    parser.add_argument("--image-audit-limit", type=int, default=30,
+                        help="报告中纳入图像合理性检测的图片数量上限（默认30）")
+    parser.add_argument("--no-image-semantic", action="store_true",
+                        help="关闭GLM-4.6V-Flash图像语义理解，仅保留本地合理性检测和imagedetector清单")
+    parser.add_argument("--image-semantic-limit", type=int, default=12,
+                        help="调用GLM-4.6V-Flash进行图像语义理解的图片数量上限（默认12）")
+    parser.add_argument("--image-semantic-timeout", type=int, default=45,
+                        help="单张图片GLM语义理解请求超时时间秒数（默认45）")
+    parser.add_argument("--no-image-detector", action="store_true",
+                        help="关闭imagedetector.com自动图片AI概率检测，仅保留本地检测和GLM语义")
+    parser.add_argument("--image-detector-limit", type=int, default=12,
+                        help="自动调用imagedetector.com检测的图片数量上限（默认12）")
+    parser.add_argument("--image-detector-timeout", type=int, default=60,
+                        help="单张图片imagedetector自动检测超时时间秒数（默认60）")
+    parser.add_argument("--no-reference-online", action="store_true",
+                        help="关闭参考文献在线真实性检索，仅执行离线格式校检")
+    parser.add_argument("--reference-online-limit", type=int, default=50,
+                        help="参考文献在线检索条数上限（默认50，避免长书目触发外部API限流）")
+    parser.add_argument("--reference-timeout", type=int, default=10,
+                        help="单个参考文献外部检索源超时时间秒数（默认10）")
     parser.add_argument("--llm-provider", default=None,
                         help="从mykey.py指定LLM供应商配置名，例如 native_oai_config_3；会覆盖config.py里的LLM，但不影响MinerU配置")
     parser.add_argument("--ignore-config-llm", action="store_true",
                         help="忽略config.py中的LLM设置，强制使用mykey.py的LLM配置（推荐用于避开旧fufu接口）")
     parser.add_argument("--no-resume", action="store_true",
                         help="禁用断点续作缓存，强制重新提取文本和重新LLM审查")
-    parser.add_argument("--llm-timeout", type=int, default=45,
-                        help="单次LLM请求超时时间秒数（默认45；不稳定网关可调小以更快跳过）")
-    parser.add_argument("--llm-retries", type=int, default=1,
-                        help="每次LLM调用内部重试次数（默认1，即最多2次尝试）")
+    parser.add_argument("--llm-timeout", type=int, default=LLM_TIMEOUT,
+                        help=f"单次LLM请求超时时间秒数（默认{LLM_TIMEOUT}；不稳定网关可调小以更快跳过）")
+    parser.add_argument("--llm-retries", type=int, default=LLM_RETRIES,
+                        help=f"每次LLM调用内部重试次数（默认{LLM_RETRIES}，即最多{LLM_RETRIES + 1}次尝试）")
     parser.add_argument("--strict-failed-chunks", action="store_true",
                         help="严格模式：失败块首轮+补跑仍失败时停止生成报告；默认生成覆盖率受限的部分报告")
     parser.add_argument("--llm-cache-only", action="store_true",
                         help="只复用已有成功LLM分块缓存生成部分报告，不再调用API；适合接口不稳定时先查看已有结果")
+    parser.add_argument("--no-open", action="store_true",
+                        help="生成报告后不自动打开HTML报告，适合CI、服务器和批处理环境")
     args = parser.parse_args()
     if getattr(args, "max_chars", 4096) > 4096:
         print(f"⚠️ --max-chars={args.max_chars} 超过4096，已自动调整为4096")
@@ -2014,13 +5177,14 @@ def main():
     if getattr(args, "max_chars", 4096) < 512:
         print(f"⚠️ --max-chars={args.max_chars} 过小，已自动调整为512")
         args.max_chars = 512
-    global LLM_TIMEOUT, LLM_RETRIES
-    LLM_TIMEOUT = max(10, int(getattr(args, "llm_timeout", 45) or 45))
-    LLM_RETRIES = max(0, int(getattr(args, "llm_retries", 1) or 0))
+    LLM_TIMEOUT = max(10, int(getattr(args, "llm_timeout", LLM_TIMEOUT) or LLM_TIMEOUT))
+    LLM_RETRIES = max(0, int(getattr(args, "llm_retries", LLM_RETRIES) or 0))
 
     # ─── 知识库更新模式 ───
     if args.update_patterns:
         return update_patterns(args.update_patterns)
+    if args.serve_report_actions:
+        return serve_report_actions(port=args.report_actions_port)
 
     # ─── 正常审查模式 ───
     if not args.pdf_path:
@@ -2042,25 +5206,38 @@ def main():
         print("♻️ 已禁用断点续作缓存，本次将重新执行提取和LLM审查")
     else:
         print(f"🔁 断点续作缓存目录: {resume_dir}")
-    resume_event(resume_dir, "init", "done", f"input={input_path}; llm={LLM_MODEL}; url={LLM_API_URL}; max_chars={args.max_chars}")
+    allow_llm_cache_read = _allow_llm_cache_read(args.no_resume, getattr(args, "llm_cache_only", False))
+    allow_llm_cache_write = not args.no_resume
+    pdf_suffixes = {".pdf"}
+    has_pdf_input = input_path.suffix.lower() in pdf_suffixes
+    if input_path.is_dir():
+        try:
+            has_pdf_input = any(p.is_file() and p.suffix.lower() in pdf_suffixes for p in input_path.rglob("*"))
+        except Exception:
+            has_pdf_input = False
+    use_mineru_default = has_pdf_input and not args.no_mineru
+    if use_mineru_default and not args.mineru:
+        print("📡 检测到PDF输入，默认启用MinerU提取；如需原始PDF文本提取请使用 --no-mineru")
+
+    resume_event(resume_dir, "init", "done", f"input={input_path}; llm={LLM_MODEL}; url={LLM_API_URL}; max_chars={args.max_chars}; use_mineru={use_mineru_default}")
     progress_bar(0, 5, "初始化完成")
 
     # ─── 阶段1：文本提取（支持单个文件/整个论文目录） ───
     extract_cache_path = resume_dir / "stage1_extract.json"
     cached_extract = None if args.no_resume else _json_load(extract_cache_path)
-    if cached_extract and cached_extract.get("input") == str(input_path.resolve()) and cached_extract.get("use_mineru") == (args.mineru and not args.no_mineru):
+    if cached_extract and cached_extract.get("input") == str(input_path.resolve()) and cached_extract.get("use_mineru") == use_mineru_default and cached_extract.get("cache_version") == EXTRACT_CACHE_VERSION:
         full_text = cached_extract.get("full_text", "")
         meta = cached_extract.get("meta", {})
         raw_pdf = None
-        use_mineru = cached_extract.get("use_mineru", args.mineru and not args.no_mineru)
+        use_mineru = cached_extract.get("use_mineru", use_mineru_default)
         print(f"🔁 断点续作：复用阶段1文本缓存 {extract_cache_path} ({len(full_text)}字符)")
         resume_event(resume_dir, "stage1_extract", "cache_hit", f"chars={len(full_text)}", cache=str(extract_cache_path))
         progress_bar(1, 5, "阶段1/5 文本提取缓存命中")
     else:
         full_text = None
-    meta = {}
-    raw_pdf = None
-    use_mineru = args.mineru and not args.no_mineru
+        meta = {}
+        raw_pdf = None
+        use_mineru = use_mineru_default
 
     if full_text is None and input_path.is_dir():
         print(f"📂 检测到输入为目录，正在扫描所有论文相关文件...")
@@ -2074,19 +5251,30 @@ def main():
             else:
                 print(f"  - {cat}: {len(files)} 个文件")
         
-        # 提取所有文件文本合并
+        reference_file_set = set(file_classes.get("references") or [])
+        audit_files = [p for p in all_files if p not in reference_file_set]
+
+        # 提取所有非参考文献文件文本合并；参考文献文件单独校检，避免污染主体审查
         full_text = ""
-        total_files = len(all_files)
-        for idx, file_path in enumerate(all_files, 1):
-            print(f"  📝 提取 [{idx}/{total_files}] {file_path.name}...")
-            progress_bar(idx - 1, total_files, f"阶段1/5 提取文件: {file_path.name}")
+        reference_file_texts = []
+        total_files = len(audit_files)
+        for idx, file_path in enumerate(audit_files, 1):
+            print(f"  📝 提取主体文件 [{idx}/{total_files}] {file_path.name}...")
+            progress_bar(idx - 1, max(total_files, 1), f"阶段1/5 提取主体文件: {file_path.name}")
             file_content = extract_text_from_file(file_path, max_chars_per_file=None,
                                                   use_mineru=use_mineru,
                                                   mineru_lang=args.mineru_lang,
                                                   output_dir=output_dir)
-            progress_bar(idx, total_files, f"阶段1/5 已完成: {file_path.name}")
+            progress_bar(idx, max(total_files, 1), f"阶段1/5 已完成: {file_path.name}")
             full_text += f"\n\n=== 文件: {file_path.name} 路径: {file_path.relative_to(input_path)} ==="
             full_text += "\n" + file_content
+
+        for idx, file_path in enumerate(file_classes.get("references") or [], 1):
+            print(f"  📚 提取参考文献文件 [{idx}/{len(reference_file_set)}] {file_path.name}...")
+            reference_file_texts.append(extract_text_from_file(file_path, max_chars_per_file=None,
+                                                               use_mineru=use_mineru,
+                                                               mineru_lang=args.mineru_lang,
+                                                               output_dir=output_dir))
         
         def _class_count(v):
             if v is None:
@@ -2100,10 +5288,15 @@ def main():
 
         meta = {
             "input_type": "directory",
-            "total_files": total_files,
+            "total_files": len(all_files),
+            "audit_files": len(audit_files),
+            "reference_files": len(reference_file_set),
             "file_classes": {k: _class_count(v) for k, v in file_classes.items()},
             "total_chars": len(full_text),
-            "extractor": "directory_multi_format"
+            "extractor": "directory_multi_format",
+            "extraction_method": "directory_multi_format",
+            "size_mb": round(sum(p.stat().st_size for p in all_files if p.exists()) / 1024 / 1024, 2),
+            "reference_file_text": "\n\n".join(reference_file_texts),
         }
         print(f"\n✅ 所有文件提取完成，总长度: {len(full_text)} 字符")
         progress_bar(1, 5, "阶段1/5 文本提取完成")
@@ -2146,9 +5339,12 @@ def main():
             print(f"✅ 提取完成: {meta['total_chars']} 字符（全文保留）")
             progress_bar(1, 5, "阶段1/5 PDF文本提取完成")
 
+    meta = normalize_run_meta(meta, input_path, full_text)
+
     if not args.no_resume and full_text:
         _json_save(extract_cache_path, {
             "input": str(input_path.resolve()),
+            "cache_version": EXTRACT_CACHE_VERSION,
             "use_mineru": use_mineru,
             "mineru_lang": args.mineru_lang,
             "full_text": full_text,
@@ -2161,14 +5357,52 @@ def main():
     if args.ai_detect:
         launch_zhuque_ai_detect(full_text)
 
-    # ─── AI图片检测（可选） ───
+    # ─── AI图片检测兼容参数 ───
     if args.image_detect:
-        launch_image_ai_detect(str(input_path))
+        print("ℹ️ --image-detect 已改为兼容参数；图片检测将在阶段4自动调用GLM与imagedetector子工具，不会打开网页或要求手动上传。")
+
+    # ─── 参考文献剥离与单独校检 ───
+    audit_text, references_text = split_references_from_text(full_text)
+    reference_file_text = meta.pop("reference_file_text", "")
+    if reference_file_text:
+        references_text = (references_text + "\n\n" + reference_file_text).strip()
+    reference_online_cache_path = resume_dir / "reference_online_cache.json"
+    reference_online_enabled = bool(references_text) and not args.no_reference_online
+    reference_online_cache = {} if args.no_resume else (_json_load(reference_online_cache_path, {}) or {})
+    if reference_online_enabled:
+        print(f"🔎 参考文献在线检索已启用: 上限{args.reference_online_limit}条, 超时{args.reference_timeout}s")
+    reference_audit = audit_references(
+        references_text,
+        online=reference_online_enabled,
+        online_limit=args.reference_online_limit,
+        timeout=args.reference_timeout,
+        cache=reference_online_cache,
+    )
+    if reference_online_enabled and not args.no_resume:
+        _json_save(reference_online_cache_path, reference_online_cache)
+        resume_event(
+            resume_dir,
+            "stage1_reference_online",
+            "saved",
+            f"checked={reference_audit.get('online_checked', 0)}; cache_entries={len(reference_online_cache)}",
+            cache=str(reference_online_cache_path),
+        )
+    if references_text:
+        meta["references_excluded_from_main_audit"] = True
+        meta["reference_chars"] = len(references_text)
+        meta["reference_count"] = reference_audit.get("reference_count", 0)
+        meta["reference_audit"] = reference_audit
+        print(f"📚 已从主体审查中剥离参考文献: {meta['reference_count']}条, {len(references_text)}字符；将单独校检")
+        resume_event(resume_dir, "stage1_references", "done", f"refs={meta['reference_count']}; chars={len(references_text)}")
+    else:
+        meta["references_excluded_from_main_audit"] = False
+        meta["reference_audit"] = reference_audit
+        print("📚 未识别到独立参考文献章节，主体审查不做引用剥离")
 
     # ─── 阶段2：本地统计检测（使用全文，统计不截断） ───
     progress_bar(1, 5, "阶段2/5 开始本地统计检测")
     print(f"🔢 正在执行本地统计检测...")
-    stat_result = local_stat_check(full_text)
+    stat_result = local_stat_check(audit_text)
     benford_str = f"{round(stat_result['benford_deviation'],3)}" if stat_result['benford_deviation'] else 'N/A'
     print(f"✅ 统计检测完成: Benford偏差={benford_str}, p值异常={stat_result['p_value_abnormal']}, 数字数={stat_result['number_count']}")
     resume_event(resume_dir, "stage2_stat", "done", f"numbers={stat_result['number_count']}; benford={benford_str}")
@@ -2178,9 +5412,9 @@ def main():
     chunk_size = min(int(args.max_chars), 4096)  # LLM单块硬上限4096字符
     overlap = min(512, chunk_size // 8)  # 重叠区约12.5%，最多512字符
 
-    chunks = smart_chunk_text(full_text, chunk_size=chunk_size, overlap=overlap)
+    chunks = smart_chunk_text(audit_text, chunk_size=chunk_size, overlap=overlap)
     total_chunks = len(chunks)
-    llm_cache_key = _text_fingerprint(full_text, f"{LLM_API_URL}|{LLM_MODEL}|{chunk_size}|{overlap}")
+    llm_cache_key = _text_fingerprint(audit_text, f"{LLM_API_URL}|{LLM_MODEL}|{chunk_size}|{overlap}|refs_excluded")
     llm_cache_dir = resume_dir / f"llm_{llm_cache_key}"
     llm_cache_dir.mkdir(parents=True, exist_ok=True)
     resume_event(resume_dir, "stage3_llm", "start", f"chunks={total_chunks}; chunk_size={chunk_size}; overlap={overlap}", cache_dir=str(llm_cache_dir))
@@ -2189,18 +5423,18 @@ def main():
 
     if total_chunks == 1:
         # 短论文：直接全文审查
-        print(f"🔍 论文长度({len(full_text)}字符)在单块范围内，直接审查...")
+        print(f"🔍 论文长度({len(audit_text)}字符，已排除参考文献)在单块范围内，直接审查...")
         single_cache = llm_cache_dir / "chunk_0000.json"
-        cached = None if args.no_resume else _json_load(single_cache)
+        cached = _json_load(single_cache) if allow_llm_cache_read else None
         if cached:
             print(f"🔁 断点续作：复用LLM审查缓存 {single_cache}")
             resume_event(resume_dir, "stage3_llm_chunk", "cache_hit", "chunk=1/1", cache=str(single_cache))
             report = cached.get("report", {"parse_error": True, "raw_output": "缓存格式异常"})
         else:
             try:
-                raw_content = call_llm(full_text)
+                raw_content = call_llm(audit_text)
                 report = parse_report(raw_content)
-                if not args.no_resume:
+                if allow_llm_cache_write:
                     _json_save(single_cache, {"report": report, "raw_content": raw_content, "saved_at": time.strftime("%F %T")})
                     resume_event(resume_dir, "stage3_llm_chunk", "saved", "chunk=1/1", cache=str(single_cache))
             except Exception as e:
@@ -2208,7 +5442,7 @@ def main():
                 report = {"parse_error": True, "raw_output": str(e)}
     else:
         # 长论文：分块审查 + 合并
-        print(f"🔍 论文较长({len(full_text)}字符)，分为{total_chunks}块(每块≤{chunk_size}字符，重叠{overlap}字符)进行审查...")
+        print(f"🔍 论文较长({len(audit_text)}字符，已排除参考文献)，分为{total_chunks}块(每块≤{chunk_size}字符，重叠{overlap}字符)进行审查...")
         chunk_reports = [None] * total_chunks
         failed_chunks = []
 
@@ -2219,7 +5453,7 @@ def main():
             chunk_report = parse_report(raw_content)
             if chunk_report.get("parse_error"):
                 raise RuntimeError(f"LLM返回解析失败: {str(chunk_report.get('raw_output',''))[:180]}")
-            if not args.no_resume:
+            if allow_llm_cache_write:
                 _json_save(chunk_cache, {"report": chunk_report, "raw_content": raw_content, "saved_at": time.strftime("%F %T"), "chunk_index": chunk_idx, "total_chunks": total_chunks, "status": "ok", "retry": retry})
                 resume_event(resume_dir, "stage3_llm_chunk", "retry_saved" if retry else "saved", f"chunk={chunk_idx+1}/{total_chunks}; chars={len(chunk_text)}", cache=str(chunk_cache))
             return chunk_report
@@ -2227,7 +5461,7 @@ def main():
         for chunk_text, chunk_idx, _ in chunks:
             progress_bar(chunk_idx, total_chunks, f"阶段3/5 LLM审查中：第{chunk_idx+1}/{total_chunks}块")
             chunk_cache = llm_cache_dir / f"chunk_{chunk_idx:04d}.json"
-            cached = None if args.no_resume else _json_load(chunk_cache)
+            cached = _json_load(chunk_cache) if allow_llm_cache_read else None
             if cached and cached.get("status") == "ok" and cached.get("report") and not cached.get("report", {}).get("parse_error"):
                 print(f"     ↳ 断点续作：复用第{chunk_idx+1}块成功LLM缓存")
                 resume_event(resume_dir, "stage3_llm_chunk", "cache_hit", f"chunk={chunk_idx+1}/{total_chunks}", cache=str(chunk_cache))
@@ -2242,7 +5476,7 @@ def main():
                 except Exception as e:
                     print(f"  ⚠️ 第{chunk_idx+1}块LLM调用/解析失败，先记录并继续其他块: {e}")
                     failed_chunks.append((chunk_text, chunk_idx, str(e)))
-                    if not args.no_resume:
+                    if allow_llm_cache_write:
                         _json_save(chunk_cache, {"report": {"parse_error": True, "raw_output": str(e)}, "raw_content": str(e), "saved_at": time.strftime("%F %T"), "chunk_index": chunk_idx, "total_chunks": total_chunks, "status": "failed_pending_retry"})
                         resume_event(resume_dir, "stage3_llm_chunk", "failed_pending_retry", f"chunk={chunk_idx+1}/{total_chunks}; error={e}", cache=str(chunk_cache))
             if chunk_reports[chunk_idx] and not chunk_reports[chunk_idx].get("parse_error"):
@@ -2265,7 +5499,7 @@ def main():
                         print(f"     ❌ 第{chunk_idx+1}块重试仍失败: {e}")
                         still_failed.append((chunk_idx, str(e)))
                         chunk_cache = llm_cache_dir / f"chunk_{chunk_idx:04d}.json"
-                        if not args.no_resume:
+                        if allow_llm_cache_write:
                             _json_save(chunk_cache, {"report": {"parse_error": True, "raw_output": str(e)}, "raw_content": str(e), "saved_at": time.strftime("%F %T"), "chunk_index": chunk_idx, "total_chunks": total_chunks, "status": "failed_final", "first_error": first_error})
                             resume_event(resume_dir, "stage3_llm_chunk", "failed_final", f"chunk={chunk_idx+1}/{total_chunks}; error={e}", cache=str(chunk_cache))
             if still_failed:
@@ -2315,6 +5549,54 @@ def main():
             resume_event(resume_dir, "stage4_merge", "done", f"checks={len(report.get('checks', [])) if isinstance(report, dict) else 'N/A'}; coverage={meta.get('llm_coverage')}")
             progress_bar(4, 5, "阶段4/5 审查结果合并完成")
 
+    # ─── 图像合理性检测：使用MinerU已保存zip中的图片/目录图片生成报告清单 ───
+    image_semantic_cache_path = resume_dir / "image_semantic_cache.json"
+    image_semantic_cache = {} if args.no_resume else (_json_load(image_semantic_cache_path, {}) or {})
+    image_detector_cache_path = resume_dir / "image_detector_cache.json"
+    image_detector_cache = {} if args.no_resume else (_json_load(image_detector_cache_path, {}) or {})
+    image_semantic_enabled = not args.no_image_semantic and bool(GLM_API_KEY)
+    image_detector_enabled = not args.no_image_detector
+    if not args.no_image_semantic and not GLM_API_KEY:
+        print("⚠️ GLM_API_KEY未配置，图像语义理解将跳过；本地合理性检测和imagedetector清单仍会生成")
+    image_audit = build_image_audit(
+        str(input_path),
+        output_dir=output_dir,
+        limit=args.image_audit_limit,
+        semantic=image_semantic_enabled,
+        semantic_limit=args.image_semantic_limit,
+        semantic_timeout=args.image_semantic_timeout,
+        semantic_cache=image_semantic_cache,
+        detector=image_detector_enabled,
+        detector_limit=args.image_detector_limit,
+        detector_timeout=args.image_detector_timeout,
+        detector_cache=image_detector_cache,
+    )
+    if image_semantic_enabled and not args.no_resume:
+        _json_save(image_semantic_cache_path, image_semantic_cache)
+        resume_event(
+            resume_dir,
+            "stage4_image_semantic",
+            "saved",
+            f"semantic_checked={image_audit.get('semantic_checked', 0)}; cache_entries={len(image_semantic_cache)}",
+            cache=str(image_semantic_cache_path),
+        )
+    if image_detector_enabled and not args.no_resume:
+        _json_save(image_detector_cache_path, image_detector_cache)
+        resume_event(
+            resume_dir,
+            "stage4_image_detector",
+            "saved",
+            f"detector_checked={image_audit.get('detector_checked', 0)}; cache_entries={len(image_detector_cache)}",
+            cache=str(image_detector_cache_path),
+        )
+    meta["image_audit"] = image_audit
+    if image_audit.get("image_count"):
+        print(f"🖼️ 图像检测完成: 本地{image_audit.get('checked_count')}/{image_audit.get('image_count')}张；GLM {image_audit.get('semantic_checked')}张；imagedetector {image_audit.get('detector_checked')}张")
+        manifest_path = save_image_review_manifest(image_audit, output_dir)
+        if manifest_path:
+            meta["image_review_manifest"] = str(manifest_path)
+            print(f"🖼️ 图像AI检测结果清单已保存: {manifest_path}")
+
     # ─── 阶段5：生成报告 ───
     progress_bar(4, 5, "阶段5/5 开始生成报告")
     report_input = str(input_path)
@@ -2354,7 +5636,7 @@ def main():
         else:
             json_path = input_path.with_suffix(".audit.json")
         json_path.write_text(
-            json.dumps({"llm_report": report, "stat_result": stat_result, "meta": meta},
+            json.dumps({"llm_report": report, "stat_result": stat_result, "meta": meta, "reference_audit": reference_audit},
                        ensure_ascii=False, indent=2),
             encoding="utf-8")
         print(f"✅ 原始JSON已保存: {json_path}")
@@ -2364,12 +5646,15 @@ def main():
     print(f"🧾 完整日志: {_RUN_LOG_FILE}")
 
     # 自动打开HTML报告
-    try:
-        html_abs = str(html_output_path.resolve())
-        webbrowser.open(f"file:///{html_abs}" if platform.system() == "Windows" else f"file://{html_abs}")
-        print(f"🌐 已在浏览器中打开HTML报告")
-    except Exception as e:
-        print(f"⚠️ 自动打开浏览器失败: {e}，请手动打开: {html_output_path}")
+    if args.no_open:
+        print(f"🌐 已跳过自动打开HTML报告: {html_output_path}")
+    else:
+        try:
+            html_abs = str(html_output_path.resolve())
+            webbrowser.open(f"file:///{html_abs}" if platform.system() == "Windows" else f"file://{html_abs}")
+            print(f"🌐 已在浏览器中打开HTML报告")
+        except Exception as e:
+            print(f"⚠️ 自动打开浏览器失败: {e}，请手动打开: {html_output_path}")
 
     # 打印摘要
     if not report.get("parse_error"):

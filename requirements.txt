@@ -2,13 +2,16 @@
 # 安装: pip install -r requirements.txt
 
 # === 核心依赖 ===
-# Python 3.8+ (标准库: json, re, argparse, urllib, zlib, math, collections, os, mimetypes, fnmatch, csv, pathlib)
+# Python 3.10+ (标准库: json, re, argparse, urllib, zlib, math, collections, os, mimetypes, fnmatch, csv, pathlib)
+
+requests>=2.28.0       # HTTP请求（MinerU与OpenAI兼容LLM调用）
 
 # === 可选依赖（目录级多格式审查） ===
 python-docx>=0.8.11    # 读取Word文档(.docx)
 openpyxl>=3.1.0        # 读取Excel表格(.xlsx/.xlsm)
 lxml>=4.9.0            # python-docx的XML解析依赖
 pymupdf>=1.24.0        # PDF图片提取（用于--image-detect功能）
+pillow>=10.0.0         # 图像尺寸/噪声/空白合理性检测
 
-# === 推荐依赖 ===
-# requests>=2.28.0     # 更稳定的HTTP请求（当前使用urllib标准库）
+# === 开发/测试依赖 ===
+# pytest>=8.0.0        # 运行测试

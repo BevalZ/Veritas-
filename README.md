@@ -20,9 +20,11 @@
 ### 🔧 技术特性
 - 📁 **目录级综合审查**：传入论文目录，自动识别PDF/Word/Excel/补充材料/原始数据，跨文件交叉验证
 - 📝 **MinerU PDF解析**：支持原生PDF/扫描件/图片PDF转Markdown，保留表格、公式、图片标注
-- 📚 **长论文冗余审查**：智能分块（8000字符/块+1000字符重叠）+ 多块结果合并，无信息丢失
+- 📚 **参考文献在线核验**：DOI优先，联合Crossref/OpenAlex/PubMed检索引用真实性与题名/年份一致性
+- 🖼️ **图像多路审查**：收集MinerU提取图片，执行本地合理性筛查、GLM-4.6V-Flash图像语义理解，并自动调用 imagedetector.com 子工具记录AI概率
+- 📚 **长论文冗余审查**：智能分块（默认4096字符/块+512字符重叠）+ 多块结果合并，并标注LLM覆盖率
 - ⚡ **双引擎检测**：本地统计检测（无API调用）+ LLM语义分析（Mimo模型）
-- 📊 **结构化输出**：美观的Markdown报告 + 原始JSON结果导出
+- 📊 **结构化输出**：Claude风格HTML报告 + Markdown报告 + 原始JSON结果导出 + 图像AI复核清单
 - 🔒 **隐私友好**：本地文件可选免Token的MinerU Agent API，无需上传到第三方训练集
 - 🧠 **社区驱动知识库**：内置12+种从PubPeer典型案例汇总的造假检测模式，支持社区贡献自动更新
 
@@ -43,8 +45,11 @@ pip install -r requirements.txt
 | python-docx ≥ 0.8.11 | 读取Word文档(.docx) | 📁 目录审查时需要 |
 | openpyxl ≥ 3.1.0 | 读取Excel表格(.xlsx/.xlsm) | 📁 目录审查时需要 |
 | lxml ≥ 4.9.0 | python-docx的XML解析依赖 | 📁 目录审查时需要 |
+| requests ≥ 2.28.0 | LLM/MinerU/文献数据库/GLM请求 | ✅ 必需 |
+| pymupdf ≥ 1.24.0 | PDF内嵌图片提取 | 🖼️ 图像检测需要 |
+| pillow ≥ 10.0.0 | 图片尺寸、空白、噪声和GLM前压缩预处理 | 🖼️ 图像检测需要 |
 
-> 💡 纯PDF审查仅需Python标准库，无额外依赖。目录级多格式审查需安装上述可选依赖。
+> 💡 建议直接使用 `pip install -r requirements.txt`，以启用文献在线检索、图像检测和多格式目录审查的完整流程。
 
 </details>
 
@@ -78,20 +83,33 @@ LLM_MODEL = "gpt-3.5-turbo"
 ```python
 MINERU_TOKEN = "你的MinerU Token（可选）"
 ```
+#### GLM图像语义理解配置（可选但推荐）
+用于对MinerU/PDF提取出的图片做语义理解，模型为智谱免费的 `glm-4.6v-flash`。密钥只放在本地 `config.py` 或环境变量 `GLM_API_KEY`，不要写入报告或提交仓库。
+```python
+GLM_API_KEY = "你的BigModel API Key"
+GLM_API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+GLM_VISION_MODEL = "glm-4.6v-flash"
+```
 
 ### 3. 运行检测
 ```bash
 # 🆕 新功能：审查整个论文项目目录（自动识别主论文/补充材料/原始数据/表格，跨文件交叉验证）
-python paper_audit.py ./my_paper_project/ --mineru
+python paper_audit.py ./my_paper_project/
 
 # 推荐：单个PDF文件MinerU解析 + 完整检测
-python paper_audit.py your_paper.pdf --mineru
-
-# 仅原始PDF文本提取 + 检测
 python paper_audit.py your_paper.pdf
 
+# 仅原始PDF文本提取 + 检测（禁用MinerU）
+python paper_audit.py your_paper.pdf --no-mineru
+
 # 自定义输出
-python paper_audit.py your_paper.pdf --mineru -o report.md --json
+python paper_audit.py your_paper.pdf -o report.md --json
+
+# 控制在线文献核验数量，适合长参考文献列表
+python paper_audit.py ./my_paper_project/ --reference-online-limit 80
+
+# 提高图片语义理解与AI概率自动检测数量上限
+python paper_audit.py ./my_paper_project/ --image-semantic-limit 20 --image-detector-limit 20
 
 # 更新欺诈模式知识库（从PubPeer评论/造假案例文本中提取新检测模式）
 python paper_audit.py --update-patterns pubpeer_comments.txt
@@ -120,13 +138,27 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --mineru              使用MinerU API将PDF转为Markdown再审查（推荐，质量更高）
+  --mineru              使用MinerU API将PDF转为Markdown再审查（PDF默认启用）
   --mineru-model        MinerU模型版本（默认vlm，仅Precision API生效）
   --mineru-lang         MinerU OCR语言（默认ch=中英，en=英文，japan=日文）
   --no-mineru           强制使用原始PDF文本提取，禁用MinerU
-  --max-chars           单块最大字符数（默认8000）
+  --max-chars           单块最大字符数（默认4096，超过4096会自动压到4096）
   --output, -o          输出报告文件路径（默认输出到同目录）
   --json                同时保存原始JSON结果
+  --reference-online-limit
+                        参考文献在线检索条数上限，默认50
+  --no-reference-online
+                        关闭参考文献在线检索
+  --image-audit-limit   报告中纳入图片检测的数量上限，默认30
+  --image-semantic-limit
+                        GLM-4.6V-Flash图像语义理解数量上限，默认12
+  --no-image-semantic   关闭GLM图像语义理解
+  --image-detector-limit
+                        自动调用imagedetector.com检测的图片数量上限，默认12
+  --image-detector-timeout
+                        单张图片imagedetector自动检测超时时间秒数，默认60
+  --no-image-detector   关闭imagedetector.com自动图片AI概率检测
+  --image-detect        兼容旧流程：打开图像复核清单
 ```
 
 ---
@@ -138,7 +170,7 @@ options:
 **文件大小**: 3.2 MB
 **提取字符数**: 23456
 **提取方式**: MinerU VLM
-**审查方式**: 分块审查 | 3块 | 单块上限8000字符 | 重叠1000字符
+**审查方式**: 分块审查 | 6块 | 单块上限4096字符 | 重叠512字符
 **审查时间**: 2026-05-22 15:30:00
 
 ## 📊 本地统计检测结果
@@ -180,7 +212,7 @@ graph TD
     J --> K
     E --> K
     K --> L["本地统计检测"]
-    L --> M["智能分块: 8000字符/块, 1000重叠"]
+    L --> M["智能分块: 默认4096字符/块, 512重叠"]
     M --> N["逐块LLM语义审查"]
     N --> O["多块结果合并: 去重+风险升级"]
     O --> P["输出Markdown报告 + JSON结果"]

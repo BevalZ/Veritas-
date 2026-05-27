@@ -7,14 +7,24 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "Paper Audit Contributors"}]
 dependencies = [
+  "requests>=2.28.0",
   "python-docx>=0.8.11",
   "openpyxl>=3.1.0",
   "lxml>=4.9.0",
   "pymupdf>=1.24.0",
+  "pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0.0",
 ]
 
 [project.scripts]
 paper-audit = "paper_audit:main"
+
+[tool.setuptools]
+py-modules = ["paper_audit"]
 
 [tool.ruff]
 line-length = 120
