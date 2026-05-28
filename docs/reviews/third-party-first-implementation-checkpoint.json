@@ -1,0 +1,34 @@
+{
+  "date": "2026-05-28",
+  "status": "passed_after_fix",
+  "resolved_findings": [
+    {
+      "id": "version-metadata-reporting",
+      "summary": "Formal Markdown and HTML reports now include prompt, schema, adapter, and risk-rule versions.",
+      "files": [
+        "veritas/legacy.py",
+        "tests/test_core.py",
+        "docs/adr/ADR-0004-risk-rules-versioned-cache-and-evaluation.md"
+      ]
+    }
+  ],
+  "review_coverage": {
+    "complete_limited_failed": "covered",
+    "critical_blocking": "covered",
+    "full_reference_image_coverage": "covered",
+    "risk_language": "covered",
+    "evaluation_path": "covered"
+  },
+  "verification": [
+    "python3 -m py_compile paper_audit.py veritas/*.py tests/test_core.py",
+    "python3 paper_audit.py --help",
+    "direct renderer version smoke",
+    "direct veritas.evaluation.run_replay_suite() smoke"
+  ],
+  "blocked_verification": [
+    {
+      "command": "python3 -m pytest tests/test_core.py -q",
+      "reason": "pytest is not installed in this environment"
+    }
+  ]
+}

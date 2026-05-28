@@ -1,6 +1,6 @@
 # 📄 Paper Audit - 耿同学版学术论文自动审查工具
 
-> 开箱即用的学术造假检测工具，融合3大开源项目思路 + MinerU OCR + LLM语义分析，一键生成专业审查报告。
+> 面向公开发表文献的第三方增强审查工具，融合 MinerU OCR、在线文献核验、图像检测与 LLM 语义分析，一键生成可复核的专业审查报告。
 
 <div align="center">
 <img src="https://img.shields.io/badge/python-3.10+-blue.svg">
@@ -19,13 +19,12 @@
 
 ### 🔧 技术特性
 - 📁 **目录级综合审查**：传入论文目录，自动识别PDF/Word/Excel/补充材料/原始数据，跨文件交叉验证
-- 📝 **MinerU PDF解析**：支持原生PDF/扫描件/图片PDF转Markdown，保留表格、公式、图片标注
+- 📝 **MinerU PDF解析**：公开文献审查默认使用 MinerU 将原生PDF/扫描件/图片PDF转Markdown，保留表格、公式、图片标注
 - 📚 **参考文献在线核验**：DOI优先，联合Crossref/OpenAlex/PubMed检索引用真实性与题名/年份一致性
-- 🖼️ **图像多路审查**：收集MinerU提取图片，执行本地合理性筛查、GLM-4.6V-Flash图像语义理解，并自动调用 imagedetector.com 子工具记录AI概率
+- 🖼️ **图像多路审查**：收集MinerU提取图片，执行轻量合理性筛查、多模态LLM图像语义理解，并自动调用 imagedetector.com 子工具记录AI概率
 - 📚 **长论文冗余审查**：智能分块（默认4096字符/块+512字符重叠）+ 多块结果合并，并标注LLM覆盖率
-- ⚡ **双引擎检测**：本地统计检测（无API调用）+ LLM语义分析（Mimo模型）
+- ⚡ **第三方增强 + 轻量统计**：MinerU/LLM/在线核验/图像检测为正式审查主路径，本地统计检测作为轻量线索
 - 📊 **结构化输出**：Claude风格HTML报告 + Markdown报告 + 原始JSON结果导出 + 图像AI复核清单
-- 🔒 **隐私友好**：本地文件可选免Token的MinerU Agent API，无需上传到第三方训练集
 - 🧠 **社区驱动知识库**：内置12+种从PubPeer典型案例汇总的造假检测模式，支持社区贡献自动更新
 
 ---
@@ -54,7 +53,7 @@ pip install -r requirements.txt
 </details>
 
 ### 2. 配置API Key
-本工具支持所有**OpenAI兼容LLM**（OpenAI/DeepSeek/通义千问/豆包/Ollama本地部署等），采用外部配置文件避免泄露密钥：
+本工具支持所有**OpenAI兼容LLM**（OpenAI/DeepSeek/通义千问/豆包等第三方或托管模型），采用外部配置文件避免泄露密钥：
 ```bash
 # 复制配置模板
 cp config.example.py config.py
@@ -72,19 +71,14 @@ LLM_MODEL = "gpt-3.5-turbo"
 # LLM_API_URL = "https://api.deepseek.com/v1/chat/completions"
 # LLM_MODEL = "deepseek-chat"
 
-# 示例3: 本地Ollama（完全离线）
-# LLM_API_KEY = "ollama"
-# LLM_API_URL = "http://localhost:11434/v1/chat/completions"
-# LLM_MODEL = "qwen2:7b"
 ```
-#### MinerU配置（可选）
-- 小文件（≤10MB/≤20页）：无需配置，自动使用内置免Token的Agent API
-- 大文件（>10MB/>20页）：到[MinerU官网](https://mineru.net/apiManage/docs)获取Token填写即可
+#### MinerU配置（正式审查必填）
+正式审查默认依赖 MinerU。到[MinerU官网](https://mineru.net/apiManage/docs)获取Token填写：
 ```python
-MINERU_TOKEN = "你的MinerU Token（可选）"
+MINERU_TOKEN = "你的MinerU Token"
 ```
-#### GLM图像语义理解配置（可选但推荐）
-用于对MinerU/PDF提取出的图片做语义理解，模型为智谱免费的 `glm-4.6v-flash`。密钥只放在本地 `config.py` 或环境变量 `GLM_API_KEY`，不要写入报告或提交仓库。
+#### 图像语义理解配置（含 GLM 示例）
+用于对MinerU/PDF提取出的图片做语义理解。当前示例使用 `glm-4.6v-flash`；后续可替换为其他多模态LLM Adapter。密钥只放在本地 `config.py` 或环境变量 `GLM_API_KEY`，不要写入报告或提交仓库。
 ```python
 GLM_API_KEY = "你的BigModel API Key"
 GLM_API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
@@ -99,16 +93,13 @@ python paper_audit.py ./my_paper_project/
 # 推荐：单个PDF文件MinerU解析 + 完整检测
 python paper_audit.py your_paper.pdf
 
-# 仅原始PDF文本提取 + 检测（禁用MinerU）
-python paper_audit.py your_paper.pdf --no-mineru
-
 # 自定义输出
 python paper_audit.py your_paper.pdf -o report.md --json
 
-# 控制在线文献核验数量，适合长参考文献列表
+# 调试/范围受限：控制在线文献核验数量（产物不应视为完整审查）
 python paper_audit.py ./my_paper_project/ --reference-online-limit 80
 
-# 提高图片语义理解与AI概率自动检测数量上限
+# 调试/范围受限：提高图片语义理解与AI概率自动检测数量上限
 python paper_audit.py ./my_paper_project/ --image-semantic-limit 20 --image-detector-limit 20
 
 # 更新欺诈模式知识库（从PubPeer评论/造假案例文本中提取新检测模式）
@@ -141,23 +132,23 @@ options:
   --mineru              使用MinerU API将PDF转为Markdown再审查（PDF默认启用）
   --mineru-model        MinerU模型版本（默认vlm，仅Precision API生效）
   --mineru-lang         MinerU OCR语言（默认ch=中英，en=英文，japan=日文）
-  --no-mineru           强制使用原始PDF文本提取，禁用MinerU
+  --no-mineru           调试/范围受限：禁用MinerU；不能作为完整正式审查
   --max-chars           单块最大字符数（默认4096，超过4096会自动压到4096）
   --output, -o          输出报告文件路径（默认输出到同目录）
   --json                同时保存原始JSON结果
   --reference-online-limit
                         参考文献在线检索条数上限，默认50
   --no-reference-online
-                        关闭参考文献在线检索
+                        调试/范围受限：关闭参考文献在线检索；识别到参考文献时不能作为完整正式审查
   --image-audit-limit   报告中纳入图片检测的数量上限，默认30
   --image-semantic-limit
                         GLM-4.6V-Flash图像语义理解数量上限，默认12
-  --no-image-semantic   关闭GLM图像语义理解
+  --no-image-semantic   调试/范围受限：关闭图像语义理解；存在可检测图片时不能作为完整正式审查
   --image-detector-limit
                         自动调用imagedetector.com检测的图片数量上限，默认12
   --image-detector-timeout
                         单张图片imagedetector自动检测超时时间秒数，默认60
-  --no-image-detector   关闭imagedetector.com自动图片AI概率检测
+  --no-image-detector   调试/范围受限：关闭imagedetector.com自动图片AI概率检测；存在可检测图片时不能作为完整正式审查
   --image-detect        兼容旧流程：打开图像复核清单
 ```
 
@@ -183,7 +174,7 @@ options:
 
 ## 总评: 存在多处统计异常，判定为中风险
 **风险等级**: 🟡 中
-**打假得分**: 72 (越高越可疑)
+**证据风险分**: 72 / 100 (辅助排序指标，越高表示越需要优先复核)
 
 ## 🔍 逐项检查
 | # | 分类 | 检查项 | 判定 |
@@ -205,7 +196,7 @@ graph TD
     B -->|单文件| F{"文件类型?"}
     F -->|PDF| G{"MinerU解析?"}
     G -->|是| H["MinerU API转Markdown"]
-    G -->|否| I["本地PDF文本提取"]
+    G -->|否| I["范围受限/诊断提取"]
     F -->|Word/Excel/CSV| J["对应格式文本提取"]
     H --> K["全文文本"]
     I --> K
@@ -237,7 +228,7 @@ graph TD
 
 ## 🤝 贡献
 欢迎提交Issue和PR！参考方向：
-- 增加本地LLM支持
+- 增加新的第三方/托管LLM Adapter
 - 更多统计检测维度
 - 批量检测功能
 - 图形界面开发
@@ -257,4 +248,3 @@ MIT License
 - 安装开发依赖：`python -m pip install -r requirements.txt`
 - CLI 检查：`python paper_audit.py --help` 或安装后运行 `paper-audit --help`
 - 语法检查：`python -m py_compile paper_audit.py`
-

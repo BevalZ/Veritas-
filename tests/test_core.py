@@ -1,10 +1,473 @@
 import json
+import types
 import subprocess
 import sys
 from pathlib import Path
 import zipfile
 
 import paper_audit
+import veritas
+from veritas.models import AuditReportModel, EvidenceFinding
+from veritas.renderers import render_html_report, render_markdown_report
+
+
+def test_runtime_config_validation_reports_missing_required_config():
+    cfg = paper_audit.default_runtime_config()
+
+    errors = cfg.validation_errors()
+
+    assert {"capability": "text_llm", "field": "api_key", "error": "missing_required_config"} in errors
+    assert {"capability": "mineru", "field": "api_key", "error": "missing_required_config"} in errors
+
+
+def test_load_runtime_config_reads_explicit_config_module(monkeypatch):
+    fake_config = types.SimpleNamespace(
+        LLM_API_KEY="llm-key",
+        LLM_API_URL="https://llm.example.test/v1/chat/completions",
+        LLM_MODEL="model-x",
+        MINERU_TOKEN="mineru-token",
+        MINERU_BASE="https://mineru.example.test",
+        GLM_API_KEY="vision-key",
+        GLM_API_URL="https://vision.example.test/chat",
+        GLM_VISION_MODEL="vision-x",
+        LLM_TIMEOUT=12,
+        LLM_RETRIES=3,
+    )
+
+    monkeypatch.setattr(paper_audit.importlib, "import_module", lambda name: fake_config)
+
+    cfg = paper_audit.load_runtime_config(verbose=False)
+
+    assert cfg.text_llm.api_key == "llm-key"
+    assert cfg.text_llm.model == "model-x"
+    assert cfg.mineru.api_key == "mineru-token"
+    assert cfg.mineru.base_url == "https://mineru.example.test"
+    assert cfg.image_semantic.api_key == "vision-key"
+    assert cfg.llm_timeout == 12
+    assert cfg.llm_retries == 3
+
+
+def test_run_preflight_once_reuses_result_within_run_only():
+    calls = {"count": 0}
+
+    def runner():
+        calls["count"] += 1
+        return paper_audit.PreflightResult("text_llm", True)
+
+    run_state = {}
+
+    first = paper_audit.run_preflight_once(run_state, "text_llm", runner)
+    second = paper_audit.run_preflight_once(run_state, "text_llm", runner)
+    third = paper_audit.run_preflight_once({}, "text_llm", runner)
+
+    assert first is second
+    assert third is not first
+    assert calls["count"] == 2
+
+
+def test_preflight_mineru_reports_auth_failure(monkeypatch):
+    class FakeResponse:
+        status_code = 401
+        text = "unauthorized"
+
+    monkeypatch.setattr(paper_audit, "MINERU_TOKEN", "bad-token")
+    monkeypatch.setattr(paper_audit, "MINERU_BASE", "https://mineru.example.test")
+    monkeypatch.setattr(paper_audit.requests, "get", lambda *args, **kwargs: FakeResponse())
+
+    result = paper_audit.preflight_mineru(timeout=1)
+
+    assert not result.ok
+    assert result.capability == "mineru"
+    assert result.error_class == "provider_auth_failed"
+    assert result.details["http_status"] == 401
+
+
+def test_preflight_text_llm_performs_lightweight_call(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr(paper_audit, "LLM_API_KEY", "llm-key")
+    monkeypatch.setattr(paper_audit, "LLM_API_URL", "https://llm.example.test/v1/chat/completions")
+    monkeypatch.setattr(paper_audit, "LLM_MODEL", "model-x")
+    monkeypatch.setattr(paper_audit.requests, "post", fake_post)
+
+    result = paper_audit.preflight_text_llm(timeout=2)
+
+    assert result.ok
+    assert result.capability == "text_llm"
+    assert calls[0]["json"]["max_tokens"] == 1
+    assert calls[0]["json"]["model"] == "model-x"
+    assert calls[0]["headers"]["Authorization"] == "Bearer llm-key"
+
+
+def test_preflight_failure_to_audit_failure_has_retry_guidance():
+    result = paper_audit.PreflightResult(
+        capability="text_llm",
+        ok=False,
+        error_class="provider_unavailable",
+        message="timeout",
+        details={"http_status": 503},
+        created_at="2026-05-28 12:00:00",
+    )
+
+    failure = paper_audit.preflight_failure_to_audit_failure(
+        result,
+        "python paper_audit.py paper.pdf --json",
+        ["init", "stage1_text_extraction"],
+    )
+
+    assert failure.capability == "text_llm"
+    assert failure.error_class == "provider_unavailable"
+    assert failure.retry_command == "python paper_audit.py paper.pdf --json"
+    assert failure.completed_stages == ["init", "stage1_text_extraction"]
+    assert "LLM_API_KEY" in " ".join(failure.fix_hints)
+
+
+def test_adapter_result_structured_success_failure_skip():
+    success = paper_audit.AdapterResult.success({"ok": True})
+    failure = paper_audit.AdapterResult.failure("provider_auth_failed", "bad key")
+    skipped = paper_audit.AdapterResult.skipped("unsupported_content", "not supported")
+
+    assert success.ok
+    assert success.to_dict()["status"] == "success"
+    assert not failure.ok
+    assert failure.error_class == "provider_auth_failed"
+    assert skipped.status == "skipped"
+    assert skipped.error_class == "unsupported_content"
+
+
+def test_fake_adapters_simulate_required_failure_modes():
+    scenarios = {
+        "auth_failure": "provider_auth_failed",
+        "network_failure": "provider_unavailable",
+        "rate_limit": "provider_rate_limited",
+        "schema_error": "schema_error",
+    }
+
+    for scenario, error_class in scenarios.items():
+        adapters = paper_audit.fake_audit_adapters(scenario=scenario)
+        assert adapters.mineru.preflight().error_class == error_class
+        assert adapters.text_llm.review("text").error_class == error_class
+        assert adapters.reference_lookup.audit("refs").error_class == error_class
+        assert adapters.image_semantic.analyze("image.png").error_class == error_class
+        assert adapters.image_detector.detect("image.png").error_class == error_class
+
+    skipped = paper_audit.fake_audit_adapters(scenario="unsupported_content")
+    assert skipped.mineru.extract(Path("paper.pdf")).status == "skipped"
+    assert skipped.image_detector.detect("tiny.png").error_class == "unsupported_content"
+
+
+def test_production_adapters_wrap_injected_functions_without_monkeypatching_globals():
+    mineru = paper_audit.ProductionMinerUAdapter(
+        preflight_func=lambda: paper_audit.PreflightResult("mineru", True),
+        extract_func=lambda file_path, language="ch", output_dir=None: ("text", {"source": "fake"}),
+    )
+    text_llm = paper_audit.ProductionTextLLMAdapter(
+        preflight_func=lambda: paper_audit.PreflightResult("text_llm", False, "provider_auth_failed", "bad key"),
+        review_func=lambda text, chunk_info=None: "raw llm",
+    )
+    references = paper_audit.ProductionReferenceLookupAdapter(
+        audit_func=lambda references_text, online=False, online_limit=50, timeout=10, cache=None: {"reference_count": 1}
+    )
+    image_semantic = paper_audit.ProductionImageSemanticAdapter(
+        analyze_func=lambda image_path, timeout=45: {"status": "ok", "summary": "ok"}
+    )
+    image_detector = paper_audit.ProductionImageDetectorAdapter(
+        detect_func=lambda image_path, timeout=60: {"status": "skipped", "reason": "too_small", "summary": "tiny"}
+    )
+
+    assert mineru.preflight().ok
+    assert mineru.extract(Path("paper.pdf")).value["text"] == "text"
+    assert text_llm.preflight().error_class == "provider_auth_failed"
+    assert text_llm.review("body").value == "raw llm"
+    assert references.audit("refs").value["reference_count"] == 1
+    assert image_semantic.analyze("image.png").ok
+    assert image_detector.detect("tiny.png").status == "skipped"
+
+
+def _complete_fake_adapters(**overrides):
+    values = {
+        "text_llm": json.dumps({
+            "summary": "fake complete",
+            "risk_level": "低",
+            "detection_score": 0,
+            "checks": [],
+            "conclusion": "fake complete",
+        }, ensure_ascii=False)
+    }
+    adapters = paper_audit.fake_audit_adapters(values=values)
+    for name, adapter in overrides.items():
+        setattr(adapters, name, adapter)
+    return adapters
+
+
+def test_fake_adapter_e2e_complete_writes_complete_artifacts(tmp_path):
+    result = paper_audit.run_adapter_e2e_audit(
+        tmp_path,
+        _complete_fake_adapters(),
+        text="Fake manuscript text with n=20 and p=0.04.",
+    )
+
+    assert result["outcome"] == "complete"
+    assert result["md_path"] == tmp_path / "audit_report.audit.md"
+    assert result["json_path"] == tmp_path / "audit_report.audit.json"
+    assert "**产物类型**: 完整审查 (complete)" in result["md_path"].read_text(encoding="utf-8")
+    payload = json.loads(result["json_path"].read_text(encoding="utf-8"))
+    assert payload["report_type"] == "complete"
+    assert payload["meta"]["artifact_type"] == "complete"
+
+
+def test_fake_adapter_e2e_llm_failure_writes_failed_diagnostics(tmp_path):
+    result = paper_audit.run_adapter_e2e_audit(
+        tmp_path,
+        _complete_fake_adapters(text_llm=paper_audit.FakeTextLLMAdapter("network_failure")),
+    )
+
+    assert result["outcome"] == "failed"
+    assert result["capability"] == "text_llm"
+    payload = json.loads(result["json_path"].read_text(encoding="utf-8"))
+    assert payload["report_type"] == "failed"
+    assert payload["complete_report_generated"] is False
+    assert payload["failure"]["error_class"] == "provider_unavailable"
+
+
+def test_fake_adapter_e2e_llm_schema_error_writes_failed_diagnostics(tmp_path):
+    result = paper_audit.run_adapter_e2e_audit(
+        tmp_path,
+        _complete_fake_adapters(text_llm=paper_audit.FakeTextLLMAdapter("success", value=json.dumps({
+            "summary": "bad schema",
+            "risk_level": "中",
+            "checks": [{"verdict": "⚠️疑点", "evidence": "missing required fields"}],
+            "conclusion": "bad",
+        }, ensure_ascii=False))),
+    )
+
+    assert result["outcome"] == "failed"
+    assert result["capability"] == "text_llm"
+    payload = json.loads(result["json_path"].read_text(encoding="utf-8"))
+    assert payload["failure"]["error_class"] == "schema_error"
+
+
+def test_fake_adapter_e2e_reference_lookup_failure_when_references_exist(tmp_path):
+    result = paper_audit.run_adapter_e2e_audit(
+        tmp_path,
+        _complete_fake_adapters(reference_lookup=paper_audit.FakeReferenceLookupAdapter("network_failure")),
+        references_text="References\n1. Smith J. Test Journal. 2024. doi:10.1000/xyz",
+    )
+
+    assert result["outcome"] == "failed"
+    assert result["capability"] == "reference_lookup"
+    payload = json.loads(result["json_path"].read_text(encoding="utf-8"))
+    assert payload["failure"]["capability"] == "reference_lookup"
+    assert payload["failure"]["error_class"] == "provider_unavailable"
+
+
+def test_fake_adapter_e2e_image_detector_failure_when_images_exist(tmp_path):
+    image_path = tmp_path / "figure.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 2048)
+
+    result = paper_audit.run_adapter_e2e_audit(
+        tmp_path,
+        _complete_fake_adapters(image_detector=paper_audit.FakeImageDetectorAdapter("network_failure")),
+        image_paths=[str(image_path)],
+    )
+
+    assert result["outcome"] == "failed"
+    assert result["capability"] == "image_detector"
+    payload = json.loads(result["json_path"].read_text(encoding="utf-8"))
+    assert payload["failure"]["capability"] == "image_detector"
+    assert payload["failure"]["error_class"] == "provider_unavailable"
+
+
+def test_run_request_maps_argparse_values():
+    args = types.SimpleNamespace(
+        pdf_path="paper.pdf",
+        output="out.md",
+        json=True,
+        no_open=True,
+        mineru=True,
+        no_mineru=False,
+        mineru_model="vlm",
+        mineru_lang="en",
+        max_chars=2048,
+        no_reference_online=True,
+        reference_online_limit=12,
+        reference_timeout=3,
+        no_image_semantic=True,
+        image_semantic_limit=4,
+        image_semantic_timeout=5,
+        no_image_detector=True,
+        image_detector_limit=6,
+        image_detector_timeout=7,
+        no_resume=True,
+        llm_timeout=11,
+        llm_retries=2,
+        strict_failed_chunks=True,
+        llm_cache_only=True,
+        ai_detect=False,
+        image_detect=False,
+    )
+
+    request = paper_audit.RunRequest.from_args(args)
+
+    assert request.input_path == Path("paper.pdf")
+    assert request.output == "out.md"
+    assert request.json_output is True
+    assert request.no_open is True
+    assert request.mineru_lang == "en"
+    assert request.max_chars == 2048
+    assert request.no_reference_online is True
+    assert request.llm_timeout == 11
+    assert request.strict_failed_chunks is True
+
+
+def test_run_result_represents_complete_limited_and_failed(tmp_path):
+    failure = paper_audit.AuditFailure(
+        capability="text_llm",
+        error_class="provider_unavailable",
+        message="down",
+        retry_command="python paper_audit.py paper.pdf --json",
+    )
+
+    complete = paper_audit.RunResult.complete({"markdown": "paper.audit.md"})
+    limited = paper_audit.RunResult.limited({"markdown": "paper.limited.md"})
+    failed = paper_audit.RunResult.failed(
+        failure,
+        {"markdown": "paper.failed.md", "json": "paper.failed.json"},
+        meta={"input_path": str(tmp_path / "paper.pdf")},
+    )
+
+    assert complete.outcome == "complete"
+    assert complete.exit_code == 0
+    assert limited.outcome == "limited"
+    assert limited.artifact_type == "limited"
+    assert failed.outcome == "failed"
+    assert failed.exit_code == 1
+    assert failed.failure["capability"] == "text_llm"
+
+
+def test_package_boundaries_export_existing_compatibility_surface():
+    assert veritas.config.RuntimeConfig is paper_audit.RuntimeConfig
+    assert veritas.preflight.PreflightResult is paper_audit.PreflightResult
+    assert veritas.run.RunRequest is paper_audit.RunRequest
+    assert veritas.workspace.create_run_workspace is paper_audit.create_run_workspace
+    assert veritas.risk_rules.apply_risk_rules is paper_audit.apply_risk_rules
+    assert veritas.adapters.AdapterResult is paper_audit.AdapterResult
+
+
+def test_paper_audit_import_still_allows_legacy_monkeypatches(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_verify(ref, timeout=10):
+        calls["count"] += 1
+        return {"online_status": "verified", "confidence": 1.0, "matched_sources": [], "problems": [], "query": {}}
+
+    monkeypatch.setattr(paper_audit, "verify_reference_online", fake_verify)
+
+    audit = paper_audit.audit_references(
+        "References\n1. Smith J. Reliable paper. Nature. 2020. doi:10.1000/abc",
+        online=True,
+        online_limit=None,
+    )
+
+    assert audit["online_checked"] == 1
+    assert calls["count"] == 1
+
+
+def test_renderer_boundary_accepts_stable_report_model(tmp_path):
+    finding = EvidenceFinding(
+        category="数据与结果",
+        item="样本量",
+        verdict="✅通过",
+        source_text="Methods: n=20",
+        evidence="Methods reports n=20.",
+        reason="样本量前后一致。",
+        recommendation="无需额外处理。",
+        confidence=0.91,
+    )
+    report = AuditReportModel(
+        summary="ok",
+        risk_level="低",
+        detection_score=0,
+        checks=[finding],
+        conclusion="done",
+    )
+    meta = {"artifact_type": "complete", "risk_rule_version": paper_audit.RISK_RULE_VERSION}
+    stat = {
+        "benford_deviation": None,
+        "benford_status": None,
+        "p_value_count": 0,
+        "p_value_abnormal": 0,
+        "sd_count": 0,
+        "number_count": 0,
+    }
+
+    markdown = render_markdown_report(report, tmp_path / "paper.pdf", meta, stat)
+    html = render_html_report(report, tmp_path / "paper.pdf", meta, stat)
+
+    assert "**产物类型**: 完整审查 (complete)" in markdown
+    assert "prompt=text_audit_prompt_v1" in markdown
+    assert "schema=strict_evidence_schema_v1" in markdown
+    assert "adapter=audit_adapters_v1" in markdown
+    assert "证据风险分" in markdown
+    assert "样本量" in markdown
+    assert "Prompt版本" in html
+    assert "Schema版本" in html
+    assert "Adapter版本" in html
+    assert "证据风险分" in html
+
+
+def test_evaluation_replay_suite_runs_synthetic_fixture_without_network():
+    results = veritas.evaluation.run_replay_suite()
+    payload = veritas.evaluation.eval_results_payload(results)
+
+    assert payload["passed"] is True
+    assert payload["total"] >= 1
+    assert payload["prompt_version"] == veritas.evaluation.EVAL_PROMPT_VERSION
+    assert payload["schema_version"] == veritas.evaluation.EVAL_SCHEMA_VERSION
+    assert payload["risk_rule_version"] == paper_audit.RISK_RULE_VERSION
+
+
+def test_evaluation_record_mode_stores_required_versions(tmp_path):
+    case = veritas.evaluation.EvalCase(
+        case_id="recordable",
+        input_text="Synthetic public paper text",
+        expected_risk_level="低",
+    )
+    response = {
+        "summary": "ok",
+        "risk_level": "低",
+        "detection_score": 0,
+        "checks": [],
+        "conclusion": "ok",
+    }
+
+    record = veritas.evaluation.build_eval_record(
+        case,
+        response=response,
+        adapter="fake_text_llm",
+        model="fixture-model",
+        recorded_at="2026-05-28 12:00:00",
+    )
+    record_path = veritas.evaluation.write_eval_record(record, tmp_path)
+    loaded = json.loads(record_path.read_text(encoding="utf-8"))
+
+    assert loaded["adapter"] == "fake_text_llm"
+    assert loaded["model"] == "fixture-model"
+    assert loaded["prompt_version"] == veritas.evaluation.EVAL_PROMPT_VERSION
+    assert loaded["schema_version"] == veritas.evaluation.EVAL_SCHEMA_VERSION
+    assert loaded["risk_rule_version"] == paper_audit.RISK_RULE_VERSION
+    assert loaded["input_hash"] == veritas.evaluation.evaluation_input_hash(case.input_text)
+    assert loaded["response"]["summary"] == "ok"
 
 
 def test_extract_all_numbers_filters_years_and_small_noise():
@@ -248,6 +711,26 @@ def test_audit_references_uses_online_cache(monkeypatch):
     assert first["online_checked"] == 1
     assert second["online_checked"] == 1
     assert calls["count"] == 1
+
+
+def test_audit_references_checks_all_references_by_default(monkeypatch):
+    refs = """References
+1. Smith J. Reliable cancer marker discovery. Nature Medicine. 2020. doi:10.1000/abc
+2. Jones A. Another reliable paper. Science. 2021. doi:10.1000/def
+"""
+    calls = {"count": 0}
+
+    def fake_verify(ref, timeout=10):
+        calls["count"] += 1
+        return {"online_status": "verified", "confidence": 1.0, "matched_sources": [], "problems": [], "query": {}}
+
+    monkeypatch.setattr(paper_audit, "verify_reference_online", fake_verify)
+
+    audit = paper_audit.audit_references(refs, online=True, online_limit=None)
+
+    assert audit["reference_count"] == 2
+    assert audit["online_checked"] == 2
+    assert calls["count"] == 2
 
 
 def test_extract_images_from_mineru_zip(tmp_path):
@@ -505,6 +988,32 @@ def test_build_image_audit_uses_detector_cache(monkeypatch, tmp_path):
     assert calls["count"] == 1
 
 
+def test_build_image_audit_checks_all_images_by_default(monkeypatch, tmp_path):
+    image_a = tmp_path / "a.png"
+    image_b = tmp_path / "b.png"
+    image_a.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * (paper_audit.MIN_IMAGE_BYTES + 10))
+    image_b.write_bytes(b"\x89PNG\r\n\x1a\n" + b"y" * (paper_audit.MIN_IMAGE_BYTES + 10))
+
+    monkeypatch.setattr(paper_audit, "collect_image_files", lambda *args, **kwargs: [str(image_a), str(image_b)])
+    monkeypatch.setattr(paper_audit, "analyze_image_reasonability", lambda path: {
+        "path": path,
+        "file": Path(path).name,
+        "risk": "local_ok",
+        "issues": [],
+        "width": 200,
+        "height": 100,
+    })
+    monkeypatch.setattr(paper_audit, "call_glm_image_semantics", lambda path, timeout=45: {"status": "ok", "summary": Path(path).name})
+    monkeypatch.setattr(paper_audit, "call_imagedetector", lambda path, timeout=60: {"status": "ok", "score": 1.0, "label": "真实/人工"})
+
+    audit = paper_audit.build_image_audit(str(tmp_path), limit=None, semantic=True, semantic_limit=None, detector=True, detector_limit=None)
+
+    assert audit["image_count"] == 2
+    assert audit["checked_count"] == 2
+    assert audit["semantic_checked"] == 2
+    assert audit["detector_checked"] == 2
+
+
 def test_launch_image_ai_detect_runs_automatic_subtool_without_browser(monkeypatch, tmp_path):
     captured = {}
 
@@ -733,11 +1242,60 @@ def test_parse_report_preserves_partial_truncated_json():
 
     parsed = paper_audit.parse_report(raw)
 
-    assert parsed["summary"] == "文本严重乱码"
-    assert parsed["risk_level"] == "高"
-    assert parsed["_partial_parse"] is True
+    assert parsed["parse_error"] is True
+    assert parsed["schema_error"] is True
+    assert "truncated_json" in parsed["schema_errors"]
+    assert parsed["partial_fields"]["summary"] == "文本严重乱码"
+    assert parsed["partial_fields"]["risk_level"] == "高"
+    assert parsed["partial_fields"]["verdict"] == "🚩红旗"
+
+
+def test_parse_report_rejects_findings_missing_required_schema_fields():
+    raw = json.dumps({
+        "summary": "missing fields",
+        "risk_level": "中",
+        "checks": [{
+            "category": "数据与结果",
+            "item": "缺少证据字段",
+            "verdict": "⚠️疑点",
+            "evidence": "n=20",
+            "reason": "样本量需要核验",
+        }],
+        "conclusion": "retry",
+    }, ensure_ascii=False)
+
+    parsed = paper_audit.parse_report(raw)
+
+    assert parsed["parse_error"] is True
+    assert parsed["schema_error"] is True
+    assert any("missing source,recommendation,confidence" in err for err in parsed["schema_errors"])
+
+
+def test_parse_report_normalizes_valid_strict_finding():
+    raw = json.dumps({
+        "summary": "ok",
+        "risk_level": "低",
+        "detection_score": 0,
+        "checks": [{
+            "category": "数据与结果",
+            "item": "样本量",
+            "verdict": "✅通过",
+            "source": "Methods",
+            "source_text": "n=20",
+            "evidence": "Methods reports n=20.",
+            "reason": "样本量前后一致。",
+            "recommendation": "无需额外处理。",
+            "confidence": 0.91,
+        }],
+        "conclusion": "ok",
+    }, ensure_ascii=False)
+
+    parsed = paper_audit.parse_report(raw)
+
     assert not parsed.get("parse_error")
-    assert parsed["checks"][0]["verdict"] == "🚩红旗"
+    assert parsed["checks"][0]["source"] == "Methods"
+    assert parsed["checks"][0]["confidence"] == 0.91
+    assert parsed["_raw_response_preserved"] is True
 
 
 def test_merge_chunk_reports_keeps_more_severe_duplicate_verdict():
@@ -850,6 +1408,42 @@ def test_merge_chunk_reports_softens_conditional_red_flag_language_for_warnings(
     assert "升级为严重问题" in merged["checks"][0]["detail"]
 
 
+def test_apply_risk_rules_overrides_llm_risk_level_and_records_version():
+    report = {"summary": "LLM says high", "risk_level": "高", "detection_score": 99, "checks": [], "conclusion": "raw"}
+
+    ruled = paper_audit.apply_risk_rules(report)
+
+    assert ruled["risk_level"] == "低"
+    assert ruled["detection_score"] == 0
+    assert ruled["rule_version"] == paper_audit.RISK_RULE_VERSION
+    assert ruled["score_breakdown"]["rule_version"] == paper_audit.RISK_RULE_VERSION
+
+
+def test_apply_risk_rules_imagedetector_high_score_alone_is_not_highest_risk():
+    report = {"summary": "ok", "risk_level": "低", "checks": [], "conclusion": "ok"}
+    image_audit = {"images": [{"detector": {"status": "ok", "score": 99.0}}]}
+
+    ruled = paper_audit.apply_risk_rules(report, image_audit=image_audit)
+
+    assert ruled["risk_level"] == "中"
+    assert ruled["risk_level"] != "严重证据冲突"
+    assert ruled["score_breakdown"]["image_detector_high"] == 1
+
+
+def test_apply_risk_rules_can_emit_severe_evidence_conflict():
+    report = {"summary": "ok", "risk_level": "低", "checks": [
+        {"category": "数据", "item": "a", "verdict": "🚩红旗"},
+        {"category": "数据", "item": "b", "verdict": "🚩红旗"},
+        {"category": "引用", "item": "c", "verdict": "⚠️疑点"},
+        {"category": "方法", "item": "d", "verdict": "⚠️疑点"},
+    ], "conclusion": "ok"}
+
+    ruled = paper_audit.apply_risk_rules(report)
+
+    assert ruled["risk_level"] == "严重证据冲突"
+    assert ruled["detection_score"] >= 85
+
+
 def test_format_html_report_normalizes_cached_directory_meta(tmp_path):
     (tmp_path / "paper.pdf").write_bytes(b"%PDF")
     report = {"summary": "ok", "risk_level": "低", "detection_score": 3, "checks": [], "conclusion": "done"}
@@ -911,6 +1505,9 @@ def test_cli_help_exposes_no_open():
     assert "--image-detector-limit" in result.stdout
     assert "不再打开网页或要求手动上传" in result.stdout
     assert "--serve-report-actions" in result.stdout
+    assert "--llm-provider" not in result.stdout
+    assert "--ignore-config-llm" not in result.stdout
+    assert "mykey.py" not in result.stdout
 
 
 def test_json_report_payload_shape_stays_stable(tmp_path):
@@ -921,6 +1518,243 @@ def test_json_report_payload_shape_stays_stable(tmp_path):
     }
 
     assert json.loads(json.dumps(payload))["meta"]["llm_coverage"] == "1/1"
+
+
+def test_audit_artifact_paths_separate_complete_and_limited(tmp_path):
+    complete_md, complete_html, complete_json = paper_audit.audit_artifact_paths(tmp_path, artifact_type="complete")
+    limited_md, limited_html, limited_json = paper_audit.audit_artifact_paths(tmp_path, artifact_type="limited")
+    single_md, single_html, single_json = paper_audit.audit_artifact_paths(tmp_path / "paper.pdf", artifact_type="limited")
+
+    assert complete_md == tmp_path / "audit_report.audit.md"
+    assert complete_html == tmp_path / "audit_report.audit.html"
+    assert complete_json == tmp_path / "audit_report.audit.json"
+    assert limited_md == tmp_path / "audit_report.limited.md"
+    assert limited_html == tmp_path / "audit_report.limited.html"
+    assert limited_json == tmp_path / "audit_report.limited.json"
+    assert single_md == tmp_path / "paper.limited.md"
+    assert single_html == tmp_path / "paper.limited.html"
+    assert single_json == tmp_path / "paper.limited.json"
+
+
+def test_run_workspace_is_unique_and_records_artifacts(tmp_path):
+    input_pdf = tmp_path / "paper.pdf"
+    input_pdf.write_bytes(b"%PDF-1.4")
+    first = paper_audit.create_run_workspace(input_pdf, tmp_path, "paper")
+    second = paper_audit.create_run_workspace(input_pdf, tmp_path, "paper")
+    root_report = tmp_path / "paper.audit.md"
+    root_report.write_text("report", encoding="utf-8")
+
+    outcome_path = paper_audit.record_run_workspace_artifacts(first, "complete", [root_report], meta={"artifact_type": "complete"})
+
+    assert first["run_id"] != second["run_id"]
+    assert Path(first["run_dir"]).is_dir()
+    assert Path(second["run_dir"]).is_dir()
+    assert (Path(first["artifacts_dir"]) / "paper.audit.md").read_text(encoding="utf-8") == "report"
+    payload = json.loads(outcome_path.read_text(encoding="utf-8"))
+    assert payload["outcome"] == "complete"
+    assert payload["root_shortcuts"] == [str(root_report)]
+    assert payload["workspace_artifacts"] == [str(Path(first["artifacts_dir"]) / "paper.audit.md")]
+
+
+def test_audit_artifact_paths_normalize_explicit_output(tmp_path):
+    output = tmp_path / "custom.audit.md"
+
+    md_path, html_path, json_path = paper_audit.audit_artifact_paths(
+        tmp_path / "paper.pdf",
+        artifact_type="limited",
+        output_path=output,
+    )
+
+    assert md_path == tmp_path / "custom.limited.md"
+    assert html_path == tmp_path / "custom.limited.html"
+    assert json_path == tmp_path / "custom.limited.json"
+
+
+def test_audit_limited_reasons_track_user_limited_flags():
+    args = types.SimpleNamespace(
+        no_mineru=True,
+        no_reference_online=True,
+        no_image_semantic=True,
+        no_image_detector=False,
+        llm_cache_only=True,
+    )
+    meta = {
+        "reference_count": 2,
+        "image_audit": {"image_count": 1},
+        "llm_partial_report": True,
+        "llm_coverage": "1/2",
+        "llm_failed_chunks": [2],
+    }
+
+    reasons = paper_audit.audit_limited_reasons(args, meta, has_pdf_input=True)
+
+    assert any("禁用MinerU" in reason for reason in reasons)
+    assert any("参考文献在线核验" in reason for reason in reasons)
+    assert any("图像语义分析" in reason for reason in reasons)
+    assert any("cache-only" in reason for reason in reasons)
+    assert any("LLM分块覆盖不足" in reason for reason in reasons)
+
+
+def test_audit_limited_reasons_include_user_limits_even_when_coverage_is_full():
+    args = types.SimpleNamespace(
+        no_mineru=False,
+        no_reference_online=False,
+        reference_online_limit=10,
+        image_audit_limit=10,
+        no_image_semantic=False,
+        image_semantic_limit=10,
+        no_image_detector=False,
+        image_detector_limit=10,
+        llm_cache_only=False,
+    )
+    meta = {
+        "reference_count": 2,
+        "reference_audit": {"reference_count": 2, "online_checked": 2},
+        "image_audit": {"image_count": 2, "semantic_checked": 2, "detector_checked": 2},
+    }
+
+    reasons = paper_audit.audit_limited_reasons(args, meta)
+
+    assert any("参考文献在线核验上限" in reason for reason in reasons)
+    assert any("图像审查上限" in reason for reason in reasons)
+    assert any("图像语义分析上限" in reason for reason in reasons)
+    assert any("imagedetector检测上限" in reason for reason in reasons)
+
+
+def test_coverage_blocking_failure_detects_service_wide_reference_error():
+    meta = {
+        "reference_audit": {
+            "reference_count": 2,
+            "online_enabled": True,
+            "online_checked": 2,
+            "references": [
+                {"online": {"online_status": "error"}},
+                {"online": {"online_status": "error"}},
+            ],
+        }
+    }
+
+    capability, message, details = paper_audit.coverage_blocking_failure(meta)
+
+    assert capability == "reference_lookup"
+    assert "全部失败" in message
+    assert details["reference_count"] == 2
+
+
+def test_coverage_blocking_failure_detects_service_wide_image_detector_error():
+    meta = {
+        "image_audit": {
+            "image_count": 2,
+            "detector_enabled": True,
+            "detector_checked": 2,
+            "images": [
+                {"detector": {"status": "error"}},
+                {"detector": {"status": "error"}},
+            ],
+        }
+    }
+
+    capability, message, details = paper_audit.coverage_blocking_failure(meta)
+
+    assert capability == "image_detector"
+    assert "全部失败" in message
+    assert details["image_count"] == 2
+
+
+def test_report_headers_state_complete_or_limited(tmp_path):
+    stat = {
+        "benford_deviation": None,
+        "benford_status": None,
+        "p_value_count": 0,
+        "p_value_abnormal": 0,
+        "sd_count": 0,
+        "number_count": 0,
+    }
+    report = {"summary": "ok", "risk_level": "低", "detection_score": 0, "checks": [], "conclusion": "ok"}
+
+    complete = paper_audit.format_report(report, tmp_path / "paper.pdf", {"artifact_type": "complete"}, stat)
+    limited = paper_audit.format_report(
+        report,
+        tmp_path / "paper.pdf",
+        {"artifact_type": "limited", "limited_reasons": ["用户关闭参考文献在线核验。"]},
+        stat,
+    )
+
+    assert "**产物类型**: 完整审查 (complete)" in complete
+    assert "**产物类型**: 范围受限审查 (limited)" in limited
+    assert "用户关闭参考文献在线核验" in limited
+
+
+def test_failed_audit_markdown_includes_required_diagnostics(tmp_path):
+    failure = paper_audit.AuditFailure(
+        capability="mineru",
+        error_class="missing_required_config",
+        message="MINERU_TOKEN is missing",
+        fix_hints=["在 config.py 中配置 MINERU_TOKEN", "确认 MinerU 网络可达"],
+        completed_stages=["runtime_config_loaded"],
+        retry_command="python paper_audit.py sample.pdf --json",
+        details={"field": "MINERU_TOKEN"},
+        created_at="2026-05-28 12:00:00",
+    )
+
+    rendered = paper_audit.format_failed_audit_markdown(failure, tmp_path / "sample.pdf")
+
+    assert "未生成完整审查报告" in rendered
+    assert "**完整审查报告已生成**: 否" in rendered
+    assert "`mineru`" in rendered
+    assert "`missing_required_config`" in rendered
+    assert "在 config.py 中配置 MINERU_TOKEN" in rendered
+    assert "runtime_config_loaded" in rendered
+    assert "python paper_audit.py sample.pdf --json" in rendered
+    assert '"field": "MINERU_TOKEN"' in rendered
+
+
+def test_failed_audit_payload_serializes_stable_shape(tmp_path):
+    failure = paper_audit.AuditFailure(
+        capability="text_llm",
+        error_class="provider_unavailable",
+        message="LLM provider timed out",
+        fix_hints=["检查第三方服务状态后重试"],
+        completed_stages=["mineru_extract_complete"],
+        retry_command="python paper_audit.py paper.pdf --json",
+        created_at="2026-05-28 12:00:00",
+    )
+
+    payload = paper_audit.failed_audit_payload(failure, tmp_path / "paper.pdf", meta={"run_id": "abc"})
+
+    assert payload["report_type"] == "failed"
+    assert payload["complete_report_generated"] is False
+    assert payload["failure"]["capability"] == "text_llm"
+    assert payload["failure"]["error_class"] == "provider_unavailable"
+    assert payload["failure"]["fix_hints"] == ["检查第三方服务状态后重试"]
+    assert payload["failure"]["completed_stages"] == ["mineru_extract_complete"]
+    assert payload["failure"]["retry_command"] == "python paper_audit.py paper.pdf --json"
+    assert payload["meta"] == {"run_id": "abc"}
+    assert json.loads(json.dumps(payload, ensure_ascii=False))["report_type"] == "failed"
+
+
+def test_save_failed_audit_diagnostics_writes_md_and_json(tmp_path):
+    failure = paper_audit.AuditFailure(
+        capability="image_semantic",
+        error_class="provider_auth_failed",
+        message="image semantic provider rejected the request",
+        fix_hints=["检查图像语义分析服务 API Key"],
+        completed_stages=["reference_audit_complete"],
+        retry_command="python paper_audit.py input.pdf --json",
+        created_at="2026-05-28 12:00:00",
+    )
+    input_pdf = tmp_path / "input.pdf"
+    input_pdf.write_bytes(b"%PDF-1.4")
+
+    md_path, json_path = paper_audit.save_failed_audit_diagnostics(failure, input_pdf)
+
+    assert md_path == tmp_path / "input.failed.md"
+    assert json_path == tmp_path / "input.failed.json"
+    assert "未生成完整审查报告" in md_path.read_text(encoding="utf-8")
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["report_type"] == "failed"
+    assert payload["complete_report_generated"] is False
+    assert payload["failure"]["capability"] == "image_semantic"
 
 
 def test_find_project_files_skips_generated_outputs(tmp_path):

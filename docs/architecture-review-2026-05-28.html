@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paper Audit / Veritas Architecture Review</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: "neutral" });</script>
+</head>
+<body class="bg-zinc-100 text-zinc-950">
+  <main class="mx-auto max-w-6xl px-6 py-8">
+    <header class="mb-6 border border-zinc-300 bg-white p-6">
+      <p class="text-xs font-semibold uppercase tracking-normal text-zinc-500">Architecture Review / 2026-05-28</p>
+      <h1 class="mt-2 text-3xl font-bold">Paper Audit / Veritas 项目分析</h1>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-zinc-700">当前项目已经具备目录级论文审查、MinerU/OCR、LLM 分块审查、参考文献核验、图像检测和报告动作面板。主要瓶颈不是功能缺失，而是所有深行为仍集中在一个 5668 行脚本里，外部依赖和证据模型还没有稳定 Module。</p>
+    </header>
+
+    <section class="mb-6 grid gap-4 md:grid-cols-4">
+      <div class="border border-zinc-300 bg-white p-4"><div class="text-2xl font-bold">5668</div><div class="text-sm text-zinc-600">paper_audit.py 行数</div></div>
+      <div class="border border-zinc-300 bg-white p-4"><div class="text-2xl font-bold">1097</div><div class="text-sm text-zinc-600">tests/test_core.py 行数</div></div>
+      <div class="border border-zinc-300 bg-white p-4"><div class="text-2xl font-bold">5</div><div class="text-sm text-zinc-600">审查运行阶段</div></div>
+      <div class="border border-zinc-300 bg-white p-4"><div class="text-2xl font-bold">6</div><div class="text-sm text-zinc-600">推荐改进候选</div></div>
+    </section>
+
+    <section class="mb-6 border border-zinc-300 bg-white p-5">
+      <h2 class="text-xl font-bold">当前结构</h2>
+      <div class="mermaid mt-4">
+flowchart TD
+    CLI[CLI main] --> Config[导入期配置加载]
+    CLI --> Extract[文本提取 / MinerU / 目录扫描]
+    Extract --> Cache[断点缓存]
+    Extract --> Refs[参考文献核验]
+    Extract --> Stat[本地统计]
+    Extract --> Chunk[智能分块]
+    Chunk --> LLM[LLM 审查]
+    LLM --> Merge[合并与降级]
+    CLI --> Images[图片检测]
+    Merge --> Render[报告渲染]
+    Refs --> Render
+    Stat --> Render
+    Images --> Render
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <article class="border-l-4 border-red-700 bg-white p-5 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-xl font-bold">A. 审查运行流程 Module</h2>
+          <span class="rounded bg-red-100 px-2 py-1 text-xs font-bold text-red-800">Strong</span>
+        </div>
+        <p class="mt-2 text-sm text-zinc-700">把 `main()` 中阶段 1-5 的业务流程沉淀为 Audit Run Module。CLI、测试、未来 UI 都通过 RunRequest 调用同一 Interface。</p>
+        <div class="mt-4 grid gap-4 md:grid-cols-2">
+          <div class="border border-zinc-200 p-3">
+            <h3 class="font-semibold">Before</h3>
+            <div class="mermaid">flowchart LR
+Args[argparse args] --> Main[main 570 行阶段流程]
+Main --> Many[全局配置 / HTTP / 缓存 / 报告]</div>
+          </div>
+          <div class="border border-zinc-200 p-3">
+            <h3 class="font-semibold">After</h3>
+            <div class="mermaid">flowchart LR
+CLI[CLI Adapter] --> Run[Audit Run Module]
+Tests[Integration Tests] --> Run
+Run --> Result[RunResult + artifacts]</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="border-l-4 border-red-700 bg-white p-5 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-xl font-bold">B. 外部依赖 Adapter 与 Critical Capability Policy</h2>
+          <span class="rounded bg-red-100 px-2 py-1 text-xs font-bold text-red-800">Strong</span>
+        </div>
+        <p class="mt-2 text-sm text-zinc-700">LLM、MinerU、Crossref/OpenAlex/PubMed、图像语义模型、imagedetector 目前直接依赖全局配置和 requests。应抽出 Adapter，并把关键能力 preflight、内容条件阻断、失败诊断报告变成显式运行策略。</p>
+        <div class="mt-4 grid gap-4 md:grid-cols-2">
+          <div class="border border-zinc-200 p-3">
+            <h3 class="font-semibold">Before</h3>
+            <div class="mermaid">flowchart TD
+Functions[业务函数] --> Globals[全局 API key / URL]
+Functions --> Requests[requests / urllib]
+Functions --> Print[print 日志]</div>
+          </div>
+          <div class="border border-zinc-200 p-3">
+            <h3 class="font-semibold">After</h3>
+            <div class="mermaid">flowchart TD
+Run[Audit Run Module] --> Policy[Critical Capability Policy]
+Run --> LLMAdapter[LLM Adapter]
+Run --> MinerUAdapter[MinerU Adapter]
+Run --> RefAdapter[Reference Adapter]
+Run --> VisionAdapter[Vision Adapter]</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="border-l-4 border-red-700 bg-white p-5 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-xl font-bold">C. 证据与报告数据模型</h2>
+          <span class="rounded bg-red-100 px-2 py-1 text-xs font-bold text-red-800">Strong</span>
+        </div>
+        <p class="mt-2 text-sm text-zinc-700">当前报告、检查项、参考文献和图像结果都用 dict 传递。建议建立 Evidence Model Module，让解析、合并、渲染之间有稳定模型。</p>
+        <div class="mt-4 grid gap-4 md:grid-cols-2">
+          <div class="border border-zinc-200 p-3">
+            <h3 class="font-semibold">Before</h3>
+            <div class="mermaid">flowchart LR
+LLMJson[LLM JSON/dict] --> Merge[合并 dict]
+Merge --> Render[HTML/Markdown 读 dict]
+Ref[参考文献 dict] --> Render
+Img[图像 dict] --> Render</div>
+          </div>
+          <div class="border border-zinc-200 p-3">
+            <h3 class="font-semibold">After</h3>
+            <div class="mermaid">flowchart LR
+Raw[LLM/Ref/Image Raw] --> Normalize[Evidence Model Normalizer]
+Normalize --> Model[AuditReport Model]
+Model --> Renderers[Markdown / HTML / JSON]</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="border-l-4 border-amber-600 bg-white p-5 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-xl font-bold">D-F. 输入、缓存、报告渲染深化</h2>
+          <span class="rounded bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">Worth exploring</span>
+        </div>
+        <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-700">
+          <li>Input Project Module: 主论文、补充材料、数据文件和参考文献文件分类应形成 InputManifest。</li>
+          <li>Run Workspace Module: 断点缓存、阶段事件、JSON 原子写和失败状态应集中。</li>
+          <li>Report Renderer Module: HTML 皮肤、证据排序、动作面板和内容模型应分层。</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="mt-6 border border-zinc-300 bg-white p-5">
+      <h2 class="text-xl font-bold">Top Recommendation</h2>
+      <p class="mt-2 text-sm leading-6 text-zinc-700">先处理外部依赖 Adapter、关键能力 preflight 和失败诊断报告，再抽 Audit Run Module。原因是该工具以公开发表文献为对象，质量主要来自第三方服务的完整覆盖；外部 Adapter 抽出后，端到端运行测试和后续流程 Module 都会更稳。</p>
+    </section>
+  </main>
+</body>
+</html>

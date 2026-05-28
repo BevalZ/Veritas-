@@ -1,0 +1,18 @@
+{
+  "record_version": "evaluation_record_v1",
+  "case_id": "clean-low-risk",
+  "adapter": "synthetic_replay",
+  "model": "fixture",
+  "prompt_version": "text_audit_prompt_v1",
+  "schema_version": "strict_evidence_schema_v1",
+  "risk_rule_version": "risk_rules_v1",
+  "input_hash": "5856c5b1f7801a66afdfdfb0f97a428f2fa78eb58c8135ba43b548ede9e9be52",
+  "recorded_at": "2026-05-28 00:00:00",
+  "response": {
+    "summary": "No evidence conflicts in the synthetic case.",
+    "risk_level": "低",
+    "detection_score": 0,
+    "checks": [],
+    "conclusion": "Replay fixture remains low risk."
+  }
+}
