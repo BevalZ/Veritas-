@@ -1799,7 +1799,8 @@ def find_project_files(root_path: Path) -> Tuple[Dict, List[Path]]:
     
     for root, dirs, files in os.walk(root_path):
         dirs[:] = [d for d in dirs if ".paper_audit_resume" not in d and "__pycache__" not in d]
-        for file in files:
+        dirs.sort()
+        for file in sorted(files):
             fpath = Path(root) / file
             ext = fpath.suffix.lower()
             if ext not in SUPPORTED_EXTS:
