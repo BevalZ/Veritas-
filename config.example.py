@@ -17,7 +17,8 @@ LLM_RETRIES = 2
 MINERU_TOKEN = ""
 MINERU_BASE = "https://mineru.net"
 
-# Optional GLM multimodal API for image semantic understanding.
-GLM_API_KEY = "YOUR_BIGMODEL_API_KEY"
-GLM_API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-GLM_VISION_MODEL = "glm-4.6v-flash"
+# Optional OpenAI-compatible multimodal API for image semantic analysis.
+# Older provider-specific config names are still accepted, but IMAGE_SEMANTIC_* is preferred.
+IMAGE_SEMANTIC_API_KEY = "YOUR_IMAGE_SEMANTIC_API_KEY"
+IMAGE_SEMANTIC_API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+IMAGE_SEMANTIC_MODEL = "your-multimodal-model"

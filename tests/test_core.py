@@ -28,9 +28,9 @@ def test_load_runtime_config_reads_explicit_config_module(monkeypatch):
         LLM_MODEL="model-x",
         MINERU_TOKEN="mineru-token",
         MINERU_BASE="https://mineru.example.test",
-        GLM_API_KEY="vision-key",
-        GLM_API_URL="https://vision.example.test/chat",
-        GLM_VISION_MODEL="vision-x",
+        IMAGE_SEMANTIC_API_KEY="vision-key",
+        IMAGE_SEMANTIC_API_URL="https://vision.example.test/chat",
+        IMAGE_SEMANTIC_MODEL="vision-x",
         LLM_TIMEOUT=12,
         LLM_RETRIES=3,
     )
@@ -55,9 +55,9 @@ def test_report_action_service_mode_loads_runtime_config(monkeypatch):
         LLM_MODEL="model-x",
         MINERU_TOKEN="mineru-token",
         MINERU_BASE="https://mineru.example.test",
-        GLM_API_KEY="vision-key",
-        GLM_API_URL="https://vision.example.test/chat",
-        GLM_VISION_MODEL="vision-x",
+        IMAGE_SEMANTIC_API_KEY="vision-key",
+        IMAGE_SEMANTIC_API_URL="https://vision.example.test/chat",
+        IMAGE_SEMANTIC_MODEL="vision-x",
         LLM_TIMEOUT=12,
         LLM_RETRIES=3,
     )
@@ -1466,6 +1466,7 @@ def test_build_image_audit_flushes_semantic_cache_after_each_success(monkeypatch
     })
     cache = {}
     flushed = []
+    cache_path = tmp_path / "image_semantic_cache.json"
 
     def fake_semantic(path, timeout=45):
         if Path(path).name == "b.png":
@@ -1480,7 +1481,7 @@ def test_build_image_audit_flushes_semantic_cache_after_each_success(monkeypatch
             limit=2,
             semantic=True,
             semantic_cache=cache,
-            semantic_cache_save=lambda: flushed.append(json.loads(json.dumps(cache))),
+            semantic_cache_save=lambda: (flushed.append(json.loads(json.dumps(cache))), paper_audit._json_save(cache_path, cache)),
             detector=False,
         )
     except KeyboardInterrupt:
@@ -1490,6 +1491,8 @@ def test_build_image_audit_flushes_semantic_cache_after_each_success(monkeypatch
 
     assert len(flushed) == 1
     assert any(value.get("summary") == "first image" for value in flushed[0].values())
+    saved_cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert any(value.get("summary") == "first image" for value in saved_cache.values())
 
 
 def test_build_image_audit_uses_detector_cache(monkeypatch, tmp_path):
@@ -1734,7 +1737,7 @@ def test_image_semantic_display_explains_uncovered_local_warning():
         "issues": ["low_resolution", "extreme_aspect_ratio"],
     })
 
-    assert "未进入GLM优先队列" in summary
+    assert "未进入图像语义分析优先队列" in summary
     assert status == "人工优先"
 
 
@@ -1806,7 +1809,7 @@ def test_image_review_manifest_uses_cards_and_semantic_text(tmp_path):
 
     assert 'class="image-card"' in html
     assert "<table" not in html
-    assert "GLM语义理解" in html
+    assert "图像语义分析" in html
     assert "类型: 流程图" in html
     assert "可读文字: Input" in html
     assert "imagedetector自动结果" in html

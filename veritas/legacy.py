@@ -389,9 +389,9 @@ def load_runtime_config(config_module_name: str = "config", env=os.environ, verb
         reference_lookup=CapabilityConfig("reference_lookup", required=False),
         image_semantic=CapabilityConfig(
             "image_semantic",
-            api_key=value("GLM_API_KEY", env.get("GLM_API_KEY", "")),
-            api_url=value("GLM_API_URL", env.get("GLM_API_URL", GLM_API_URL)),
-            model=value("GLM_VISION_MODEL", env.get("GLM_VISION_MODEL", GLM_VISION_MODEL)),
+            api_key=value("IMAGE_SEMANTIC_API_KEY", env.get("IMAGE_SEMANTIC_API_KEY", value("GLM_API_KEY", env.get("GLM_API_KEY", "")))),
+            api_url=value("IMAGE_SEMANTIC_API_URL", env.get("IMAGE_SEMANTIC_API_URL", value("GLM_API_URL", env.get("GLM_API_URL", GLM_API_URL)))),
+            model=value("IMAGE_SEMANTIC_MODEL", env.get("IMAGE_SEMANTIC_MODEL", value("GLM_VISION_MODEL", env.get("GLM_VISION_MODEL", GLM_VISION_MODEL)))),
         ),
         image_detector=CapabilityConfig("image_detector", base_url="https://imagedetector.com/", required=False),
         llm_timeout=llm_timeout,
@@ -5159,7 +5159,7 @@ def build_audit_action_items(report, meta, stat_result, limit=8):
             "score": 230,
             "source": "图像检测",
             "title": f"{len(image_warnings)}张本地异常 / {len(semantic_warnings)}张需语义复核 / {len(detector_warnings)}张AI概率偏高",
-            "detail": "查看 image_ai_review_manifest.html 中的自动imagedetector结果，并核对GLM语义描述是否与论文图注一致。",
+            "detail": "查看 image_ai_review_manifest.html 中的自动imagedetector结果，并核对图像语义分析描述是否与论文图注一致。",
         })
     items.sort(key=lambda item: (-item["score"], item["source"], item["title"]))
     selected = []
@@ -6991,7 +6991,7 @@ def _normalize_glm_image_result(parsed, model):
     reasonability = str(parsed.get("reasonability") or "需人工核对").strip()
     if reasonability not in {"合理", "需人工核对", "可疑"}:
         reasonability = "需人工核对"
-    summary = str(parsed.get("summary") or "GLM未返回明确摘要。").strip()
+    summary = str(parsed.get("summary") or "图像语义分析未返回明确摘要。").strip()
     visible_text = str(parsed.get("visible_text") or "").strip()
     risks = [str(r).strip() for r in risks if str(r).strip()]
     manual_checks = [str(c).strip() for c in manual_checks if str(c).strip()]
@@ -7051,10 +7051,10 @@ def _glm_error_result(exc, model):
             if text:
                 message = _brief_text(text, 220)
     if status_code == 429:
-        summary = "GLM图像语义理解被服务端限流或模型当前繁忙，建议稍后重试。"
+        summary = "图像语义分析被服务端限流或模型当前繁忙，建议稍后重试。"
         risk = "glm_rate_limited"
     else:
-        summary = "GLM暂未完成该图语义理解，建议稍后重试或人工核对图注与原图。"
+        summary = "图像语义分析暂未完成该图语义理解，建议稍后重试或人工核对图注与原图。"
         risk = "glm_temporary_unavailable"
     return {
         "status": "error",
@@ -7062,7 +7062,7 @@ def _glm_error_result(exc, model):
         "summary": summary,
         "reasonability": "需人工核对",
         "risks": [risk],
-        "manual_checks": ["稍后重试GLM语义理解；必要时人工核对图片内容、图注、正文结论是否一致。"],
+        "manual_checks": ["稍后重试图像语义分析；必要时人工核对图片内容、图注、正文结论是否一致。"],
         "confidence": 0,
         "error_reason": reason,
         "error_message": _brief_text(message, 220),
@@ -7157,7 +7157,7 @@ def _glm_timeout_result(model, timeout):
     return {
         "status": "error",
         "model": model,
-        "summary": f"GLM图像语义理解超过{timeout}s未返回，建议检查第三方服务或网络后重试。",
+        "summary": f"图像语义分析超过{timeout}s未返回，建议检查第三方服务或网络后重试。",
         "reasonability": "需人工核对",
         "risks": ["glm_timeout"],
         "manual_checks": ["检查图像语义分析服务配置、网络情况和服务商状态后重试。"],
@@ -7273,7 +7273,7 @@ def _extract_json_object(text):
 
 
 def call_glm_image_semantics(image_path: str, timeout=45, api_key=None, model=None):
-    """Use GLM-4.6V-Flash to understand image semantics and flag visual reasonability risks."""
+    """Use the configured image semantic model to flag visual reasonability risks."""
     api_key = api_key or GLM_API_KEY
     model = model or GLM_VISION_MODEL
 
@@ -7290,7 +7290,7 @@ def _call_glm_image_semantics_unbounded(image_path: str, timeout=45, api_key=Non
         return {
             "status": "skipped",
             "model": model,
-            "summary": "GLM_API_KEY未配置，已跳过图像语义理解。",
+            "summary": "图像语义分析API Key未配置，已跳过图像语义分析。",
             "risks": ["glm_key_missing"],
             "confidence": 0,
         }
@@ -7299,7 +7299,7 @@ def _call_glm_image_semantics_unbounded(image_path: str, timeout=45, api_key=Non
             return {
                 "status": "skipped",
                 "model": model,
-                "summary": "图片超过GLM语义理解的本地压缩前安全上限，已跳过。",
+                "summary": "图片超过图像语义分析的本地压缩前安全上限，已跳过。",
                 "reasonability": "需人工核对",
                 "risks": ["glm_image_too_large"],
                 "manual_checks": ["人工核对该图原图、图注和正文结论是否一致。"],
@@ -7374,9 +7374,8 @@ def _image_semantic_priority_key(item):
     ratio = max_side / max(1, min_side)
     issues = set(item.get("issues") or [])
 
-    # GLM works best on images with enough visible content. Keep tiny/strip-like
-    # figures in the manual manifest, but do not spend scarce semantic calls on
-    # them before richer figures.
+    # 图像语义分析模型对可见内容较多的图片更稳妥。保留过小/条带式图片到人工清单，
+    # 但优先把语义分析调用额度用于信息量更高的图片。
     low_information = (
         min_side < 80
         or area < 30_000
@@ -7451,7 +7450,7 @@ def build_image_audit(
                 _flush_image_cache(semantic_cache_save, "图像语义")
                 semantic_result = None
             if not semantic_result:
-                print(f"  🖼️ GLM图像语义分析 [{idx}/{len(semantic_queue)}] {item.get('file', '')}")
+                print(f"  🖼️ 图像语义分析 [{idx}/{len(semantic_queue)}] {item.get('file', '')}")
                 semantic_result = call_glm_image_semantics(item.get("path", ""), timeout=semantic_timeout)
                 if semantic_result.get("status") != "error":
                     semantic_cache[cache_key] = semantic_result
@@ -7488,7 +7487,7 @@ def build_image_audit(
         "image_count": len(images),
         "checked_count": len(analyses),
         "images": analyses,
-        "note": "本地做尺寸、空白、噪声/对比度筛查；GLM-4.6V-Flash做图像语义理解；imagedetector.com子工具自动上传并记录AI概率。",
+        "note": "本地做尺寸、空白、噪声/对比度筛查；图像语义分析模型做图片语义理解；imagedetector.com子工具自动上传并记录AI概率。",
     }
 
 
@@ -7520,11 +7519,11 @@ def _image_semantic_display(item):
     issues = set(item.get("issues") or [])
     if item.get("risk") == "local_warning" or {"low_resolution", "extreme_aspect_ratio", "near_blank_or_flat"} & issues:
         return (
-            "未进入GLM优先队列；该图信息量低或形态异常，优先按本地异常上传imagedetector并人工核对原图。",
+            "未进入图像语义分析优先队列；该图信息量低或形态异常，优先按本地异常上传imagedetector并人工核对原图。",
             "人工优先",
         )
     return (
-        "未进入本次GLM语义上限；需要时可提高 --image-semantic-limit 后重跑。",
+        "未进入本次图像语义分析上限；需要时可提高 --image-semantic-limit 后重跑。",
         "未覆盖",
     )
 
@@ -7583,7 +7582,7 @@ def format_image_audit_html(image_audit):
     <p class="section-hint">{_html_escape(image_audit.get('note', ''))}</p>
     <p><strong>检测网站</strong>: <a href="{IMAGE_DETECT_URL}" target="_blank" rel="noopener">{IMAGE_DETECT_URL}</a> | <strong>图片</strong>: {image_audit.get('checked_count', 0)} / {image_audit.get('image_count', 0)} | <strong>语义模型</strong>: {_html_escape(image_audit.get('semantic_model', 'N/A'))}（{image_audit.get('semantic_checked', 0)}张） | <strong>imagedetector</strong>: {image_audit.get('detector_checked', 0)}张</p>
     <table class="checks-table image-table">
-      <thead><tr><th>#</th><th>预览</th><th>文件</th><th>尺寸</th><th>本地结论</th><th>本地问题</th><th>GLM语义理解</th><th>imagedetector自动结果 / 路径</th></tr></thead>
+      <thead><tr><th>#</th><th>预览</th><th>文件</th><th>尺寸</th><th>本地结论</th><th>本地问题</th><th>图像语义分析</th><th>imagedetector自动结果 / 路径</th></tr></thead>
       <tbody>{rows}</tbody>
     </table>
   </div>"""
@@ -7604,7 +7603,7 @@ def format_image_audit_markdown(image_audit):
     ]
     images = image_audit.get("images") or []
     if images:
-        lines.append("| # | 文件 | 尺寸 | 本地结论 | GLM语义理解 | imagedetector | 本地问题 |")
+        lines.append("| # | 文件 | 尺寸 | 本地结论 | 图像语义分析 | imagedetector | 本地问题 |")
         lines.append("|---|------|------|----------|-------------|---------------|----------|")
         for idx, item in enumerate(images[:30], 1):
             size = f"{item.get('width') or '?'} x {item.get('height') or '?'}"
@@ -7650,7 +7649,7 @@ def save_image_review_manifest(image_audit, output_dir):
               <span>本地结论: <strong>{_html_escape(item.get('risk', ''))}</strong></span>
               <span>本地问题: <strong>{issues}</strong></span>
             </div>
-            <p class="semantic"><strong>GLM语义理解</strong>: {semantic_summary}<br><span>{semantic_reasonability}</span></p>
+            <p class="semantic"><strong>图像语义分析</strong>: {semantic_summary}<br><span>{semantic_reasonability}</span></p>
             <p class="semantic"><strong>imagedetector自动结果</strong>: {detector_summary}<br><span>{detector_status}</span></p>
             <code>{path}</code>
           </div>
@@ -7812,7 +7811,7 @@ def launch_image_ai_detect(
 ):
     """Run the automatic image audit subtool and save the review manifest."""
     print("\n" + "=" * 60)
-    print("🖼️ AI图片检测子工具 (GLM + imagedetector.com)")
+    print("🖼️ AI图片检测子工具 (图像语义分析 + imagedetector.com)")
     print("=" * 60)
 
     target_output_dir = output_dir or (Path(input_path).parent if Path(input_path).is_file() else Path(input_path))
@@ -7838,7 +7837,7 @@ def launch_image_ai_detect(
         print(f"  🧾 图片AI检测结果清单: {manifest_path}")
     print(
         f"✅ 图片子工具完成: 本地{image_audit.get('checked_count')}/{image_audit.get('image_count')}张；"
-        f"GLM {image_audit.get('semantic_checked')}张；imagedetector {image_audit.get('detector_checked')}张"
+        f"图像语义分析 {image_audit.get('semantic_checked')}张；imagedetector {image_audit.get('detector_checked')}张"
     )
 
     # 清理临时提取目录
@@ -8139,7 +8138,7 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
 
     # ─── AI图片检测兼容参数 ───
     if args.image_detect:
-        print("ℹ️ --image-detect 已改为兼容参数；图片检测将在阶段4自动调用GLM与imagedetector子工具，不会打开网页或要求手动上传。")
+        print("ℹ️ --image-detect 已改为兼容参数；图片检测将在阶段4自动调用图像语义分析与imagedetector子工具，不会打开网页或要求手动上传。")
 
     # ─── 参考文献剥离与单独校检 ───
     audit_text, references_text = split_references_from_text(full_text)
@@ -8445,16 +8444,21 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
 
     # ─── 图像合理性检测：使用MinerU已保存zip中的图片/目录图片生成报告清单 ───
     image_semantic_cache_path = resume_dir / "image_semantic_cache.json"
-    image_semantic_cache = {} if args.no_resume else (_json_load(image_semantic_cache_path, {}) or {})
+    image_semantic_local_cache_path = output_dir / "image_semantic_cache.json"
+    image_semantic_cache = {} if args.no_resume else (
+        _json_load(image_semantic_cache_path, {}) or _json_load(image_semantic_local_cache_path, {}) or {}
+    )
     image_detector_cache_path = resume_dir / "image_detector_cache.json"
     image_detector_cache = {} if args.no_resume else (_json_load(image_detector_cache_path, {}) or {})
     image_semantic_enabled = not args.no_image_semantic and bool(GLM_API_KEY)
     image_detector_enabled = not args.no_image_detector
     if not args.no_image_semantic and not GLM_API_KEY:
-        print("⚠️ GLM_API_KEY未配置，图像语义理解将跳过；本地合理性检测和imagedetector清单仍会生成")
+        print("⚠️ 图像语义分析API Key未配置，图像语义分析将跳过；本地合理性检测和imagedetector清单仍会生成")
     image_semantic_cache_save = None
     if image_semantic_enabled and not args.no_resume:
-        image_semantic_cache_save = lambda: _json_save(image_semantic_cache_path, image_semantic_cache)
+        def image_semantic_cache_save():
+            _json_save(image_semantic_cache_path, image_semantic_cache)
+            _json_save(image_semantic_local_cache_path, image_semantic_cache)
     image_detector_cache_save = None
     if image_detector_enabled and not args.no_resume:
         image_detector_cache_save = lambda: _json_save(image_detector_cache_path, image_detector_cache)
@@ -8475,11 +8479,12 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
     )
     if image_semantic_enabled and not args.no_resume:
         _json_save(image_semantic_cache_path, image_semantic_cache)
+        _json_save(image_semantic_local_cache_path, image_semantic_cache)
         resume_event(
             resume_dir,
             "stage4_image_semantic",
             "saved",
-            f"semantic_checked={image_audit.get('semantic_checked', 0)}; cache_entries={len(image_semantic_cache)}",
+            f"semantic_checked={image_audit.get('semantic_checked', 0)}; cache_entries={len(image_semantic_cache)}; local_cache={image_semantic_local_cache_path}",
             cache=str(image_semantic_cache_path),
         )
     if image_detector_enabled and not args.no_resume:
@@ -8493,7 +8498,7 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
         )
     meta["image_audit"] = image_audit
     if image_audit.get("image_count"):
-        print(f"🖼️ 图像检测完成: 本地{image_audit.get('checked_count')}/{image_audit.get('image_count')}张；GLM {image_audit.get('semantic_checked')}张；imagedetector {image_audit.get('detector_checked')}张")
+        print(f"🖼️ 图像检测完成: 本地{image_audit.get('checked_count')}/{image_audit.get('image_count')}张；图像语义分析 {image_audit.get('semantic_checked')}张；imagedetector {image_audit.get('detector_checked')}张")
         manifest_path = save_image_review_manifest(image_audit, output_dir)
         if manifest_path:
             meta["image_review_manifest"] = str(manifest_path)
@@ -8654,11 +8659,11 @@ def main():
     parser.add_argument("--image-audit-limit", type=int, default=None,
                         help="报告中纳入图像合理性检测的图片数量上限（默认全部；设置后为范围受限审查）")
     parser.add_argument("--no-image-semantic", action="store_true",
-                        help="调试/范围受限：关闭图像语义理解；存在可检测图片时不能作为完整正式审查")
+                        help="调试/范围受限：关闭图像语义分析；存在可检测图片时不能作为完整正式审查")
     parser.add_argument("--image-semantic-limit", type=int, default=None,
-                        help="调用GLM-4.6V-Flash进行图像语义理解的图片数量上限（默认全部；设置后为范围受限审查）")
+                        help="调用图像语义分析的图片数量上限（默认全部；设置后为范围受限审查）")
     parser.add_argument("--image-semantic-timeout", type=int, default=45,
-                        help="单张图片GLM语义理解请求超时时间秒数（默认45）")
+                        help="单张图片图像语义分析请求超时时间秒数（默认45）")
     parser.add_argument("--no-image-detector", action="store_true",
                         help="调试/范围受限：关闭imagedetector.com自动图片AI概率检测；存在可检测图片时不能作为完整正式审查")
     parser.add_argument("--image-detector-limit", type=int, default=None,

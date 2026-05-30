@@ -21,7 +21,7 @@
 - 📁 **目录级综合审查**：传入论文目录，自动识别PDF/Word/Excel/补充材料/原始数据，跨文件交叉验证
 - 📝 **MinerU PDF解析**：公开文献审查默认使用 MinerU 将原生PDF/扫描件/图片PDF转Markdown，保留表格、公式、图片标注
 - 📚 **参考文献在线核验**：DOI优先，联合Crossref/OpenAlex/PubMed检索引用真实性与题名/年份一致性
-- 🖼️ **图像多路审查**：收集MinerU提取图片，执行轻量合理性筛查、多模态LLM图像语义理解，并自动调用 imagedetector.com 子工具记录AI概率
+- 🖼️ **图像多路审查**：收集MinerU提取图片，执行轻量合理性筛查、图像语义分析，并自动调用 imagedetector.com 子工具记录AI概率
 - 📚 **长论文冗余审查**：智能分块（默认4096字符/块+512字符重叠）+ 多块结果合并，并标注LLM覆盖率
 - ⚡ **第三方增强 + 轻量统计**：MinerU/LLM/在线核验/图像检测为正式审查主路径，本地统计检测作为轻量线索
 - 📊 **结构化输出**：Claude风格HTML报告 + Markdown报告 + 原始JSON结果导出 + 图像AI复核清单
@@ -45,9 +45,9 @@ pip install -r requirements.txt
 | python-docx ≥ 0.8.11 | 读取Word文档(.docx) | 📁 目录审查时需要 |
 | openpyxl ≥ 3.1.0 | 读取Excel表格(.xlsx/.xlsm) | 📁 目录审查时需要 |
 | lxml ≥ 4.9.0 | python-docx的XML解析依赖 | 📁 目录审查时需要 |
-| requests ≥ 2.28.0 | LLM/MinerU/文献数据库/GLM请求 | ✅ 必需 |
+| requests ≥ 2.28.0 | LLM/MinerU/文献数据库/图像语义分析请求 | ✅ 必需 |
 | pymupdf ≥ 1.24.0 | PDF内嵌图片提取 | 🖼️ 图像检测需要 |
-| pillow ≥ 10.0.0 | 图片尺寸、空白、噪声和GLM前压缩预处理 | 🖼️ 图像检测需要 |
+| pillow ≥ 10.0.0 | 图片尺寸、空白、噪声和图像语义分析前压缩预处理 | 🖼️ 图像检测需要 |
 
 > 💡 建议直接使用 `pip install -r requirements.txt`，以启用文献在线检索、图像检测和多格式目录审查的完整流程。
 
@@ -78,12 +78,12 @@ LLM_MODEL = "gpt-3.5-turbo"
 ```python
 MINERU_TOKEN = "你的MinerU Token"
 ```
-#### 图像语义理解配置（含 GLM 示例）
-用于对MinerU/PDF提取出的图片做语义理解。当前示例使用 `glm-4.6v-flash`；后续可替换为其他多模态LLM Adapter。密钥只放在本地 `config.py` 或环境变量 `GLM_API_KEY`，不要写入报告或提交仓库。
+#### 图像语义分析配置
+用于对MinerU/PDF提取出的图片做语义理解。可填写任意 OpenAI-compatible 多模态模型；下面只是一个模型示例。密钥只放在本地 `config.py` 或环境变量 `IMAGE_SEMANTIC_API_KEY`，不要写入报告或提交仓库。
 ```python
-GLM_API_KEY = "你的BigModel API Key"
-GLM_API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-GLM_VISION_MODEL = "glm-4.6v-flash"
+IMAGE_SEMANTIC_API_KEY = "你的图像语义分析 API Key"
+IMAGE_SEMANTIC_API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+IMAGE_SEMANTIC_MODEL = "your-multimodal-model"
 ```
 
 ### 3. 运行检测
@@ -116,6 +116,12 @@ python paper_audit.py ./my_paper_project/ --image-semantic-limit 20 --image-dete
 python paper_audit.py --update-patterns pubpeer_comments.txt
 ```
 
+图像语义分析断点续跑：
+- 默认启用断点续跑；不要加 `--no-resume`。
+- 每完成一张图片的图像语义分析，都会立即写入断点缓存，避免中断后重跑已完成图片。
+- 可见缓存文件会写到输出目录：`image_semantic_cache.json`；隐藏断点缓存仍保留在 `.输入名.paper_audit_resume/image_semantic_cache.json`。
+- 如果要强制重跑全部图片语义分析，使用 `--fresh` 清空断点缓存。
+
 ### 4. HTML报告与后续草稿生成
 正常审查完成后会写入正式产物目录：
 - `*.audit.md` / `*.audit.html`：完整审查；加 `--json` 时同时写入 `*.audit.json`
@@ -140,6 +146,17 @@ python paper_audit.py --serve-report-actions
 python paper_audit.py ./my_paper_project/ --report-actions-port 8876
 ```
 - 使用 `--no-open` 时会跳过自动打开HTML，也不会自动启动HTML动作服务，适合CI、远程服务器和批处理。
+
+### 5. Test_paper HTML 演示
+如果你把 `Test_paper/` 当作样例目录，推荐按下面流程验证 HTML 联动：
+1. 重新生成报告：
+```bash
+python paper_audit.py Test_paper -o full_risk_from_scratch --json
+```
+2. 打开生成后的 `Test_paper/full_risk_from_scratch.audit.html`。
+3. 在草稿区先选 `中文` 或 `English`。
+4. 点击 `生成 PubPeer Comment` 或 `生成期刊 Letter`。
+5. 如果旧页面报服务未响应，先重启 `python paper_audit.py --serve-report-actions`，再刷新页面。
 
 ---
 
@@ -187,8 +204,8 @@ options:
   --no-resource-online  调试/范围受限：关闭代码仓库与在线资源可用性校检；识别到资源时不能作为完整正式审查
   --image-audit-limit   报告中纳入图片检测的数量上限，默认30
   --image-semantic-limit
-                        图像语义理解数量上限，默认全部；设置后为范围受限审查
-  --no-image-semantic   调试/范围受限：关闭图像语义理解；存在可检测图片时不能作为完整正式审查
+                        图像语义分析数量上限，默认全部；设置后为范围受限审查
+  --no-image-semantic   调试/范围受限：关闭图像语义分析；存在可检测图片时不能作为完整正式审查
   --image-detector-limit
                         自动调用imagedetector.com检测的图片数量上限，默认全部；设置后为范围受限审查
   --image-detector-timeout

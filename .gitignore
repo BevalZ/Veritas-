@@ -27,6 +27,7 @@ venv/
 *.failed.md
 *.failed.json
 image_ai_review_manifest.html
+image_semantic_cache.json
 *.mineru.zip
 *.mineru_url.txt
 _paper_audit_images/
