@@ -48,6 +48,46 @@ def test_load_runtime_config_reads_explicit_config_module(monkeypatch):
     assert cfg.llm_retries == 3
 
 
+def test_report_action_service_mode_loads_runtime_config(monkeypatch):
+    fake_config = types.SimpleNamespace(
+        LLM_API_KEY="llm-key",
+        LLM_API_URL="https://llm.example.test/v1/chat/completions",
+        LLM_MODEL="model-x",
+        MINERU_TOKEN="mineru-token",
+        MINERU_BASE="https://mineru.example.test",
+        GLM_API_KEY="vision-key",
+        GLM_API_URL="https://vision.example.test/chat",
+        GLM_VISION_MODEL="vision-x",
+        LLM_TIMEOUT=12,
+        LLM_RETRIES=3,
+    )
+    captured = {}
+
+    for name in ("LLM_API_KEY", "LLM_API_URL", "LLM_MODEL", "LLM_TIMEOUT", "LLM_RETRIES"):
+        monkeypatch.setattr(paper_audit, name, getattr(paper_audit, name))
+    monkeypatch.setattr(paper_audit.importlib, "import_module", lambda name: fake_config)
+    monkeypatch.setattr(sys, "argv", ["paper_audit.py", "--serve-report-actions", "--report-actions-port", "9010"])
+
+    def fake_serve_report_actions(port=8765):
+        captured["port"] = port
+        captured["llm_api_key"] = paper_audit.LLM_API_KEY
+        captured["llm_api_url"] = paper_audit.LLM_API_URL
+        captured["llm_model"] = paper_audit.LLM_MODEL
+        captured["llm_timeout"] = paper_audit.LLM_TIMEOUT
+        return 0
+
+    monkeypatch.setattr(paper_audit, "serve_report_actions", fake_serve_report_actions)
+
+    assert paper_audit.main() == 0
+    assert captured == {
+        "port": 9010,
+        "llm_api_key": "llm-key",
+        "llm_api_url": "https://llm.example.test/v1/chat/completions",
+        "llm_model": "model-x",
+        "llm_timeout": 12,
+    }
+
+
 def test_chat_completions_endpoint_accepts_base_or_full_url():
     assert paper_audit._chat_completions_endpoint("https://llm.example.test/v1") == "https://llm.example.test/v1/chat/completions"
     assert paper_audit._chat_completions_endpoint("https://llm.example.test/v1/") == "https://llm.example.test/v1/chat/completions"

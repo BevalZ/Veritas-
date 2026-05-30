@@ -8566,8 +8566,10 @@ def main():
 
     # ─── 知识库更新模式 ───
     if args.update_patterns:
+        apply_runtime_config(load_runtime_config())
         return update_patterns(args.update_patterns)
     if args.serve_report_actions:
+        apply_runtime_config(load_runtime_config())
         return serve_report_actions(port=args.report_actions_port)
 
     # ─── 正常审查模式 ───
