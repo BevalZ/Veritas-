@@ -5193,8 +5193,8 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
     service_url = report_action_service_url(host, port)
     generate_url = f"{service_url}/generate"
     context = _report_action_context(report, pdf_path, meta, stat_result or {})
-    context_json = json.dumps(context, ensure_ascii=False).replace("</", "<\\/")
-    generate_url_json = json.dumps(generate_url, ensure_ascii=False)
+    context_json = _json_for_script_tag(context)
+    generate_url_json = _json_for_script_tag(generate_url)
     return f"""
   <div class="section web-action-section">
     <h2>一键生成后续沟通草稿</h2>
@@ -5207,7 +5207,7 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
     <div id="web-action-status" class="web-action-status">动作服务: <code>{_html_escape(service_url)}</code></div>
     <textarea id="generated-draft" class="generated-draft" spellcheck="false" placeholder="生成的草稿会显示在这里，可直接编辑。"></textarea>
   </div>
-  <script id="paper-audit-action-context" type="application/json">{_html_escape(context_json)}</script>
+  <script id="paper-audit-action-context" type="application/json">{context_json}</script>
   <script>
   (function() {{
     const statusEl = document.getElementById('web-action-status');
@@ -6423,6 +6423,18 @@ def _html_escape(text):
         .replace(">", "&gt;")
         .replace('"', "&quot;")
         .replace("\n", "<br>"))
+
+
+def _json_for_script_tag(value):
+    """JSON that remains parseable inside a <script type="application/json"> block."""
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
 
 def update_patterns(comments_file):
     """从PubPeer评论文本中用LLM提取新的欺诈模式，更新知识库

@@ -2618,6 +2618,31 @@ def test_web_action_panel_uses_report_action_port():
     assert "127.0.0.1:8765" not in rendered
 
 
+def test_web_action_context_script_contains_parseable_json():
+    rendered = paper_audit.format_web_action_panel_html(
+        {
+            "summary": "quoted \" summary",
+            "risk_level": "中",
+            "detection_score": 50,
+            "checks": [],
+            "conclusion": "safe </script><script>alert(1)</script>",
+        },
+        "paper.pdf",
+        {"report_actions": {"host": "127.0.0.1", "port": 9123}},
+        {"number_count": 0},
+    )
+    marker = '<script id="paper-audit-action-context" type="application/json">'
+    context_text = rendered.split(marker, 1)[1].split("</script>", 1)[0]
+
+    context = json.loads(context_text)
+
+    assert context["paper"] == "paper.pdf"
+    assert context["summary"] == 'quoted " summary'
+    assert context["conclusion"] == "safe </script><script>alert(1)</script>"
+    assert "&quot;" not in context_text
+    assert "</script>" not in context_text.lower()
+
+
 def test_ensure_report_action_service_reuses_existing(monkeypatch, tmp_path):
     popen_calls = []
     monkeypatch.setattr(
