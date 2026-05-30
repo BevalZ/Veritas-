@@ -20,8 +20,22 @@ venv/
 *.audit.html
 *.audit.md
 *.audit.json
+*.limited.html
+*.limited.md
+*.limited.json
+*.failed.html
+*.failed.md
+*.failed.json
+image_ai_review_manifest.html
+*.mineru.zip
+*.mineru_url.txt
+_paper_audit_images/
+.paper_audit_runs/
 .*.paper_audit_resume/
 paper_audit_path_test*/
+
+# Local paper cases / user-provided documents
+Test_paper/
 
 # OS / editor
 .DS_Store

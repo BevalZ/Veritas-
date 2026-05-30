@@ -25,6 +25,7 @@
 - 📚 **长论文冗余审查**：智能分块（默认4096字符/块+512字符重叠）+ 多块结果合并，并标注LLM覆盖率
 - ⚡ **第三方增强 + 轻量统计**：MinerU/LLM/在线核验/图像检测为正式审查主路径，本地统计检测作为轻量线索
 - 📊 **结构化输出**：Claude风格HTML报告 + Markdown报告 + 原始JSON结果导出 + 图像AI复核清单
+- 🌐 **HTML联动操作**：报告生成后默认自动打开HTML，并自动启动本机动作服务；可在报告中一键生成 PubPeer Comment 或期刊 Letter 草稿
 - 🧠 **社区驱动知识库**：内置12+种从PubPeer典型案例汇总的造假检测模式，支持社区贡献自动更新
 
 ---
@@ -96,6 +97,15 @@ python paper_audit.py your_paper.pdf
 # 自定义输出
 python paper_audit.py your_paper.pdf -o report.md --json
 
+# 断点续跑：默认启用。失败后直接重跑同一命令，会复用文本提取、参考文献、LLM分块和图片检测缓存
+python paper_audit.py ./my_paper_project/ -o full_risk_from_scratch --json
+
+# 从头重跑：清空该输入的断点缓存后重新执行
+python paper_audit.py ./my_paper_project/ -o full_risk_from_scratch --json --fresh
+
+# CI/服务器/批处理：生成报告但不打开浏览器，也不自动启动HTML动作服务
+python paper_audit.py ./my_paper_project/ -o full_risk_from_scratch --json --no-open
+
 # 调试/范围受限：控制在线文献核验数量（产物不应视为完整审查）
 python paper_audit.py ./my_paper_project/ --reference-online-limit 80
 
@@ -105,6 +115,31 @@ python paper_audit.py ./my_paper_project/ --image-semantic-limit 20 --image-dete
 # 更新欺诈模式知识库（从PubPeer评论/造假案例文本中提取新检测模式）
 python paper_audit.py --update-patterns pubpeer_comments.txt
 ```
+
+### 4. HTML报告与后续草稿生成
+正常审查完成后会写入正式产物目录：
+- `*.audit.md` / `*.audit.html`：完整审查；加 `--json` 时同时写入 `*.audit.json`
+- `*.limited.md` / `*.limited.html`：范围受限审查；加 `--json` 时同时写入 `*.limited.json`
+- `*.failed.md` / `*.failed.html` / `*.failed.json`：失败诊断始终写入三类产物，便于定位失败能力和断点续跑命令
+
+默认行为：
+- 审查成功生成HTML后，会自动打开浏览器查看报告。
+- 打开HTML前，程序会自动启动或复用本机动作服务：`http://127.0.0.1:8765`。
+- HTML里的“生成 PubPeer Comment”和“生成期刊 Letter”按钮会直接调用该本机服务生成草稿，不需要再手动运行额外脚本。
+- 动作服务只监听 `127.0.0.1`，用于本机浏览器和本机Python进程通信；草稿仍由你在 `config.py` 中配置的LLM生成，使用前必须人工核对证据和措辞。
+
+旧HTML报告的边界：
+- 如果审查脚本正常运行结束，后台动作服务通常会继续存在；之后单独打开同一份HTML，按钮仍可直接生成草稿。
+- 如果电脑重启、动作服务被手动结束、端口被占用，或服务异常退出，浏览器里的静态HTML不能自行启动本地Python脚本；此时按钮会提示服务未响应。
+- 兜底方式是重新启动动作服务：
+```bash
+python paper_audit.py --serve-report-actions
+```
+- 如果 `8765` 端口被占用，可以在生成报告时指定端口，HTML会记录该端口：
+```bash
+python paper_audit.py ./my_paper_project/ --report-actions-port 8876
+```
+- 使用 `--no-open` 时会跳过自动打开HTML，也不会自动启动HTML动作服务，适合CI、远程服务器和批处理。
 
 ---
 
@@ -122,6 +157,8 @@ usage: paper_audit.py [-h] [--mineru]
                       [--mineru-model {pipeline,vlm,MinerU-HTML}]
                       [--mineru-lang MINERU_LANG] [--no-mineru]
                       [--max-chars MAX_CHARS] [--output OUTPUT] [--json]
+                      [--serve-report-actions]
+                      [--report-actions-port REPORT_ACTIONS_PORT]
                       pdf_path
 
 positional arguments:
@@ -129,6 +166,10 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
+  --serve-report-actions
+                        启动本机HTML报告动作服务：一键生成PubPeer comment和期刊letter
+  --report-actions-port
+                        HTML报告动作服务端口（默认8765，仅监听127.0.0.1）
   --mineru              使用MinerU API将PDF转为Markdown再审查（PDF默认启用）
   --mineru-model        MinerU模型版本（默认vlm，仅Precision API生效）
   --mineru-lang         MinerU OCR语言（默认ch=中英，en=英文，japan=日文）
@@ -136,16 +177,20 @@ options:
   --max-chars           单块最大字符数（默认4096，超过4096会自动压到4096）
   --output, -o          输出报告文件路径（默认输出到同目录）
   --json                同时保存原始JSON结果
+  --no-resume           禁用断点续作缓存，强制重新提取文本和重新LLM审查
+  --fresh               运行前清空本输入的断点续作缓存，然后重新开始；默认不清空缓存并自动续跑
+  --no-open             生成报告后不自动打开HTML报告，适合CI、服务器和批处理环境
   --reference-online-limit
-                        参考文献在线检索条数上限，默认50
+                        参考文献在线检索条数上限，默认全部；设置后为范围受限审查
   --no-reference-online
                         调试/范围受限：关闭参考文献在线检索；识别到参考文献时不能作为完整正式审查
+  --no-resource-online  调试/范围受限：关闭代码仓库与在线资源可用性校检；识别到资源时不能作为完整正式审查
   --image-audit-limit   报告中纳入图片检测的数量上限，默认30
   --image-semantic-limit
-                        GLM-4.6V-Flash图像语义理解数量上限，默认12
+                        图像语义理解数量上限，默认全部；设置后为范围受限审查
   --no-image-semantic   调试/范围受限：关闭图像语义理解；存在可检测图片时不能作为完整正式审查
   --image-detector-limit
-                        自动调用imagedetector.com检测的图片数量上限，默认12
+                        自动调用imagedetector.com检测的图片数量上限，默认全部；设置后为范围受限审查
   --image-detector-timeout
                         单张图片imagedetector自动检测超时时间秒数，默认60
   --no-image-detector   调试/范围受限：关闭imagedetector.com自动图片AI概率检测；存在可检测图片时不能作为完整正式审查
@@ -172,8 +217,8 @@ options:
 | 标准差提及 | 4处 | N/A |
 | 提取数字数 | 234 | - |
 
-## 总评: 存在多处统计异常，判定为中风险
-**风险等级**: 🟡 中
+## 总评: 存在多处统计异常，复核优先级为中
+**复核优先级**: 🟡 中
 **证据风险分**: 72 / 100 (辅助排序指标，越高表示越需要优先复核)
 
 ## 🔍 逐项检查
@@ -183,6 +228,11 @@ options:
 | 2 | 图片与图表 | Figure 2与Figure 3背景高度相似 | ⚠️疑点 |
 | 3 | 方法论 | 样本量n=12不足以支撑统计结论 | 🚩红旗 |
 ```
+
+失败诊断也会写入正式产物目录，包含：
+- `*.failed.md`
+- `*.failed.html`
+- `*.failed.json`
 
 ---
 
@@ -206,7 +256,9 @@ graph TD
     L --> M["智能分块: 默认4096字符/块, 512重叠"]
     M --> N["逐块LLM语义审查"]
     N --> O["多块结果合并: 去重+风险升级"]
-    O --> P["输出Markdown报告 + JSON结果"]
+    O --> P["输出Markdown + HTML + 可选JSON正式产物"]
+    P --> Q["自动打开HTML报告"]
+    Q --> R["本机动作服务生成PubPeer Comment/期刊Letter草稿"]
 ```
 
 ---
@@ -219,10 +271,17 @@ graph TD
 
 感谢 [LINUX DO 社区](https://linux.do/) 提供的技术交流与支持。
 
+感谢 https://linux.do/t/topic/2177102 该吃细糠了！！这才是我们需要的回复样式！！(提示词4.0) @Eeevan
+
+感谢 linux.do 几位佬提供 token：@Member @picpi @Rawchat
+
 ---
 
 ## ⚠️ 免责声明
 本工具仅供学术研究使用，所有检测结果仅为参考，不构成任何学术不端的判定依据。请严格遵守相关法律法规和学术规范，禁止将本工具用于任何非法用途。
+
+## 无利益冲突声明
+本项目作者与维护者声明：本工具及其检测规则、示例报告和文档说明不代表任何期刊、出版机构、审稿平台、商业检测服务或第三方模型服务商的立场；除用户自行配置和承担的第三方服务调用成本外，项目本身不因特定论文、期刊、机构或服务商的检测结果获得利益。
 
 ---
 

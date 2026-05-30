@@ -2,6 +2,7 @@ import json
 import types
 import subprocess
 import sys
+import time
 from pathlib import Path
 import zipfile
 
@@ -45,6 +46,12 @@ def test_load_runtime_config_reads_explicit_config_module(monkeypatch):
     assert cfg.image_semantic.api_key == "vision-key"
     assert cfg.llm_timeout == 12
     assert cfg.llm_retries == 3
+
+
+def test_chat_completions_endpoint_accepts_base_or_full_url():
+    assert paper_audit._chat_completions_endpoint("https://llm.example.test/v1") == "https://llm.example.test/v1/chat/completions"
+    assert paper_audit._chat_completions_endpoint("https://llm.example.test/v1/") == "https://llm.example.test/v1/chat/completions"
+    assert paper_audit._chat_completions_endpoint("https://llm.example.test/v1/chat/completions") == "https://llm.example.test/v1/chat/completions"
 
 
 def test_run_preflight_once_reuses_result_within_run_only():
@@ -240,7 +247,7 @@ def test_fake_adapter_e2e_llm_failure_writes_failed_diagnostics(tmp_path):
     assert payload["failure"]["error_class"] == "provider_unavailable"
 
 
-def test_fake_adapter_e2e_llm_schema_error_writes_failed_diagnostics(tmp_path):
+def test_fake_adapter_e2e_llm_schema_gap_recovers_to_complete(tmp_path):
     result = paper_audit.run_adapter_e2e_audit(
         tmp_path,
         _complete_fake_adapters(text_llm=paper_audit.FakeTextLLMAdapter("success", value=json.dumps({
@@ -251,10 +258,10 @@ def test_fake_adapter_e2e_llm_schema_error_writes_failed_diagnostics(tmp_path):
         }, ensure_ascii=False))),
     )
 
-    assert result["outcome"] == "failed"
-    assert result["capability"] == "text_llm"
+    assert result["outcome"] == "complete"
     payload = json.loads(result["json_path"].read_text(encoding="utf-8"))
-    assert payload["failure"]["error_class"] == "schema_error"
+    assert payload["llm_report"]["_schema_recovered"] is True
+    assert payload["llm_report"]["checks"][0]["confidence"] == 0.2
 
 
 def test_fake_adapter_e2e_reference_lookup_failure_when_references_exist(tmp_path):
@@ -302,6 +309,8 @@ def test_run_request_maps_argparse_values():
         no_reference_online=True,
         reference_online_limit=12,
         reference_timeout=3,
+        no_resource_online=True,
+        resource_timeout=9,
         no_image_semantic=True,
         image_semantic_limit=4,
         image_semantic_timeout=5,
@@ -309,6 +318,7 @@ def test_run_request_maps_argparse_values():
         image_detector_limit=6,
         image_detector_timeout=7,
         no_resume=True,
+        fresh=True,
         llm_timeout=11,
         llm_retries=2,
         strict_failed_chunks=True,
@@ -326,6 +336,9 @@ def test_run_request_maps_argparse_values():
     assert request.mineru_lang == "en"
     assert request.max_chars == 2048
     assert request.no_reference_online is True
+    assert request.no_resource_online is True
+    assert request.resource_timeout == 9
+    assert request.fresh is True
     assert request.llm_timeout == 11
     assert request.strict_failed_chunks is True
 
@@ -534,6 +547,37 @@ def test_mineru_structured_text_prefers_content_list_v2(tmp_path):
     assert "fallback markdown" not in text
 
 
+def test_mineru_structured_text_handles_nested_v2_html_tables(tmp_path):
+    zip_path = tmp_path / "mineru.zip"
+    content = [[
+        {
+            "type": "title",
+            "content": {"title_content": [{"type": "text", "content": "Code availability"}]},
+            "page_idx": 0,
+        },
+        {
+            "type": "table",
+            "content": {
+                "table_caption": [{"type": "text", "content": "Table 1 Model performance"}],
+                "html": "<table><tr><td>Model</td><td>AUC</td></tr><tr><td>DNN</td><td>0.987</td></tr></table>",
+            },
+            "page_idx": 1,
+        },
+    ]]
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("paper_content_list_v2.json", json.dumps(content))
+
+    with zipfile.ZipFile(zip_path) as zf:
+        text = paper_audit._extract_mineru_structured_text(zf)
+
+    assert "[[BLOCK type=title page=0]]" in text
+    assert "Code availability" in text
+    assert "[[TABLE_START page=1 id=1]]" in text
+    assert "Table 1 Model performance" in text
+    assert "| Model | AUC |" in text
+    assert "<td>" not in text
+
+
 def test_split_references_from_text_removes_reference_tail():
     text = "Abstract\nBody with n=20.\n\nReferences\n1. Smith J. Journal X. 2020. doi:10.1000/abc\n2. Missing source"
 
@@ -542,6 +586,27 @@ def test_split_references_from_text_removes_reference_tail():
     assert "Body with n=20" in main_text
     assert "Smith J" not in main_text
     assert "Smith J" in refs
+
+
+def test_split_references_from_text_handles_mineru_singular_reference_heading():
+    text = """Body text.
+
+[[BLOCK type=text page=26]]
+Reference
+[[/BLOCK]]
+
+[[BLOCK type=reference_list page=27]]
+1. Smith J. Journal X. 2020. doi:10.1000/abc
+[[/BLOCK]]
+"""
+
+    main_text, refs = paper_audit.split_references_from_text(text)
+
+    assert "Body text" in main_text
+    assert "Smith J" not in main_text
+    assert "Smith J" in refs
+    parsed = paper_audit.parse_references(refs)
+    assert parsed[0]["doi"] == "10.1000/abc"
 
 
 def test_audit_references_reports_basic_verifiability_issues():
@@ -585,6 +650,42 @@ def test_parse_references_skips_html_table_noise():
 
     assert len(parsed) == 1
     assert parsed[0]["doi"] == "10.1000/xyz123"
+
+
+def test_parse_references_merges_mineru_page_continuations_and_truncates_figure_legends():
+    refs = """[[BLOCK type=title page=?]]
+Reference
+[[/BLOCK]]
+
+[[BLOCK type=reference_list page=?]]
+1. 1. Alpha A. First complete reference. Journal X 1, 1-2 (2020).
+2. 2. Beta B. Second reference title. Journal Y 2, 3-4 (2021).
+3. 3. Gamma C. A split title starts before page break
+[[/BLOCK]]
+
+[[BLOCK type=page_header page=?]]
+ARTICLE IN PRESS
+[[/BLOCK]]
+
+[[BLOCK type=reference_list page=?]]
+1. and continues after the break. Journal Z 3, 5-6 (2022).
+2. 4. Delta D. Fourth reference title. Journal Q 4, 7-8 (2023).
+[[/BLOCK]]
+
+[[BLOCK type=title page=?]]
+Figure legends
+[[/BLOCK]]
+
+[[BLOCK type=paragraph page=?]]
+Figure 1 Workflow of the study.
+[[/BLOCK]]
+"""
+
+    parsed = paper_audit.parse_references(refs)
+
+    assert len(parsed) == 4
+    assert "continues after the break" in parsed[2]["text"]
+    assert "Figure 1" not in parsed[-1]["text"]
 
 
 def test_reference_html_renders_table_noise_without_escaped_td():
@@ -665,12 +766,178 @@ def test_verify_reference_online_uses_doi_exact_match(monkeypatch):
     assert result["matched_sources"][0]["source"] == "Crossref"
 
 
+def test_extract_reference_title_keeps_real_title_with_year(tmp_path):
+    ref1 = "Sung,H. et al. Global Cancer Statistics 2020: GLOBOCAN Estimates of Incidence and Mortality Worldwide for 36 Cancers in 185 Countries. CA Cancer JClin 71, 209-249 (2021)."
+    ref2 = "Haugen, B. R. et al. 2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer: The American Thyroid Association Guidelines Task Force on Thyroid Nodules and Differentiated Thyroid Cancer. Thyroid 26, (2016)."
+    ref3 = "Liu, Z. et al. Machine learning-based integration develops an immune-derived lncRNA signature for improving outcomes in colorectal cancer. Nat Commun 13,(2022)."
+    ref4 = "Chen, D. W., Lang, B. H. H., McLeod, D. S.A., Newbold, K.& Haymart, M. R. Thyroid cancer. The Lancet 401,1531-1544 (2023)."
+    ref5 = "Davies, L.& Welch, H. G. Increasing Incidence of Thyroid Cancer in the United States, 1973-2002. JAMA 295,2164 (2006)."
+
+    assert paper_audit.extract_reference_title(ref1).startswith("Global Cancer Statistics 2020")
+    assert paper_audit.extract_reference_title(ref2).startswith("2015 American Thyroid Association Management Guidelines")
+    assert paper_audit.extract_reference_title(ref3).startswith("Machine learning-based integration")
+    assert paper_audit.extract_reference_title(ref4) == "Thyroid cancer"
+    assert paper_audit.extract_reference_title(ref5).startswith("Increasing Incidence of Thyroid Cancer")
+    assert paper_audit.extract_reference_year_hint(ref1) == "2021"
+    assert paper_audit.extract_reference_year_hint(ref2) == "2016"
+
+
+def test_verify_reference_online_can_verify_without_doi(monkeypatch):
+    ref = {
+        "text": "Haugen, B. R. et al. 2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer: The American Thyroid Association Guidelines Task Force on Thyroid Nodules and Differentiated Thyroid Cancer. Thyroid 26, (2016).",
+        "year": "2015",
+        "title_hint": "2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer",
+        "author_hint": "Haugen",
+        "container_hint": "Thyroid",
+    }
+
+    def fake_crossref(_ref, timeout=10):
+        return [{
+            "source": "Crossref",
+            "title": "2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer",
+            "year": "2015",
+            "doi": "10.1089/thy.2015.0020",
+            "authors": ["Haugen", "Brent", "Sherman"],
+            "container": "Thyroid",
+            "url": "https://doi.org/10.1089/thy.2015.0020",
+        }]
+
+    monkeypatch.setattr(paper_audit, "lookup_crossref_reference", fake_crossref)
+    monkeypatch.setattr(paper_audit, "lookup_openalex_reference", lambda _ref, timeout=10: [])
+    monkeypatch.setattr(paper_audit, "lookup_pubmed_reference", lambda _ref, timeout=10: [])
+
+    result = paper_audit.verify_reference_online(ref)
+
+    assert result["online_status"] == "verified"
+    assert result["confidence"] >= 0.9
+    assert result["matched_sources"][0]["source"] == "Crossref"
+
+
+def test_lookup_openalex_reference_prefers_exact_title_search(monkeypatch):
+    ref = {
+        "text": "Haugen, B. R. et al. 2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer: The American Thyroid Association Guidelines Task Force on Thyroid Nodules and Differentiated Thyroid Cancer. Thyroid 26, (2016).",
+        "title_hint": "2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer: The American Thyroid Association Guidelines Task Force on Thyroid Nodules and Differentiated Thyroid Cancer",
+        "author_hint": "Haugen",
+        "container_hint": "Thyroid",
+        "year": "2016",
+    }
+
+    def fake_get_json(url, timeout=10, headers=None):
+        if "filter=title.search" in url:
+            return {
+                "results": [{
+                    "display_name": ref["title_hint"],
+                    "publication_year": 2015,
+                    "doi": "https://doi.org/10.1089/thy.2015.0020",
+                    "authorships": [{"author": {"display_name": "Haugen"}}],
+                    "primary_location": {"source": {"display_name": "Thyroid"}},
+                }]
+            }
+        return {"results": []}
+
+    monkeypatch.setattr(paper_audit, "_reference_get_json", fake_get_json)
+
+    matches = paper_audit.lookup_openalex_reference(ref)
+
+    assert matches
+    assert matches[0]["title"] == ref["title_hint"]
+
+
+def test_lookup_official_site_reference_searches_publisher_site(monkeypatch):
+    ref = {
+        "text": "Haugen, B. R. et al. 2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer. Thyroid 26, (2016).",
+        "title_hint": "2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer",
+        "author_hint": "Haugen",
+        "container_hint": "Thyroid",
+        "year": "2016",
+    }
+    seen_urls = []
+
+    def fake_http(url, method="GET", headers=None, data=None, timeout=60):
+        seen_urls.append(url)
+        html = """
+        <html><title>Thyroid search</title><body>
+        2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules
+        and Differentiated Thyroid Cancer. Published in 2016.
+        </body></html>
+        """
+        return html.encode("utf-8"), 200
+
+    monkeypatch.setattr(paper_audit, "_http_request", fake_http)
+
+    matches = paper_audit.lookup_official_site_reference(ref)
+
+    assert matches
+    assert matches[0]["source"] == "Official site: Mary Ann Liebert"
+    assert "liebertpub.com" in seen_urls[0]
+
+
+def test_lookup_official_site_reference_retries_title_tail_for_ocr_damage(monkeypatch):
+    ref = {
+        "text": "Metallprotease-disintegrin ADAM12 actively promotes the stem cell-like phenotype in claudin-low breast cancer. Mol Cancer 16, (2017).",
+        "title_hint": "Metallprotease-disintegrin ADAM12 actively promotes the stem cell-like phenotype in claudin-low breast cancer",
+        "container_hint": "Mol Cancer",
+        "year": "2017",
+    }
+    seen_urls = []
+
+    def fake_http(url, method="GET", headers=None, data=None, timeout=60):
+        seen_urls.append(url)
+        if "Metallprotease" in url:
+            return b"<html><body>No results</body></html>", 200
+        html = """
+        <html><body>
+        Metalloprotease-disintegrin ADAM12 actively promotes the stem cell-like phenotype
+        in claudin-low breast cancer. Molecular Cancer, 2017.
+        </body></html>
+        """
+        return html.encode("utf-8"), 200
+
+    monkeypatch.setattr(paper_audit, "_http_request", fake_http)
+
+    matches = paper_audit.lookup_official_site_reference(ref)
+
+    assert matches
+    assert matches[0]["source"] == "Official site: BMC Molecular Cancer"
+    assert len(seen_urls) >= 2
+
+
+def test_verify_reference_online_uses_official_site_fallback(monkeypatch):
+    ref = {
+        "text": "Sung,H. et al. Global Cancer Statistics 2020: GLOBOCAN Estimates of Incidence and Mortality Worldwide for 36 Cancers in 185 Countries. CA Cancer JClin 71, 209-249 (2021).",
+        "title_hint": "Global Cancer Statistics 2020: GLOBOCAN Estimates of Incidence and Mortality Worldwide for 36 Cancers in 185 Countries",
+        "author_hint": "Sung",
+        "container_hint": "CA Cancer JClin",
+        "year": "2021",
+    }
+
+    monkeypatch.setattr(paper_audit, "lookup_crossref_reference", lambda _ref, timeout=10: [])
+    monkeypatch.setattr(paper_audit, "lookup_openalex_reference", lambda _ref, timeout=10: [])
+    monkeypatch.setattr(paper_audit, "lookup_pubmed_reference", lambda _ref, timeout=10: [])
+    monkeypatch.setattr(paper_audit, "lookup_official_site_reference", lambda _ref, timeout=10: [{
+        "source": "Official site: Wiley Online Library",
+        "title": ref["title_hint"],
+        "year": "2021",
+        "doi": "",
+        "authors": ["Sung"],
+        "container": "CA Cancer JClin",
+        "url": "https://onlinelibrary.wiley.com/action/doSearch?AllField=Global",
+        "official_site": True,
+    }])
+
+    result = paper_audit.verify_reference_online(ref)
+
+    assert result["online_status"] == "verified"
+    assert result["matched_sources"][0]["source"] == "Official site: Wiley Online Library"
+
+
 def test_verify_reference_online_reports_not_found_without_network_error(monkeypatch):
     ref = {"text": "Invented title. Imaginary Journal. 2021. doi:10.9999/notfound", "doi": "10.9999/notfound", "year": "2021"}
 
     monkeypatch.setattr(paper_audit, "lookup_crossref_reference", lambda _ref, timeout=10: [])
     monkeypatch.setattr(paper_audit, "lookup_openalex_reference", lambda _ref, timeout=10: [])
     monkeypatch.setattr(paper_audit, "lookup_pubmed_reference", lambda _ref, timeout=10: [])
+    monkeypatch.setattr(paper_audit, "lookup_official_site_reference", lambda _ref, timeout=10: [])
 
     result = paper_audit.verify_reference_online(ref)
 
@@ -733,6 +1000,25 @@ def test_audit_references_checks_all_references_by_default(monkeypatch):
     assert calls["count"] == 2
 
 
+def test_audit_references_all_verified_overrides_format_only_weak_status(monkeypatch):
+    refs = """References
+1. Smith J. Reliable cancer marker discovery. Nature Medicine. 2020.
+2. Jones A. Another reliable paper. Science. 2021.
+"""
+
+    monkeypatch.setattr(
+        paper_audit,
+        "verify_reference_online",
+        lambda ref, timeout=10: {"online_status": "verified", "confidence": 1.0, "matched_sources": [], "problems": [], "query": {}},
+    )
+
+    audit = paper_audit.audit_references(refs, online=True, online_limit=None)
+
+    assert audit["reference_count"] == 2
+    assert audit["online_checked"] == 2
+    assert audit["status"] == "ok"
+
+
 def test_extract_images_from_mineru_zip(tmp_path):
     zip_path = tmp_path / "paper.abc.mineru.zip"
     image_bytes = b"\x89PNG\r\n\x1a\n" + b"x" * (paper_audit.MIN_IMAGE_BYTES + 10)
@@ -755,6 +1041,24 @@ def test_collect_mineru_image_files_reuses_extracted_image_cache_without_zip(tmp
     images = paper_audit.collect_mineru_image_files(str(tmp_path), output_dir=tmp_path)
 
     assert images == [str(image_path.resolve())] or images == [str(image_path)]
+
+
+def test_collect_mineru_image_files_ignores_stale_cache_when_zip_exists(tmp_path):
+    cache_dir = tmp_path / "_paper_audit_images"
+    cache_dir.mkdir()
+    stale_image = cache_dir / "paper.old.mineru_stale.png"
+    stale_image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * (paper_audit.MIN_IMAGE_BYTES + 10))
+
+    zip_path = tmp_path / "paper.new.mineru.zip"
+    fresh_bytes = b"\x89PNG\r\n\x1a\n" + b"y" * (paper_audit.MIN_IMAGE_BYTES + 10)
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("images/fresh.png", fresh_bytes)
+
+    images = paper_audit.collect_mineru_image_files(str(tmp_path), output_dir=tmp_path)
+
+    assert len(images) == 1
+    assert Path(images[0]).name == "paper.new.mineru_fresh.png"
+    assert Path(images[0]).read_bytes() == fresh_bytes
 
 
 def test_latest_mineru_zips_keeps_newest_per_source(tmp_path):
@@ -780,6 +1084,70 @@ def test_no_resume_still_allows_llm_cache_only_read():
     assert paper_audit._allow_llm_cache_read(no_resume=True, llm_cache_only=True)
     assert not paper_audit._allow_llm_cache_read(no_resume=True, llm_cache_only=False)
     assert paper_audit._allow_llm_cache_read(no_resume=False, llm_cache_only=False)
+
+
+def test_retry_command_from_args_preserves_resume_scope():
+    args = types.SimpleNamespace(
+        output="reports/final.md",
+        json=True,
+        no_open=True,
+        mineru=False,
+        no_mineru=False,
+        mineru_model="vlm",
+        mineru_lang="ch",
+        max_chars=4096,
+        reference_online_limit=None,
+        reference_timeout=20,
+        no_reference_online=False,
+        no_resource_online=True,
+        resource_timeout=15,
+        image_audit_limit=None,
+        no_image_semantic=False,
+        image_semantic_limit=30,
+        image_semantic_timeout=120,
+        no_image_detector=False,
+        image_detector_limit=None,
+        image_detector_timeout=90,
+        llm_timeout=180,
+        llm_retries=2,
+        strict_failed_chunks=False,
+        ai_detect=False,
+        image_detect=False,
+        no_resume=True,
+        fresh=True,
+    )
+
+    command = paper_audit.retry_command_from_args(args, Path("Test_paper"))
+
+    assert command.startswith("python paper_audit.py Test_paper")
+    assert "--output reports/final.md" in command
+    assert "--json" in command
+    assert "--no-open" in command
+    assert "--no-resource-online" in command
+    assert "--image-semantic-timeout 120" in command
+    assert "--llm-retries 2" in command
+    assert "--no-resume" not in command
+    assert "--fresh" not in command
+
+
+def test_failed_artifact_options_uses_output_prefix(tmp_path):
+    args = types.SimpleNamespace(output="full_risk_from_scratch.md")
+
+    options = paper_audit._failed_artifact_options(tmp_path / "paper_dir", tmp_path, args)
+    failure = paper_audit.AuditFailure(
+        capability="text_llm",
+        error_class="provider_unavailable",
+        message="down",
+    )
+
+    md_path, json_path = paper_audit.save_failed_audit_diagnostics(
+        failure,
+        tmp_path / "paper_dir",
+        **options,
+    )
+
+    assert md_path == tmp_path / "full_risk_from_scratch.failed.md"
+    assert json_path == tmp_path / "full_risk_from_scratch.failed.json"
 
 
 def test_call_glm_image_semantics_parses_json_response(monkeypatch, tmp_path):
@@ -808,7 +1176,7 @@ def test_call_glm_image_semantics_parses_json_response(monkeypatch, tmp_path):
         assert "Authorization" in headers
         body = json.loads(data.decode("utf-8"))
         assert body["model"] == "glm-test"
-        assert body["max_tokens"] == 800
+        assert body["max_tokens"] == 10000
         assert body["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/")
         return json.dumps(payload).encode("utf-8"), 200
 
@@ -848,6 +1216,96 @@ def test_call_glm_image_semantics_reports_rate_limit(monkeypatch, tmp_path):
     assert result["http_status"] == 429
     assert "glm_rate_limited" in result["risks"]
     assert "访问量过大" in result["error_message"]
+
+
+def test_call_glm_image_semantics_treats_no_image_response_as_error(monkeypatch, tmp_path):
+    image_path = tmp_path / "figure.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    payload = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "summary": "未检测到上传的图片，无法进行语义理解与合理性审查",
+                    "image_type": "其他",
+                    "reasonability": "需人工核对",
+                    "risks": ["缺少图像数据，无法执行分析"],
+                    "manual_checks": [],
+                    "confidence": 0,
+                }, ensure_ascii=False)
+            }
+        }]
+    }
+
+    monkeypatch.setattr(
+        paper_audit,
+        "_http_request",
+        lambda *args, **kwargs: (json.dumps(payload).encode("utf-8"), 200),
+    )
+
+    result = paper_audit.call_glm_image_semantics(str(image_path), api_key="test-key", model="deepseek-v4-flash")
+
+    assert result["status"] == "error"
+    assert result["error_reason"] == "image_input_not_received"
+    assert "image_input_not_supported" in result["risks"]
+
+
+def test_call_glm_image_semantics_treats_plain_no_image_response_as_error(monkeypatch, tmp_path):
+    image_path = tmp_path / "figure.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    payload = {
+        "choices": [{
+            "message": {
+                "content": "未提供图片，无法进行审查"
+            }
+        }]
+    }
+
+    monkeypatch.setattr(
+        paper_audit,
+        "_http_request",
+        lambda *args, **kwargs: (json.dumps(payload).encode("utf-8"), 200),
+    )
+
+    result = paper_audit.call_glm_image_semantics(str(image_path), api_key="test-key", model="deepseek-v4-flash")
+
+    assert result["status"] == "error"
+    assert result["error_reason"] == "image_input_not_received"
+    assert "image_input_not_supported" in result["risks"]
+
+
+def test_call_glm_image_semantics_accepts_reasoning_content_response(monkeypatch, tmp_path):
+    image_path = tmp_path / "figure.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    payload = {
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "reasoning_content": json.dumps({
+                    "summary": "一张标题为Sample 2的水平条形图",
+                    "image_type": "图",
+                    "scientific_context": "展示不同节点的输出值",
+                    "visible_text": "Sample 2, From Node, Output",
+                    "reasonability": "需人工核对",
+                    "risks": ["需核对图注解释"],
+                    "manual_checks": ["核对正文是否解释这些节点输出值"],
+                    "confidence": 0.74,
+                }, ensure_ascii=False),
+            }
+        }]
+    }
+
+    monkeypatch.setattr(
+        paper_audit,
+        "_http_request",
+        lambda *args, **kwargs: (json.dumps(payload).encode("utf-8"), 200),
+    )
+
+    result = paper_audit.call_glm_image_semantics(str(image_path), api_key="test-key", model="mimo-v2.5-free")
+
+    assert result["status"] == "ok"
+    assert result["summary"] == "一张标题为Sample 2的水平条形图"
+    assert result["visible_text"] == "Sample 2, From Node, Output"
+    assert result["confidence"] == 0.74
 
 
 def test_image_semantic_display_includes_visual_fields():
@@ -986,6 +1444,19 @@ def test_build_image_audit_uses_detector_cache(monkeypatch, tmp_path):
     assert first["detector_checked"] == 1
     assert second["images"][0]["detector"]["score"] == 12.0
     assert calls["count"] == 1
+
+
+def test_alarm_timeout_bounds_image_capability_calls():
+    started = time.monotonic()
+
+    result = paper_audit._run_with_alarm_timeout(
+        lambda: time.sleep(2),
+        1,
+        lambda: {"status": "error", "reason": "timeout"},
+    )
+
+    assert result == {"status": "error", "reason": "timeout"}
+    assert time.monotonic() - started < 1.8
 
 
 def test_build_image_audit_checks_all_images_by_default(monkeypatch, tmp_path):
@@ -1242,12 +1713,13 @@ def test_parse_report_preserves_partial_truncated_json():
 
     parsed = paper_audit.parse_report(raw)
 
-    assert parsed["parse_error"] is True
-    assert parsed["schema_error"] is True
+    assert not parsed.get("parse_error")
+    assert parsed["_schema_recovered"] is True
     assert "truncated_json" in parsed["schema_errors"]
     assert parsed["partial_fields"]["summary"] == "文本严重乱码"
     assert parsed["partial_fields"]["risk_level"] == "高"
     assert parsed["partial_fields"]["verdict"] == "🚩红旗"
+    assert parsed["checks"][0]["recommendation"]
 
 
 def test_parse_report_rejects_findings_missing_required_schema_fields():
@@ -1266,9 +1738,11 @@ def test_parse_report_rejects_findings_missing_required_schema_fields():
 
     parsed = paper_audit.parse_report(raw)
 
-    assert parsed["parse_error"] is True
-    assert parsed["schema_error"] is True
-    assert any("missing source,recommendation,confidence" in err for err in parsed["schema_errors"])
+    assert not parsed.get("parse_error")
+    assert parsed["_schema_recovered"] is True
+    assert "missing_or_invalid_check_fields" in parsed["schema_errors"]
+    assert parsed["checks"][0]["source_text"] == "未找到直接原文证据"
+    assert parsed["checks"][0]["confidence"] == 0.2
 
 
 def test_parse_report_normalizes_valid_strict_finding():
@@ -1317,6 +1791,95 @@ def test_merge_chunk_reports_keeps_more_severe_duplicate_verdict():
     assert merged["risk_level"] == "中"
     assert len(merged["checks"]) == 1
     assert merged["checks"][0]["verdict"] == "🚩红旗"
+
+
+def test_merge_chunk_reports_consolidates_similar_findings():
+    reports = [
+        {
+            "summary": "a",
+            "risk_level": "中",
+            "checks": [{
+                "category": "参考文献",
+                "item": "参考文献年份异常",
+                "verdict": "⚠️疑点",
+                "evidence": "Reference 12 metadata year differs from cited year.",
+                "reason": "参考文献年份与在线元数据不一致，需要核验。",
+            }],
+        },
+        {
+            "summary": "b",
+            "risk_level": "中",
+            "checks": [{
+                "category": "参考文献",
+                "item": "引用年份和在线元数据不一致",
+                "verdict": "🚩红旗",
+                "evidence": "Reference 12 cited year does not match Crossref metadata.",
+                "reason": "参考文献年份与在线元数据不一致，需要核验。",
+            }],
+        },
+    ]
+
+    merged = paper_audit.merge_chunk_reports(reports)
+
+    assert len(merged["checks"]) == 1
+    assert merged["checks"][0]["verdict"] == "🚩红旗"
+    assert merged["checks"][0]["_merged_similar_count"] == 2
+
+
+def test_future_publication_flag_uses_runtime_year_not_llm_knowledge(monkeypatch):
+    monkeypatch.setattr(paper_audit, "runtime_utc_year", lambda: 2026)
+    report = {
+        "summary": "ok",
+        "risk_level": "高",
+        "checks": [{
+            "category": "参考文献",
+            "item": "发表时间在未来",
+            "verdict": "🚩红旗",
+            "evidence": "该文献被模型认为尚未发表，但未给出晚于当前年份的元数据。",
+            "reason": "LLM知识库认为该出版时间在未来。",
+        }],
+        "conclusion": "ok",
+    }
+
+    ruled = paper_audit.apply_risk_rules(report)
+
+    assert ruled["checks"][0]["verdict"] == "⚠️疑点"
+    assert ruled["checks"][0]["_verdict_adjusted"] == "future_publication_runtime_year_not_confirmed"
+    assert ruled["checks"][0]["_runtime_year_check"]["current_year"] == 2026
+    assert ruled["score_breakdown"]["red_flags"] == 0
+
+
+def test_future_publication_flag_keeps_future_year_when_evidence_exceeds_runtime(monkeypatch):
+    monkeypatch.setattr(paper_audit, "runtime_utc_year", lambda: 2026)
+    report = {
+        "summary": "ok",
+        "risk_level": "高",
+        "checks": [{
+            "category": "参考文献",
+            "item": "发表时间在未来",
+            "verdict": "🚩红旗",
+            "evidence": "Crossref publication year is 2028.",
+            "reason": "发表年份2028晚于当前运行时间。",
+        }],
+        "conclusion": "ok",
+    }
+
+    ruled = paper_audit.apply_risk_rules(report)
+
+    assert ruled["checks"][0]["verdict"] == "🚩红旗"
+    assert ruled["checks"][0]["_runtime_year_check"]["future_years"] == [2028]
+
+
+def test_audit_references_marks_future_year_by_runtime_clock(monkeypatch):
+    monkeypatch.setattr(paper_audit, "runtime_utc_year", lambda: 2026)
+
+    audit = paper_audit.audit_references(
+        "1. Future A. Runtime year based reference. Journal X. 2028. doi:10.1000/future",
+        online=False,
+    )
+
+    assert "future_year" in audit["issues"][0]["issues"]
+    assert "年份晚于运行时当前年份" in paper_audit._reference_issue_text(audit["issues"][0]["issues"])
 
 
 def test_merge_chunk_reports_does_not_escalate_ocr_noise_to_high_risk():
@@ -1503,6 +2066,7 @@ def test_cli_help_exposes_no_open():
     assert result.returncode == 0
     assert "--no-open" in result.stdout
     assert "--image-detector-limit" in result.stdout
+    assert "--no-resource-online" in result.stdout
     assert "不再打开网页或要求手动上传" in result.stdout
     assert "--serve-report-actions" in result.stdout
     assert "--llm-provider" not in result.stdout
@@ -1570,16 +2134,71 @@ def test_audit_artifact_paths_normalize_explicit_output(tmp_path):
     assert json_path == tmp_path / "custom.limited.json"
 
 
+def test_audit_resources_extracts_and_checks_code_and_deployed_urls(monkeypatch):
+    text = (
+        "Code available at https://github.com/2951121599/streamlit\\_PTC2. "
+        "The web links were https://ptc-normal.streamlit.app/ and htps://ptcmetastasize.streamlit.app/."
+    )
+    calls = []
+
+    def fake_verify(resource, timeout=10):
+        calls.append(resource["url"])
+        if resource["url"].startswith("htps://"):
+            return {"status": "malformed", "problem": "malformed_url"}
+        return {"status": "available", "http_status": 200, "problem": ""}
+
+    monkeypatch.setattr(paper_audit, "verify_resource_availability", fake_verify)
+
+    audit = paper_audit.audit_resources(text, online=True, timeout=3, cache={})
+
+    assert audit["resource_count"] == 3
+    assert audit["online_checked"] == 3
+    urls = [item["url"] for item in audit["resources"]]
+    assert "https://github.com/2951121599/streamlit_PTC2" in urls
+    assert "https://ptc-normal.streamlit.app/" in urls
+    assert "htps://ptcmetastasize.streamlit.app/" in urls
+    assert any(issue["status"] == "malformed" for issue in audit["issues"])
+    assert calls == urls
+
+
+def test_resource_audit_renders_markdown_and_html_sections():
+    audit = {
+        "status": "needs_review",
+        "resource_count": 1,
+        "online_enabled": True,
+        "online_checked": 1,
+        "note": "note",
+        "issues": [{"index": 1, "status": "unavailable"}],
+        "resources": [{
+            "url": "https://ptc-normal.streamlit.app/",
+            "type": "deployed_resource",
+            "context": "web calculator",
+            "availability": {"status": "unavailable", "problem": "not_found"},
+        }],
+    }
+
+    markdown = "\n".join(paper_audit.format_resource_audit_markdown(audit))
+    rendered = paper_audit.format_resource_audit_html(audit)
+
+    assert "代码仓库与在线资源可用性校检" in markdown
+    assert "https://ptc-normal.streamlit.app/" in markdown
+    assert "不可访问" in markdown
+    assert "代码仓库与在线资源可用性校检" in rendered
+    assert '<a href="https://ptc-normal.streamlit.app/"' in rendered
+
+
 def test_audit_limited_reasons_track_user_limited_flags():
     args = types.SimpleNamespace(
         no_mineru=True,
         no_reference_online=True,
+        no_resource_online=True,
         no_image_semantic=True,
         no_image_detector=False,
         llm_cache_only=True,
     )
     meta = {
         "reference_count": 2,
+        "resource_audit": {"resource_count": 1},
         "image_audit": {"image_count": 1},
         "llm_partial_report": True,
         "llm_coverage": "1/2",
@@ -1590,6 +2209,7 @@ def test_audit_limited_reasons_track_user_limited_flags():
 
     assert any("禁用MinerU" in reason for reason in reasons)
     assert any("参考文献在线核验" in reason for reason in reasons)
+    assert any("在线资源可用性校检" in reason for reason in reasons)
     assert any("图像语义分析" in reason for reason in reasons)
     assert any("cache-only" in reason for reason in reasons)
     assert any("LLM分块覆盖不足" in reason for reason in reasons)
@@ -1639,6 +2259,26 @@ def test_coverage_blocking_failure_detects_service_wide_reference_error():
     assert capability == "reference_lookup"
     assert "全部失败" in message
     assert details["reference_count"] == 2
+
+
+def test_coverage_blocking_failure_detects_service_wide_resource_error():
+    meta = {
+        "resource_audit": {
+            "resource_count": 2,
+            "online_enabled": True,
+            "online_checked": 2,
+            "resources": [
+                {"availability": {"status": "error"}},
+                {"availability": {"status": "error"}},
+            ],
+        }
+    }
+
+    capability, message, details = paper_audit.coverage_blocking_failure(meta)
+
+    assert capability == "resource_availability"
+    assert "全部失败" in message
+    assert details["resource_count"] == 2
 
 
 def test_coverage_blocking_failure_detects_service_wide_image_detector_error():
@@ -1729,8 +2369,72 @@ def test_failed_audit_payload_serializes_stable_shape(tmp_path):
     assert payload["failure"]["fix_hints"] == ["检查第三方服务状态后重试"]
     assert payload["failure"]["completed_stages"] == ["mineru_extract_complete"]
     assert payload["failure"]["retry_command"] == "python paper_audit.py paper.pdf --json"
-    assert payload["meta"] == {"run_id": "abc"}
+    assert payload["meta"]["run_id"] == "abc"
+    assert payload["meta"]["runtime"]["future_year_basis"] == "utc_year"
     assert json.loads(json.dumps(payload, ensure_ascii=False))["report_type"] == "failed"
+
+
+def test_failed_audit_payload_promotes_completed_audits(tmp_path):
+    failure = paper_audit.AuditFailure(
+        capability="image_semantic",
+        error_class="provider_unavailable",
+        message="image semantic provider failed",
+        created_at="2026-05-28 12:00:00",
+    )
+    reference_audit = {"reference_count": 2, "online_checked": 2, "references": []}
+    resource_audit = {"resource_count": 1, "online_checked": 1, "resources": []}
+
+    payload = paper_audit.failed_audit_payload(
+        failure,
+        tmp_path / "paper.pdf",
+        meta={"reference_audit": reference_audit, "resource_audit": resource_audit},
+    )
+
+    assert payload["reference_audit"] == reference_audit
+    assert payload["resource_audit"] == resource_audit
+
+
+def test_failed_audit_markdown_includes_completed_audit_sections(tmp_path):
+    failure = paper_audit.AuditFailure(
+        capability="image_semantic",
+        error_class="provider_unavailable",
+        message="image semantic provider failed",
+        created_at="2026-05-28 12:00:00",
+    )
+    meta = {
+        "reference_audit": {
+            "status": "ok",
+            "reference_count": 2,
+            "doi_count": 1,
+            "year_count": 2,
+            "online_enabled": True,
+            "online_checked": 2,
+            "issues": [],
+            "references": [],
+        },
+        "resource_audit": {
+            "status": "needs_review",
+            "resource_count": 1,
+            "online_enabled": True,
+            "online_checked": 1,
+            "resources": [
+                {
+                    "type": "code_repository",
+                    "url": "https://github.com/example/repo",
+                    "availability": {"status": "available"},
+                    "context": "Code available at https://github.com/example/repo",
+                }
+            ],
+            "issues": [],
+        },
+    }
+
+    rendered = paper_audit.format_failed_audit_markdown(failure, tmp_path / "paper.pdf", meta=meta)
+
+    assert "已完成校检摘要" in rendered
+    assert "参考文献真实性/可核验性校检" in rendered
+    assert "代码仓库与在线资源可用性校检" in rendered
+    assert "https://github.com/example/repo" in rendered
 
 
 def test_save_failed_audit_diagnostics_writes_md_and_json(tmp_path):
@@ -1750,7 +2454,9 @@ def test_save_failed_audit_diagnostics_writes_md_and_json(tmp_path):
 
     assert md_path == tmp_path / "input.failed.md"
     assert json_path == tmp_path / "input.failed.json"
+    assert (tmp_path / "input.failed.html").exists()
     assert "未生成完整审查报告" in md_path.read_text(encoding="utf-8")
+    assert "断点续跑命令" in (tmp_path / "input.failed.html").read_text(encoding="utf-8")
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["report_type"] == "failed"
     assert payload["complete_report_generated"] is False
@@ -1761,6 +2467,9 @@ def test_find_project_files_skips_generated_outputs(tmp_path):
     (tmp_path / "paper.pdf").write_bytes(b"%PDF-1.4")
     (tmp_path / "paper_reference.pdf").write_bytes(b"%PDF-1.4")
     (tmp_path / "audit_report.audit.md").write_text("generated", encoding="utf-8")
+    (tmp_path / "audit_report.failed.md").write_text("generated", encoding="utf-8")
+    (tmp_path / "reference_audit_full.md").write_text("generated", encoding="utf-8")
+    (tmp_path / "reference_audit_full.json").write_text("{}", encoding="utf-8")
     (tmp_path / "sample.paper_audit.log").write_text("log", encoding="utf-8")
     (tmp_path / "paper.abc123.mineru_url.txt").write_text("https://example.invalid/mineru.zip", encoding="utf-8")
     (tmp_path / "paper.abc123.mineru.zip").write_bytes(b"zip")
@@ -1892,7 +2601,74 @@ def test_format_html_report_sorts_checks_and_uses_collapsible_details():
     assert "生成期刊 Letter" in rendered
     assert "paper-audit-action-context" in rendered
     assert "127.0.0.1:8765" in rendered
+    assert "--serve-report-actions" not in rendered
     assert "证据型疑点 1" in rendered
+
+
+def test_web_action_panel_uses_report_action_port():
+    rendered = paper_audit.format_web_action_panel_html(
+        {"summary": "ok", "risk_level": "中", "detection_score": 50, "checks": [], "conclusion": "done"},
+        "paper.pdf",
+        {"report_actions": {"host": "127.0.0.1", "port": 9123}},
+        {"number_count": 0},
+    )
+
+    assert "http://127.0.0.1:9123" in rendered
+    assert "http://127.0.0.1:9123/generate" in rendered
+    assert "127.0.0.1:8765" not in rendered
+
+
+def test_ensure_report_action_service_reuses_existing(monkeypatch, tmp_path):
+    popen_calls = []
+    monkeypatch.setattr(
+        paper_audit,
+        "report_action_service_health",
+        lambda **kwargs: {"ok": True, "model": "configured-model"},
+    )
+    monkeypatch.setattr(paper_audit.subprocess, "Popen", lambda *args, **kwargs: popen_calls.append((args, kwargs)))
+
+    result = paper_audit.ensure_report_action_service(port=9001, log_path=tmp_path / "report_actions.log")
+
+    assert result["ok"] is True
+    assert result["status"] == "already_running"
+    assert result["url"] == "http://127.0.0.1:9001"
+    assert popen_calls == []
+
+
+def test_ensure_report_action_service_starts_background_process(monkeypatch, tmp_path):
+    health_calls = []
+    popen_calls = []
+
+    def fake_health(**kwargs):
+        health_calls.append(kwargs)
+        return {"ok": True, "model": "configured-model"} if len(health_calls) >= 2 else None
+
+    class DummyProcess:
+        pid = 4321
+        returncode = None
+
+        def poll(self):
+            return None
+
+    def fake_popen(*args, **kwargs):
+        popen_calls.append((args, kwargs))
+        return DummyProcess()
+
+    monkeypatch.setattr(paper_audit, "report_action_service_health", fake_health)
+    monkeypatch.setattr(paper_audit.subprocess, "Popen", fake_popen)
+
+    result = paper_audit.ensure_report_action_service(port=9002, log_path=tmp_path / "report_actions.log", startup_timeout=0.2)
+
+    assert result["ok"] is True
+    assert result["status"] == "started"
+    assert result["pid"] == 4321
+    command = popen_calls[0][0][0]
+    assert command[:2] == [sys.executable, str(paper_audit.Path(__file__).resolve().parents[1] / "paper_audit.py")]
+    assert "--serve-report-actions" in command
+    assert "--report-actions-port" in command
+    assert "9002" in command
+    assert popen_calls[0][1]["stdin"] == subprocess.DEVNULL
+    assert popen_calls[0][1]["start_new_session"] is True
 
 
 def test_report_action_context_cleans_reference_issue_text():

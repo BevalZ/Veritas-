@@ -244,6 +244,44 @@ output_path, html_output_path, json_path = audit_artifact_paths(input_path, meta
 - Unit test no references and no images do not create coverage blocking failures.
 - Unit test service-wide reference, image semantic, and imagedetector failures return failed capabilities.
 
+## Scenario: Reference Official-Site Fallback
+
+### 1. Scope / Trigger
+
+- Trigger: `verify_reference_online` cannot verify a parsed reference through the primary scholarly sources.
+- The verifier must try DOI landing pages and publisher/official journal search pages before returning `not_found`, `weak`, or `error`.
+- This is especially important for references without DOI text, conference abstracts, and OCR-damaged titles.
+
+### 2. Signatures
+
+- `lookup_official_site_reference(ref, timeout=10) -> list[dict]`
+- `_official_site_search_urls(ref) -> list[(label, url)]`
+- `_official_page_matches_reference(ref, page_text) -> bool`
+
+### 3. Contracts
+
+- The primary source order remains Crossref, OpenAlex, and PubMed.
+- When no primary match reaches `verified`, the verifier tries:
+  - DOI landing page for references with DOI text.
+  - Known publisher or official journal search pages inferred from `container_hint`, title, and raw reference text.
+  - OCR-tolerant title variants, including the title tail without the first word for long titles.
+- Official-site matches must be scored only when the page text contains enough title tokens and a compatible year when available.
+- A DOI landing page with an exact DOI match can verify the DOI even if metadata APIs fail.
+- If all primary sources fail with provider errors, do not mask the outage by silently degrading; keep `online_status == "error"` unless another source returns a real match.
+
+### 4. Validation & Error Matrix
+
+- Title has a damaged first word but an official publisher page contains the intact title -> `verified`.
+- Reference lacks DOI but official journal search returns a page containing title tokens and year -> `verified`.
+- Official site is unavailable while primary sources returned no match -> `not_found` or partial source error, not a fabricated match.
+- All primary sources raise provider errors and no official match exists -> `error`.
+
+### 5. Tests Required
+
+- Unit test official-site fallback verifies a reference when Crossref/OpenAlex/PubMed return no matches.
+- Unit test OCR-damaged first title word still searches with a title-tail variant.
+- Unit test publisher rule coverage for domain-specific official sites that appear in real fixtures.
+
 ## Scenario: Per-Run Workspace
 
 ### 1. Scope / Trigger
@@ -625,4 +663,89 @@ risk = report["risk_level"]
 ```python
 report = apply_risk_rules(report, stat_result=stat_result, image_audit=meta.get("image_audit"))
 risk = report["risk_level"]
+```
+
+## Scenario: Paper Resource Availability Audit
+
+### 1. Scope / Trigger
+
+- Trigger: A formal audit text mentions code repositories, data repositories, deployed calculators, Streamlit apps, or other online paper resources.
+- These resources must be extracted from the full paper text and recorded in formal Markdown, HTML, and JSON artifacts.
+- Resource availability checking is online by default. Disabling it is allowed only as a range-limited/debug run.
+
+### 2. Signatures
+
+- `extract_paper_resources(text) -> list[dict]`
+- `verify_resource_availability(resource, timeout=10) -> dict`
+- `audit_resources(text, online=True, timeout=10, cache=None) -> dict`
+- `format_resource_audit_markdown(resource_audit) -> list[str]`
+- `format_resource_audit_html(resource_audit) -> str`
+- CLI:
+  - `--no-resource-online`
+  - `--resource-timeout <seconds>`
+
+### 3. Contracts
+
+- `resource_audit` fields:
+  - `status`: `ok`, `needs_review`, or `error`
+  - `resource_count`
+  - `online_enabled`
+  - `online_checked`
+  - `issues`
+  - `resources`
+  - `note`
+- Each resource contains:
+  - `url`
+  - `type`: `code_repository`, `data_repository`, or `deployed_resource`
+  - `context`
+  - `availability`
+- Each availability result contains:
+  - `status`: `available`, `unavailable`, `access_restricted`, `malformed`, `error`, or `skipped`
+  - `http_status`
+  - `problem`
+  - `message`
+- Successful JSON payloads must include both `meta.resource_audit` and top-level `resource_audit`.
+- Markdown and HTML reports must include a "代码仓库与在线资源可用性校检" section when `resource_audit` exists.
+
+### 4. Validation & Error Matrix
+
+- `https://github.com/...` -> `type == code_repository`
+- `https://*.streamlit.app/...` -> `type == deployed_resource`
+- GEO/GDC/Zenodo/Figshare/OSF style links -> `type == data_repository`
+- `htps://...` or unsupported schemes -> `availability.status == malformed`
+- HTTP 401/403 -> `access_restricted`
+- HTTP 404/410 -> `unavailable`
+- Provider/network exception without HTTP status -> `error`
+- All checked resources ending in `error` -> `coverage_blocking_failure(...)` returns `resource_availability`
+- User passes `--no-resource-online` with resources present -> limited artifact reason is recorded.
+
+### 5. Good/Base/Bad Cases
+
+- Good: A paper with GitHub and Streamlit links records both in Markdown, HTML, JSON, and checks their availability.
+- Base: A paper with no resource links records zero resources and remains eligible for complete if other coverage requirements pass.
+- Bad: A malformed Streamlit URL is ignored silently or merged into reference checking only.
+- Bad: All resource availability requests fail due provider/network errors but the run still writes `*.audit.*`.
+
+### 6. Tests Required
+
+- Unit test resource extraction classifies GitHub, Streamlit, and malformed URLs.
+- Renderer test asserts Markdown and HTML resource sections are present.
+- Unit test `--no-resource-online` creates a limited reason when resources exist.
+- Unit test service-wide resource provider errors are returned by `coverage_blocking_failure`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+resources = re.findall(r"https?://\S+", text)
+# only mention them in prose, no structured report field
+```
+
+#### Correct
+
+```python
+resource_audit = audit_resources(full_text, online=True, timeout=args.resource_timeout, cache=cache)
+meta["resource_audit"] = resource_audit
+json_payload["resource_audit"] = resource_audit
 ```

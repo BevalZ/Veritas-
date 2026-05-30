@@ -7,7 +7,7 @@
 输入PDF路径 → MinerU转Markdown → 本地统计检测 + LLM语义分析 → 输出md格式报告
 用法: python paper_audit.py <pdf_path> [--mineru] [--max-chars 8000] [--output report.md]
 """
-import re, json, time, argparse, urllib.request, urllib.parse, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, builtins, hashlib, html, base64, io
+import re, json, time, argparse, urllib.request, urllib.parse, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, builtins, hashlib, html, base64, io, concurrent.futures, signal, threading, shlex, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple, Dict, List, Any, Callable
@@ -29,6 +29,7 @@ _ORIGINAL_PRINT = builtins.print
 _RUN_LOG_FILE = None
 _RUN_OUTPUT_DIR = None
 _RUN_OUTPUT_STEM = None
+_RESUME_EVENTS_ENABLED = True
 
 
 def get_output_base(input_path: Path):
@@ -173,6 +174,8 @@ def record_run_workspace_artifacts(
 
 def resume_event(resume_dir: Path, step: str, status: str, detail: str = "", **extra):
     """记录可断点续作的步骤清单，同时写入普通log。"""
+    if not _RESUME_EVENTS_ENABLED:
+        return
     try:
         event = {"time": time.strftime("%F %T"), "step": step, "status": status, "detail": detail}
         event.update(extra)
@@ -196,10 +199,38 @@ def _text_fingerprint(text: str, extra: str = ""):
     return h.hexdigest()[:16]
 
 
+def runtime_utc_year() -> int:
+    """Return the runtime UTC year for deterministic date checks."""
+    return datetime.datetime.now(datetime.timezone.utc).year
+
+
+def runtime_metadata() -> Dict[str, Any]:
+    """Return runtime clock metadata used by reports and deterministic date rules."""
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    local_now = utc_now.astimezone()
+    return {
+        "local_time": local_now.isoformat(timespec="seconds"),
+        "timezone": local_now.tzname() or str(local_now.tzinfo or ""),
+        "utc_time": utc_now.isoformat(timespec="seconds"),
+        "utc_year": utc_now.year,
+        "future_year_basis": "utc_year",
+    }
+
+
+def ensure_runtime_meta(meta: Dict[str, Any] = None) -> Dict[str, Any]:
+    normalized = dict(meta or {})
+    runtime = dict(normalized.get("runtime") or {})
+    defaults = runtime_metadata()
+    for key, value in defaults.items():
+        runtime.setdefault(key, value)
+    normalized["runtime"] = runtime
+    return normalized
+
+
 # LLM运行参数：由CLI覆盖。默认保守，避免一次请求无限阻塞。
 LLM_TIMEOUT = 45
 LLM_RETRIES = 1
-EXTRACT_CACHE_VERSION = 5
+EXTRACT_CACHE_VERSION = 6
 MIN_IMAGE_BYTES = 5000
 IMAGE_SEMANTIC_CACHE_VERSION = 3
 
@@ -400,7 +431,8 @@ class AuditFailure:
 
 def failed_audit_payload(failure: AuditFailure, input_path: Path, meta: Dict[str, Any] = None) -> Dict[str, Any]:
     """Return the stable JSON payload for a failed audit diagnostic artifact."""
-    return {
+    meta = ensure_runtime_meta(meta)
+    payload = {
         "report_type": "failed",
         "complete_report_generated": False,
         "input_path": str(input_path),
@@ -414,8 +446,12 @@ def failed_audit_payload(failure: AuditFailure, input_path: Path, meta: Dict[str
             "retry_command": failure.retry_command,
             "details": dict(failure.details),
         },
-        "meta": dict(meta or {}),
+        "meta": meta,
     }
+    for key in ("reference_audit", "resource_audit", "image_audit"):
+        if key in meta:
+            payload[key] = meta[key]
+    return payload
 
 
 def format_failed_audit_markdown(failure: AuditFailure, input_path: Path, meta: Dict[str, Any] = None) -> str:
@@ -468,19 +504,109 @@ def format_failed_audit_markdown(failure: AuditFailure, input_path: Path, meta: 
             json.dumps(failed["details"], ensure_ascii=False, indent=2),
             "```",
         ])
+    meta = payload.get("meta") or {}
+    completed_sections = []
+    if meta.get("resource_audit") is not None:
+        completed_sections.extend(format_resource_audit_markdown(meta.get("resource_audit")))
+    if meta.get("reference_audit") is not None:
+        completed_sections.extend(format_reference_audit_markdown(meta.get("reference_audit")))
+    if completed_sections:
+        lines.extend([
+            "",
+            "## 已完成校检摘要",
+            "",
+            "> 以下为失败前已经完成并写入 JSON 的正式校检结果；失败能力修复后应重新运行以生成完整报告。",
+            "",
+        ])
+        lines.extend(completed_sections)
     return "\n".join(lines)
 
 
-def failed_audit_artifact_paths(input_path: Path, output_dir: Path = None, output_stem: str = None) -> Tuple[Path, Path]:
-    """Return Markdown and JSON artifact paths for failed audit diagnostics."""
+def format_failed_audit_html(failure: AuditFailure, input_path: Path, meta: Dict[str, Any] = None) -> str:
+    payload = failed_audit_payload(failure, input_path, meta)
+    failed = payload["failure"]
+    runtime = payload.get("meta", {}).get("runtime") or {}
+    stages = failed.get("completed_stages") or ["无"]
+    hints = failed.get("fix_hints") or ["检查关键服务配置、网络连通性和服务商返回状态后重试。"]
+    retry_command = failed.get("retry_command") or f"python paper_audit.py {_shell_quote(str(input_path))} --json"
+    details = failed.get("details") or {}
+    stages_html = "".join(f"<li>{_html_escape(stage)}</li>" for stage in stages)
+    hints_html = "".join(f"<li>{_html_escape(hint)}</li>" for hint in hints)
+    details_html = ""
+    if details:
+        details_html = f"""
+    <section>
+      <h2>技术细节</h2>
+      <pre>{_html_escape(json.dumps(details, ensure_ascii=False, indent=2))}</pre>
+    </section>"""
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审查失败诊断</title>
+<style>
+body {{ margin:0; padding:24px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif; background:#f6f6f6; color:#171717; line-height:1.6; }}
+main {{ max-width:1080px; margin:0 auto; }}
+.hero, section {{ background:#fff; border:1px solid #d4d4d4; border-radius:8px; padding:18px; margin-bottom:14px; }}
+.status {{ display:inline-block; border-radius:6px; background:#b42318; color:#fff; padding:6px 10px; font-weight:800; margin-bottom:10px; }}
+h1 {{ font-size:24px; margin:0 0 8px; }}
+h2 {{ font-size:17px; margin:0 0 10px; border-bottom:1px solid #d4d4d4; padding-bottom:6px; }}
+.grid {{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px; margin-top:12px; }}
+.cell {{ border:1px solid #d4d4d4; border-radius:6px; background:#fafafa; padding:9px; font-size:13px; color:#666; }}
+.cell strong {{ display:block; color:#171717; overflow-wrap:anywhere; }}
+pre, code {{ white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; background:#f1f1f1; border:1px solid #d4d4d4; border-radius:6px; padding:10px; display:block; }}
+ul {{ padding-left:22px; }}
+@media (max-width:760px) {{ body {{ padding:12px; }} .grid {{ grid-template-columns:1fr; }} }}
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <div class="status">失败诊断 failed</div>
+    <h1>未生成完整审查报告</h1>
+    <p>关键审查能力失败，本次运行只生成失败诊断产物；修复后可使用下方命令断点续跑。</p>
+    <div class="grid">
+      <div class="cell"><span>文件</span><strong>{_html_escape(str(input_path))}</strong></div>
+      <div class="cell"><span>失败能力</span><strong>{_html_escape(failed.get('capability'))}</strong></div>
+      <div class="cell"><span>错误类别</span><strong>{_html_escape(failed.get('error_class'))}</strong></div>
+      <div class="cell"><span>运行时间</span><strong>{_html_escape(runtime.get('local_time') or payload.get('created_at'))}</strong></div>
+      <div class="cell"><span>运行时 UTC 年份</span><strong>{_html_escape(runtime.get('utc_year'))}</strong></div>
+      <div class="cell"><span>产物类型</span><strong>failed</strong></div>
+    </div>
+  </div>
+  <section>
+    <h2>失败原因</h2>
+    <p>{_html_escape(failed.get('message'))}</p>
+  </section>
+  <section>
+    <h2>断点续跑命令</h2>
+    <code>{_html_escape(retry_command)}</code>
+  </section>
+  <section>
+    <h2>已完成阶段</h2>
+    <ul>{stages_html}</ul>
+  </section>
+  <section>
+    <h2>修复建议</h2>
+    <ul>{hints_html}</ul>
+  </section>
+  {details_html}
+</main>
+</body>
+</html>"""
+
+
+def failed_audit_artifact_paths(input_path: Path, output_dir: Path = None, output_stem: str = None) -> Tuple[Path, Path, Path]:
+    """Return Markdown, HTML, and JSON artifact paths for failed audit diagnostics."""
     input_path = Path(input_path)
     if output_dir:
         output_dir = Path(output_dir)
         stem = _safe_name(output_stem or ("audit_report" if input_path.is_dir() else input_path.stem))
-        return output_dir / f"{stem}.failed.md", output_dir / f"{stem}.failed.json"
+        return output_dir / f"{stem}.failed.md", output_dir / f"{stem}.failed.html", output_dir / f"{stem}.failed.json"
     if input_path.is_dir():
-        return input_path / "audit_report.failed.md", input_path / "audit_report.failed.json"
-    return input_path.with_suffix(".failed.md"), input_path.with_suffix(".failed.json")
+        return input_path / "audit_report.failed.md", input_path / "audit_report.failed.html", input_path / "audit_report.failed.json"
+    return input_path.with_suffix(".failed.md"), input_path.with_suffix(".failed.html"), input_path.with_suffix(".failed.json")
 
 
 def save_failed_audit_diagnostics(
@@ -491,10 +617,12 @@ def save_failed_audit_diagnostics(
     meta: Dict[str, Any] = None,
 ) -> Tuple[Path, Path]:
     """Write failed audit Markdown and JSON artifacts to the formal output location."""
-    md_path, json_path = failed_audit_artifact_paths(input_path, output_dir=output_dir, output_stem=output_stem)
+    md_path, html_path, json_path = failed_audit_artifact_paths(input_path, output_dir=output_dir, output_stem=output_stem)
     md_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.write_text(format_failed_audit_markdown(failure, input_path, meta=meta), encoding="utf-8")
+    html_path.write_text(format_failed_audit_html(failure, input_path, meta=meta), encoding="utf-8")
     json_path.write_text(json.dumps(failed_audit_payload(failure, input_path, meta=meta), ensure_ascii=False, indent=2), encoding="utf-8")
     return md_path, json_path
 
@@ -541,6 +669,7 @@ def audit_limited_reasons(args, meta: Dict[str, Any], has_pdf_input=False) -> Li
     image_count = ((meta.get("image_audit") or {}).get("image_count") or 0)
     reference_count = meta.get("reference_count") or ((meta.get("reference_audit") or {}).get("reference_count") or 0)
     reference_checked = ((meta.get("reference_audit") or {}).get("online_checked") or 0)
+    resource_count = meta.get("resource_count") or ((meta.get("resource_audit") or {}).get("resource_count") or 0)
     image_audit = meta.get("image_audit") or {}
     if has_pdf_input and getattr(args, "no_mineru", False):
         reasons.append("用户禁用MinerU正式PDF解析。")
@@ -550,6 +679,8 @@ def audit_limited_reasons(args, meta: Dict[str, Any], has_pdf_input=False) -> Li
         reasons.append(f"用户设置参考文献在线核验上限: {getattr(args, 'reference_online_limit')}。")
     elif reference_count and reference_checked < reference_count:
         reasons.append(f"参考文献在线核验覆盖不足: {reference_checked}/{reference_count}。")
+    if resource_count and getattr(args, "no_resource_online", False):
+        reasons.append("用户关闭代码仓库与在线资源可用性校检。")
     if image_count and getattr(args, "image_audit_limit", None) is not None:
         reasons.append(f"用户设置图像审查上限: {getattr(args, 'image_audit_limit')}。")
     if image_count and getattr(args, "no_image_semantic", False):
@@ -584,6 +715,14 @@ def coverage_blocking_failure(meta: Dict[str, Any]) -> Tuple[str, str, Dict[str,
         checked = [ref.get("online") or {} for ref in references if (ref.get("online") or {}).get("online_status")]
         if checked and all(item.get("online_status") == "error" for item in checked):
             return "reference_lookup", "参考文献在线核验服务全部失败。", {"reference_count": reference_audit.get("reference_count"), "online_checked": reference_audit.get("online_checked")}
+
+    resource_audit = meta.get("resource_audit") or {}
+    resources = resource_audit.get("resources") or []
+    if resource_audit.get("resource_count", 0) and resource_audit.get("online_enabled") and resources:
+        checked = [item.get("availability") or {} for item in resources if (item.get("availability") or {}).get("status")]
+        provider_errors = [item for item in checked if item.get("status") == "error"]
+        if checked and provider_errors and len(provider_errors) == len(checked):
+            return "resource_availability", "代码仓库与在线资源可用性校检服务全部失败。", {"resource_count": resource_audit.get("resource_count"), "online_checked": resource_audit.get("online_checked")}
 
     image_audit = meta.get("image_audit") or {}
     images = image_audit.get("images") or []
@@ -683,13 +822,13 @@ def preflight_text_llm(timeout=10) -> PreflightResult:
     }
     try:
         resp = requests.post(
-            LLM_API_URL,
+            _chat_completions_endpoint(LLM_API_URL),
             json=payload,
             headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json", "User-Agent": "PaperAudit/1.0"},
             timeout=timeout,
         )
         status = getattr(resp, "status_code", None)
-        details = {"http_status": status, "endpoint": LLM_API_URL, "model": LLM_MODEL}
+        details = {"http_status": status, "endpoint": _chat_completions_endpoint(LLM_API_URL), "model": LLM_MODEL}
         if status in {401, 403}:
             return PreflightResult("text_llm", False, "provider_auth_failed", "文本LLM认证失败，请检查LLM_API_KEY。", details)
         if status and status >= 500:
@@ -701,7 +840,7 @@ def preflight_text_llm(timeout=10) -> PreflightResult:
             return PreflightResult("text_llm", False, "preflight_invalid_response", "文本LLM预检未返回choices。", {**details, "response": data})
         return PreflightResult("text_llm", True, details=details)
     except Exception as e:
-        return PreflightResult("text_llm", False, "provider_unavailable", f"文本LLM预检请求失败: {e}", {"endpoint": LLM_API_URL, "model": LLM_MODEL})
+        return PreflightResult("text_llm", False, "provider_unavailable", f"文本LLM预检请求失败: {e}", {"endpoint": _chat_completions_endpoint(LLM_API_URL), "model": LLM_MODEL})
 
 
 def preflight_failure_to_audit_failure(
@@ -733,8 +872,57 @@ def preflight_failure_to_audit_failure(
     )
 
 
+def _shell_quote(value: Any) -> str:
+    return shlex.quote(str(value))
+
+
+def _append_flag(parts: List[str], enabled: bool, flag: str):
+    if enabled:
+        parts.append(flag)
+
+
+def retry_command_from_args(args, input_path: Path) -> str:
+    """Build a retry command that keeps the current audit scope and reuses resume caches."""
+    parts = ["python", "paper_audit.py", str(input_path)]
+
+    option_pairs = [
+        ("output", "--output"),
+        ("mineru_model", "--mineru-model"),
+        ("mineru_lang", "--mineru-lang"),
+        ("max_chars", "--max-chars"),
+        ("reference_online_limit", "--reference-online-limit"),
+        ("reference_timeout", "--reference-timeout"),
+        ("resource_timeout", "--resource-timeout"),
+        ("image_audit_limit", "--image-audit-limit"),
+        ("image_semantic_limit", "--image-semantic-limit"),
+        ("image_semantic_timeout", "--image-semantic-timeout"),
+        ("image_detector_limit", "--image-detector-limit"),
+        ("image_detector_timeout", "--image-detector-timeout"),
+        ("llm_timeout", "--llm-timeout"),
+        ("llm_retries", "--llm-retries"),
+    ]
+    for attr, flag in option_pairs:
+        value = getattr(args, attr, None)
+        if value is not None and value != "":
+            parts.extend([flag, str(value)])
+
+    _append_flag(parts, bool(getattr(args, "json", False)), "--json")
+    _append_flag(parts, bool(getattr(args, "no_open", False)), "--no-open")
+    _append_flag(parts, bool(getattr(args, "mineru", False)), "--mineru")
+    _append_flag(parts, bool(getattr(args, "no_mineru", False)), "--no-mineru")
+    _append_flag(parts, bool(getattr(args, "no_reference_online", False)), "--no-reference-online")
+    _append_flag(parts, bool(getattr(args, "no_resource_online", False)), "--no-resource-online")
+    _append_flag(parts, bool(getattr(args, "no_image_semantic", False)), "--no-image-semantic")
+    _append_flag(parts, bool(getattr(args, "no_image_detector", False)), "--no-image-detector")
+    _append_flag(parts, bool(getattr(args, "strict_failed_chunks", False)), "--strict-failed-chunks")
+    _append_flag(parts, bool(getattr(args, "ai_detect", False)), "--ai-detect")
+    _append_flag(parts, bool(getattr(args, "image_detect", False)), "--image-detect")
+
+    return " ".join(_shell_quote(part) for part in parts)
+
+
 def default_retry_command(input_path: Path) -> str:
-    return f"python paper_audit.py {json.dumps(str(input_path), ensure_ascii=False)} --json"
+    return f"python paper_audit.py {_shell_quote(str(input_path))} --json"
 
 
 @dataclass
@@ -1056,6 +1244,7 @@ def run_adapter_e2e_audit(
         "total_chars": len(text),
         "extraction_method": "fake_adapter",
         "reference_audit": {"reference_count": 1 if references_text else 0},
+        "resource_audit": {"resource_count": 0, "resources": [], "issues": []},
         "image_audit": image_audit,
         "prompt_version": PROMPT_VERSION,
         "schema_version": SCHEMA_VERSION,
@@ -1094,6 +1283,8 @@ class RunRequest:
     no_reference_online: bool = False
     reference_online_limit: int = None
     reference_timeout: int = 10
+    no_resource_online: bool = False
+    resource_timeout: int = 10
     no_image_semantic: bool = False
     image_semantic_limit: int = None
     image_semantic_timeout: int = 45
@@ -1101,6 +1292,7 @@ class RunRequest:
     image_detector_limit: int = None
     image_detector_timeout: int = 60
     no_resume: bool = False
+    fresh: bool = False
     llm_timeout: int = LLM_TIMEOUT
     llm_retries: int = LLM_RETRIES
     strict_failed_chunks: bool = False
@@ -1123,6 +1315,8 @@ class RunRequest:
             no_reference_online=bool(getattr(args, "no_reference_online", False)),
             reference_online_limit=getattr(args, "reference_online_limit", None),
             reference_timeout=int(getattr(args, "reference_timeout", 10)),
+            no_resource_online=bool(getattr(args, "no_resource_online", False)),
+            resource_timeout=int(getattr(args, "resource_timeout", 10)),
             no_image_semantic=bool(getattr(args, "no_image_semantic", False)),
             image_semantic_limit=getattr(args, "image_semantic_limit", None),
             image_semantic_timeout=int(getattr(args, "image_semantic_timeout", 45)),
@@ -1130,6 +1324,7 @@ class RunRequest:
             image_detector_limit=getattr(args, "image_detector_limit", None),
             image_detector_timeout=int(getattr(args, "image_detector_timeout", 60)),
             no_resume=bool(getattr(args, "no_resume", False)),
+            fresh=bool(getattr(args, "fresh", False)),
             llm_timeout=int(getattr(args, "llm_timeout", LLM_TIMEOUT)),
             llm_retries=int(getattr(args, "llm_retries", LLM_RETRIES)),
             strict_failed_chunks=bool(getattr(args, "strict_failed_chunks", False)),
@@ -1313,6 +1508,16 @@ def _http_request(url, method="GET", headers=None, data=None, timeout=60):
         resp = requests.request(method, url, headers=headers, data=data, timeout=timeout)
     resp.raise_for_status()
     return resp.content, resp.status_code
+
+
+def _chat_completions_endpoint(api_url: str) -> str:
+    """Accept either an OpenAI-compatible base URL or a full chat completions URL."""
+    url = str(api_url or "").strip().rstrip("/")
+    if not url:
+        return url
+    if url.endswith("/chat/completions"):
+        return url
+    return f"{url}/chat/completions"
 
 
 def mineru_precision_extract_by_url(pdf_url, model_version="vlm", language="ch",
@@ -1610,7 +1815,7 @@ def _format_mineru_content_list(data):
     ]
     table_idx = 0
     figure_idx = 0
-    for item in data:
+    for item in _flatten_mineru_items(data):
         if not isinstance(item, dict):
             continue
         block_type = _mineru_block_type(item)
@@ -1629,16 +1834,29 @@ def _format_mineru_content_list(data):
     return "\n\n".join(parts)
 
 
+def _flatten_mineru_items(data):
+    """Yield MinerU layout items from flat or page-nested content lists."""
+    if isinstance(data, dict):
+        yield data
+        return
+    if isinstance(data, list):
+        for item in data:
+            yield from _flatten_mineru_items(item)
+
+
 def _mineru_block_type(item):
     raw = str(item.get("type") or item.get("category") or item.get("block_type") or "").lower()
+    content = item.get("content")
     if "table" in raw:
         return "table"
-    if raw in {"image", "figure"} or "image" in raw or "figure" in raw:
+    if raw in {"image", "figure", "chart"} or "image" in raw or "figure" in raw or "chart" in raw:
         return "figure"
     if "title" in raw:
         return "title"
     if "equation" in raw or "formula" in raw:
         return "formula"
+    if raw == "list" and isinstance(content, dict) and content.get("list_type") == "reference_list":
+        return "reference_list"
     return raw or "text"
 
 
@@ -1647,24 +1865,95 @@ def _mineru_block_text(item):
         value = item.get(key)
         if isinstance(value, str) and value.strip():
             return value
+        if isinstance(value, dict):
+            extracted = _mineru_content_text(value)
+            if extracted:
+                return extracted
     texts = []
-    for key in ("table_caption", "image_caption", "img_caption"):
+    for key in ("table_caption", "table_footnote", "image_caption", "img_caption", "chart_caption", "chart_footnote"):
         value = item.get(key)
         if isinstance(value, list):
-            texts.extend(str(v) for v in value if str(v).strip())
+            texts.extend(_mineru_content_text(v) for v in value if _mineru_content_text(v))
         elif isinstance(value, str) and value.strip():
             texts.append(value)
     return "\n".join(texts)
 
 
+def _mineru_content_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        parts = [_mineru_content_text(v) for v in value]
+        return " ".join(p for p in parts if p).strip()
+    if not isinstance(value, dict):
+        return ""
+
+    direct = value.get("content")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    html_value = value.get("html")
+    parts = []
+    for key in (
+        "title_content", "paragraph_content", "page_header_content", "page_footer_content",
+        "page_number_content", "math_content", "table_caption", "table_footnote",
+        "image_caption", "image_footnote", "chart_caption", "chart_footnote", "item_content",
+    ):
+        item = value.get(key)
+        text = _mineru_content_text(item)
+        if text:
+            parts.append(text)
+    list_items = value.get("list_items")
+    if isinstance(list_items, list):
+        for idx, item in enumerate(list_items, 1):
+            text = _mineru_content_text(item)
+            if text:
+                parts.append(f"{idx}. {text}")
+    if isinstance(html_value, str) and html_value.strip():
+        parts.append(html_value.strip())
+    return "\n".join(parts).strip()
+
+
 def _format_mineru_table_block(text, page, table_idx):
-    text = _normalize_markdown_table(text)
+    text = _normalize_mineru_table_text(text)
     return (
         f"[[TABLE_START page={page} id={table_idx}]]\n"
         "[[EXTRACTION_NOTE]] This table was extracted by MinerU/OCR. Broken alignment, merged cells, or missing separators are extraction artifacts unless numeric contradictions are explicit. [[/EXTRACTION_NOTE]]\n"
         f"{text}\n"
         "[[TABLE_END]]"
     )
+
+
+def _normalize_mineru_table_text(text):
+    raw = str(text or "")
+    rows = _parse_html_table_rows(text)
+    if rows:
+        prefix = re.split(r"<table\b", raw, maxsplit=1, flags=re.I)[0]
+        prefix = re.sub(r"<[^>]+>", " ", html.unescape(prefix))
+        prefix = re.sub(r"\s+", " ", prefix).strip()
+        table_text = _table_rows_to_markdown(rows)
+        return "\n".join(part for part in (prefix, table_text) if part)
+    return _normalize_markdown_table(text)
+
+
+def _table_rows_to_markdown(rows):
+    rows = [[re.sub(r"\s+", " ", str(cell or "")).strip() for cell in row] for row in rows if row]
+    if not rows:
+        return ""
+    max_cols = max(len(row) for row in rows)
+    rows = [row + [""] * (max_cols - len(row)) for row in rows]
+
+    def cell(value):
+        return str(value).replace("|", "\\|")
+
+    lines = ["| " + " | ".join(cell(c) for c in rows[0]) + " |"]
+    lines.append("| " + " | ".join("---" for _ in range(max_cols)) + " |")
+    for row in rows[1:]:
+        lines.append("| " + " | ".join(cell(c) for c in row) + " |")
+    return "\n".join(lines)
 
 
 def _normalize_markdown_table(text):
@@ -1786,7 +2075,16 @@ def find_project_files(root_path: Path) -> Tuple[Dict, List[Path]]:
     SUPPORTED_EXTS = {".pdf", ".docx", ".xlsx", ".xlsm", ".csv", ".txt", ".md"}
     SUPPLEMENT_KEYWORDS = {"supplement", "supp", "补充材料", "原始数据", "data", "source", "appendix"}
     REFERENCE_KEYWORDS = {"reference", "references", "bibliography", "参考文献", "参考资料"}
-    GENERATED_MARKERS = (".audit.", ".paper_audit.", ".mineru.", ".mineru_")
+    GENERATED_MARKERS = (
+        ".audit.",
+        ".limited.",
+        ".failed.",
+        "audit_report.",
+        "reference_audit_full.",
+        ".paper_audit.",
+        ".mineru.",
+        ".mineru_",
+    )
     
     file_categories = {
         "main_paper": None,
@@ -1867,7 +2165,7 @@ def _is_missing_meta_value(value):
 
 def normalize_run_meta(meta, input_path=None, full_text=None):
     """Fill display/report metadata that may be missing from older resume caches."""
-    normalized = dict(meta or {})
+    normalized = ensure_runtime_meta(meta)
     normalized.setdefault("prompt_version", PROMPT_VERSION)
     normalized.setdefault("schema_version", SCHEMA_VERSION)
     normalized.setdefault("adapter_version", ADAPTER_VERSION)
@@ -2141,10 +2439,17 @@ def call_llm(text, max_retries=None, chunk_info=None, timeout=None):
         idx, total = chunk_info
         user_msg = (
             f"审查以下论文文本（第{idx+1}/{total}段，请重点关注本段内容，"
-            f"同时注意与其他段落的逻辑连贯性）：\n\n{text}"
+            f"同时注意与其他段落的逻辑连贯性）。"
+            "只返回一个合法JSON对象；checks最多2条；每个字符串字段不超过120字；"
+            "source_text/source/evidence必须短摘录，不能展开长篇推理：\n\n"
+            f"{text}"
         )
     else:
-        user_msg = f"审查以下论文文本：\n\n{text}"
+        user_msg = (
+            "审查以下论文文本。只返回一个合法JSON对象；checks最多3条；"
+            "每个字符串字段不超过120字；source_text/source/evidence必须短摘录：\n\n"
+            f"{text}"
+        )
 
     payload = {
         "model": LLM_MODEL,
@@ -2152,7 +2457,8 @@ def call_llm(text, max_retries=None, chunk_info=None, timeout=None):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_msg}
         ],
-        "temperature": 0.2
+        "temperature": 0.2,
+        "max_tokens": 4000,
     }
     _BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     last_err = None
@@ -2161,7 +2467,7 @@ def call_llm(text, max_retries=None, chunk_info=None, timeout=None):
             if attempt:
                 print(f"     ↻ API重试 {attempt}/{max_retries}（timeout={timeout}s）")
             resp = requests.post(
-                LLM_API_URL, json=payload,
+                _chat_completions_endpoint(LLM_API_URL), json=payload,
                 headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json", "User-Agent": _BROWSER_UA},
                 timeout=timeout
             )
@@ -2190,7 +2496,7 @@ def call_llm_messages(messages, temperature=0.2, timeout=None, max_tokens=1800):
     }
     _BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     resp = requests.post(
-        LLM_API_URL,
+        _chat_completions_endpoint(LLM_API_URL),
         json=payload,
         headers={
             "Authorization": f"Bearer {LLM_API_KEY}",
@@ -2245,6 +2551,84 @@ def build_followup_prompt(kind, context):
 def generate_followup_draft(kind, context, timeout=None):
     messages = build_followup_prompt(kind, context)
     return call_llm_messages(messages, temperature=0.15, timeout=timeout, max_tokens=2200)
+
+
+def report_action_service_url(host="127.0.0.1", port=8765):
+    return f"http://{host}:{int(port)}"
+
+
+def report_action_service_health(host="127.0.0.1", port=8765, timeout=0.5):
+    """Return the local report action service health payload, or None when unavailable."""
+    try:
+        with urllib.request.urlopen(f"{report_action_service_url(host, port)}/health", timeout=timeout) as resp:
+            if resp.status != 200:
+                return None
+            payload = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
+            if payload.get("ok"):
+                return payload
+    except Exception:
+        return None
+    return None
+
+
+def _report_action_entrypoint():
+    candidate = Path(__file__).resolve().parents[1] / "paper_audit.py"
+    if candidate.exists():
+        return candidate
+    return Path(sys.argv[0]).resolve()
+
+
+def ensure_report_action_service(host="127.0.0.1", port=8765, log_path: Path = None, startup_timeout=2.0):
+    """Start or reuse the localhost action service used by generated HTML reports."""
+    existing = report_action_service_health(host=host, port=port, timeout=0.3)
+    if existing:
+        return {"ok": True, "status": "already_running", "url": report_action_service_url(host, port), "health": existing}
+
+    command = [
+        sys.executable,
+        str(_report_action_entrypoint()),
+        "--serve-report-actions",
+        "--report-actions-port",
+        str(int(port)),
+    ]
+    popen_kwargs = {
+        "stdin": subprocess.DEVNULL,
+        "start_new_session": True,
+    }
+    if log_path:
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(log_path, "a", encoding="utf-8")
+        popen_kwargs["stdout"] = log_file
+        popen_kwargs["stderr"] = subprocess.STDOUT
+    else:
+        log_file = None
+        popen_kwargs["stdout"] = subprocess.DEVNULL
+        popen_kwargs["stderr"] = subprocess.DEVNULL
+
+    try:
+        process = subprocess.Popen(command, **popen_kwargs)
+    except Exception as e:
+        if log_file:
+            log_file.close()
+        return {"ok": False, "status": "start_failed", "url": report_action_service_url(host, port), "error": f"{type(e).__name__}: {_brief_text(str(e), 240)}"}
+    finally:
+        if log_file:
+            log_file.close()
+
+    deadline = time.time() + float(startup_timeout)
+    while time.time() < deadline:
+        health = report_action_service_health(host=host, port=port, timeout=0.3)
+        if health:
+            return {"ok": True, "status": "started", "url": report_action_service_url(host, port), "pid": process.pid, "health": health}
+        if process.poll() is not None:
+            return {"ok": False, "status": "exited", "url": report_action_service_url(host, port), "pid": process.pid, "returncode": process.returncode}
+        time.sleep(0.1)
+    return {"ok": True, "status": "starting", "url": report_action_service_url(host, port), "pid": process.pid}
+
+
+def open_html_artifact(html_path: Path):
+    html_abs = str(Path(html_path).resolve())
+    webbrowser.open(f"file:///{html_abs}" if platform.system() == "Windows" else f"file://{html_abs}")
 
 
 def serve_report_actions(host="127.0.0.1", port=8765):
@@ -2394,6 +2778,173 @@ def _downgrade_extraction_red_flags(checks):
     return checks
 
 
+def _check_text_blob(check: Dict[str, Any]) -> str:
+    fields = ("category", "item", "verdict", "source", "source_text", "evidence", "reason", "recommendation", "detail")
+    return " ".join(str(check.get(field) or "") for field in fields)
+
+
+def _extract_years_from_check(check: Dict[str, Any]) -> List[int]:
+    years = []
+    for match in re.findall(r"\b((?:19|20)\d{2})\b", _check_text_blob(check)):
+        try:
+            years.append(int(match))
+        except ValueError:
+            pass
+    return years
+
+
+def _is_future_publication_check(check: Dict[str, Any]) -> bool:
+    blob = _check_text_blob(check).lower()
+    future_terms = ("未来", "future", "尚未发表", "未发表", "publication date", "发表时间", "发表年份", "出版时间", "出版年份")
+    return any(term in blob for term in future_terms)
+
+
+def _downgrade_unverified_future_publication_checks(checks, current_year=None):
+    current_year = int(current_year or runtime_utc_year())
+    for check in checks:
+        if not _is_future_publication_check(check):
+            continue
+        future_years = [year for year in _extract_years_from_check(check) if year > current_year]
+        if future_years:
+            check["_runtime_year_check"] = {
+                "current_year": current_year,
+                "future_years": sorted(set(future_years)),
+                "status": "confirmed_future_year_in_evidence",
+            }
+            continue
+        if "红旗" in str(check.get("verdict", "")):
+            check["verdict"] = "⚠️疑点"
+        check["_verdict_adjusted"] = "future_publication_runtime_year_not_confirmed"
+        check["_runtime_year_check"] = {
+            "current_year": current_year,
+            "future_years": [],
+            "status": "not_future_by_runtime_year",
+        }
+        note = f"自动降级：发表时间是否在未来必须以运行时年份({current_year})和在线元数据为准；该项未在证据文本中给出晚于当前年份的年份，不能仅凭LLM知识库判断。"
+        detail = check.get("detail") or check.get("reason") or ""
+        check["detail"] = f"{note} {detail}".strip()
+        if not check.get("recommendation"):
+            check["recommendation"] = "使用参考文献在线核验结果、DOI/Crossref/OpenAlex/PubMed元数据或出版方页面确认发表时间。"
+    return checks
+
+
+_CHECK_STOPWORDS = {
+    "数据", "结果", "方法", "论文", "文献", "引用", "参考", "检查", "问题", "疑点", "红旗",
+    "可能", "存在", "出现", "显示", "发现", "需要", "核对", "一致", "不一致", "异常",
+    "the", "and", "for", "with", "from", "that", "this", "into", "using", "used",
+}
+
+
+def _normalize_check_terms(value: str) -> set:
+    text = str(value or "").lower()
+    tokens = re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]{2,}", text)
+    return {token for token in tokens if len(token) >= 2 and token not in _CHECK_STOPWORDS}
+
+
+def _check_similarity(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    a_terms = _normalize_check_terms(" ".join(str(a.get(k, "")) for k in ("category", "item", "source", "evidence", "reason")))
+    b_terms = _normalize_check_terms(" ".join(str(b.get(k, "")) for k in ("category", "item", "source", "evidence", "reason")))
+    if not a_terms or not b_terms:
+        return 0.0
+    overlap = len(a_terms & b_terms)
+    return overlap / max(1, min(len(a_terms), len(b_terms)))
+
+
+def _check_merge_key(check: Dict[str, Any]):
+    return (
+        re.sub(r"\s+", "", str(check.get("category", "")).lower()),
+        re.sub(r"\s+", "", str(check.get("item", "")).lower()),
+    )
+
+
+def _check_severity(verdict: str) -> int:
+    if "红旗" in str(verdict):
+        return 3
+    if "疑点" in str(verdict):
+        return 2
+    if "通过" in str(verdict):
+        return 1
+    return 0
+
+
+def _same_or_similar_check(existing: Dict[str, Any], new: Dict[str, Any]) -> bool:
+    if _check_merge_key(existing) == _check_merge_key(new):
+        return True
+    if _is_extraction_limited_check(existing) or _is_extraction_limited_check(new):
+        return False
+    category_a = str(existing.get("category") or "")
+    category_b = str(new.get("category") or "")
+    if category_a and category_b and category_a != category_b and _token_similarity(category_a, category_b) < 0.5:
+        return False
+    return _check_similarity(existing, new) >= 0.68
+
+
+def _append_unique_evidence(existing: Dict[str, Any], new: Dict[str, Any], chunk_idx: int):
+    evidence = str(new.get("evidence") or "").strip()
+    if evidence and evidence not in str(existing.get("evidence") or ""):
+        prefix = str(existing.get("evidence") or "").strip()
+        suffix = f"[第{chunk_idx + 1}段补充: {evidence}]"
+        existing["evidence"] = f"{prefix} {suffix}".strip()
+
+
+def _merge_check_into(existing: Dict[str, Any], new: Dict[str, Any], chunk_idx: int):
+    similarity = _check_similarity(existing, new)
+    old_s = _check_severity(existing.get("verdict", ""))
+    new_s = _check_severity(new.get("verdict", ""))
+    if _check_merge_key(existing) != _check_merge_key(new) or similarity >= 0.68:
+        group = existing.setdefault("merged_group", {
+            "count": 1,
+            "source_chunks": list(existing.get("_source_chunks") or [existing.get("_source_chunk")]),
+            "items": [existing.get("item")],
+            "merge_reason": "category_item_or_evidence_similarity",
+            "members": [_check_member_summary(existing, similarity=1.0)],
+        })
+        group["members"].append(_check_member_summary(new, similarity=round(similarity, 3)))
+        group["count"] = len(group["members"])
+        if new.get("item") and new.get("item") not in group["items"]:
+            group["items"].append(new.get("item"))
+        source_chunk = new.get("_source_chunk", chunk_idx + 1)
+        if source_chunk not in group["source_chunks"]:
+            group["source_chunks"].append(source_chunk)
+    if new_s > old_s:
+        for key in ("verdict", "source", "source_text", "evidence", "reason", "recommendation", "detail", "confidence"):
+            if new.get(key):
+                existing[key] = new.get(key)
+    else:
+        _append_unique_evidence(existing, new, chunk_idx)
+    sources = list(existing.get("_source_chunks") or [])
+    source_chunk = new.get("_source_chunk", chunk_idx + 1)
+    if source_chunk not in sources:
+        sources.append(source_chunk)
+    existing["_source_chunks"] = sources
+    if _check_merge_key(existing) != _check_merge_key(new) or similarity >= 0.68:
+        existing["_merged_similar_count"] = int(existing.get("_merged_similar_count", 1)) + 1
+        items = list(existing.get("_merged_similar_items") or [existing.get("item")])
+        if new.get("item") and new.get("item") not in items:
+            items.append(new.get("item"))
+        existing["_merged_similar_items"] = items[:8]
+
+
+def _check_member_summary(check: Dict[str, Any], similarity=None) -> Dict[str, Any]:
+    member = {
+        "chunk": check.get("_source_chunk"),
+        "category": check.get("category"),
+        "item": check.get("item"),
+        "verdict": check.get("verdict"),
+        "source": check.get("source"),
+        "source_text": _brief_text(check.get("source_text") or "", 500),
+        "evidence": _brief_text(check.get("evidence") or "", 500),
+        "reason": _brief_text(check.get("reason") or check.get("detail") or "", 500),
+        "recommendation": _brief_text(check.get("recommendation") or "", 300),
+        "confidence": check.get("confidence"),
+    }
+    if check.get("_verdict_adjusted"):
+        member["_verdict_adjusted"] = check.get("_verdict_adjusted")
+    if similarity is not None:
+        member["merge_similarity"] = similarity
+    return {k: v for k, v in member.items() if v not in (None, "")}
+
+
 PROMPT_VERSION = "text_audit_prompt_v1"
 SCHEMA_VERSION = "strict_evidence_schema_v1"
 ADAPTER_VERSION = "audit_adapters_v1"
@@ -2423,7 +2974,7 @@ def _brief_check_list(checks, limit=4):
 
 def _build_merged_summary(total_reports, risk_level, red_flags, evidence_warnings, extraction_warnings):
     parts = [
-        f"[合并{total_reports}段审查] 风险等级{risk_level}",
+        f"[合并{total_reports}段审查] 复核优先级{risk_level}",
         f"红旗{red_flags}项",
         f"证据型疑点{evidence_warnings}项",
         f"提取质量疑点{extraction_warnings}项",
@@ -2444,7 +2995,7 @@ def _build_merged_conclusion(reports, all_checks, risk_level, red_flags, evidenc
     red_flag_checks = [c for c in all_checks if "红旗" in str(c.get("verdict", ""))]
 
     parts = [
-        f"综合结论：合并{len(valid_reports) or len(reports)}段审查后，当前风险等级为{risk_level}；最终结论以合并后检查项为准，而不是逐段LLM原始措辞。",
+        f"综合结论：合并{len(valid_reports) or len(reports)}段审查后，当前复核优先级为{risk_level}；最终结论以合并后检查项为准，而不是逐段LLM原始措辞。",
     ]
     if red_flags:
         parts.append(f"保留红旗{red_flags}项，优先核对：{_brief_check_list(red_flag_checks)}。")
@@ -2467,7 +3018,9 @@ def _build_merged_conclusion(reports, all_checks, risk_level, red_flags, evidenc
 def apply_risk_rules(report: Dict[str, Any], stat_result=None, image_audit=None) -> Dict[str, Any]:
     """Apply versioned deterministic rules for final risk and evidence risk score."""
     report = dict(report or {})
-    checks = _downgrade_extraction_red_flags([dict(c) for c in report.get("checks", []) if isinstance(c, dict)])
+    checks = [dict(c) for c in report.get("checks", []) if isinstance(c, dict)]
+    checks = _downgrade_unverified_future_publication_checks(checks)
+    checks = _downgrade_extraction_red_flags(checks)
     warning_checks = [c for c in checks if "疑点" in str(c.get("verdict", ""))]
     red_flags = sum(1 for c in checks if "红旗" in str(c.get("verdict", "")))
     extraction_warnings = sum(1 for c in warning_checks if _is_extraction_limited_check(c))
@@ -2529,37 +3082,25 @@ def merge_chunk_reports(reports, stat_result=None):
 
     reports: [parse_report返回的dict, ...]
     """
-    # 1. 收集所有检查项，按 (category, item) 去重
-    seen_keys = set()
+    # 1. 收集所有检查项，按精确项和相近问题统合，避免同一风险跨分块重复出现。
     all_checks = []
     for i, r in enumerate(reports):
         if r.get("parse_error"):
             continue
         for c in r.get("checks", []):
-            key = (c.get("category", ""), c.get("item", ""))
-            if key not in seen_keys:
-                seen_keys.add(key)
-                c["_source_chunk"] = i + 1
-                all_checks.append(c)
+            if not isinstance(c, dict):
+                continue
+            candidate = dict(c)
+            candidate["_source_chunk"] = i + 1
+            for existing in all_checks:
+                if _same_or_similar_check(existing, candidate):
+                    _merge_check_into(existing, candidate, i)
+                    break
             else:
-                # 合并：如果已有同key项，补充来源信息
-                for existing in all_checks:
-                    ekey = (existing.get("category", ""), existing.get("item", ""))
-                    if ekey == key:
-                        # 保留更严重的判定
-                        severity = {"🚩红旗": 3, "⚠️疑点": 2, "✅通过": 1}
-                        old_s = severity.get(existing.get("verdict", ""), 0)
-                        new_s = severity.get(c.get("verdict", ""), 0)
-                        if new_s > old_s:
-                            existing["verdict"] = c["verdict"]
-                            existing["evidence"] = c.get("evidence", existing.get("evidence", ""))
-                            existing["detail"] = c.get("detail", existing.get("detail", ""))
-                        # 补充证据
-                        if c.get("evidence") and c["evidence"] not in existing.get("evidence", ""):
-                            existing["evidence"] = (existing.get("evidence", "") + 
-                                                     f" [第{c.get('_source_chunk', i+1)}段补充: {c['evidence']}]")
-                        break
+                candidate["_source_chunks"] = [i + 1]
+                all_checks.append(candidate)
 
+    all_checks = _downgrade_unverified_future_publication_checks(all_checks)
     all_checks = _downgrade_extraction_red_flags(all_checks)
 
     # 2. 统计红旗/疑点数量。OCR/表格提取质量问题单独计数，避免低证据噪声堆叠成高风险。
@@ -2608,6 +3149,7 @@ def merge_chunk_reports(reports, stat_result=None):
     # 清理临时字段
     for c in all_checks:
         c.pop("_source_chunk", None)
+        c.pop("_source_chunks", None)
 
     return {
         "summary": merged_summary,
@@ -2660,24 +3202,30 @@ def normalize_llm_report_schema(report: Dict[str, Any], raw_output: str = "") ->
 
     errors = []
     normalized_checks = []
+    recovered_schema = False
     for idx, check in enumerate(checks):
         if not isinstance(check, dict):
             errors.append(f"checks[{idx}]: not_object")
             continue
         missing = _missing_finding_fields(check)
         if missing:
-            errors.append(f"checks[{idx}]: missing {','.join(missing)}")
-            continue
+            recovered_schema = True
         normalized = dict(check)
         normalized.setdefault("category", "未分类")
         normalized.setdefault("item", "未命名检查项")
+        normalized.setdefault("verdict", "⚠️疑点")
         normalized["source_text"] = normalized.get("source_text") or normalized.get("source") or normalized.get("quote") or "未找到直接原文证据"
         normalized["source"] = normalized.get("source") or normalized["source_text"]
+        normalized.setdefault("evidence", normalized["source_text"])
+        normalized.setdefault("reason", "LLM未完整返回该字段，已按需人工复核处理。")
+        normalized.setdefault("recommendation", "人工复核该检查项对应原文和模型输出。")
         try:
             normalized["confidence"] = float(normalized.get("confidence"))
         except (TypeError, ValueError):
-            errors.append(f"checks[{idx}]: invalid confidence")
-            continue
+            normalized["confidence"] = 0.2
+            recovered_schema = True
+        if missing:
+            normalized["_schema_recovered_missing_fields"] = missing
         normalized_checks.append(normalized)
 
     if errors:
@@ -2689,6 +3237,9 @@ def normalize_llm_report_schema(report: Dict[str, Any], raw_output: str = "") ->
     normalized_report.setdefault("risk_level", "未知")
     normalized_report.setdefault("detection_score", 0)
     normalized_report.setdefault("conclusion", "")
+    if recovered_schema:
+        normalized_report["_schema_recovered"] = True
+        normalized_report.setdefault("schema_errors", []).append("missing_or_invalid_check_fields")
     if raw_output:
         normalized_report["_raw_response_preserved"] = True
     return normalized_report
@@ -2715,25 +3266,51 @@ def parse_report(content):
         except json.JSONDecodeError:
             pass
 
-    # Preserve raw truncated output for diagnostics, but do not accept it into complete reports.
+    # Recover common gateway truncation/non-strict JSON cases into an explicit
+    # manual-review finding so one malformed chunk does not discard an otherwise
+    # complete multi-chunk audit.
     summary = re.search(r'"summary"\s*:\s*"((?:\\.|[^"\\])*)"', content)
     risk = re.search(r'"risk_level"\s*:\s*"((?:\\.|[^"\\])*)"', content)
-    score = re.search(r'"detection_score"\s*:\s*(\d+)', content)
+    score = re.search(r'"detection_score"\s*:\s*([0-9]+(?:\.[0-9]+)?)', content)
     verdict = re.search(r'"verdict"\s*:\s*"((?:\\.|[^"\\])*)"', content)
     category = re.search(r'"category"\s*:\s*"((?:\\.|[^"\\])*)"', content)
     item = re.search(r'"item"\s*:\s*"((?:\\.|[^"\\])*)"', content)
     if summary or risk or verdict:
+        recovered_summary = _json_string_unescape(summary.group(1)) if summary else "LLM返回JSON不完整，已转为需人工复核项。"
+        recovered_risk = _json_string_unescape(risk.group(1)) if risk else "中"
+        try:
+            recovered_score = float(score.group(1)) if score else 50
+        except Exception:
+            recovered_score = 50
+        recovered_verdict = _json_string_unescape(verdict.group(1)) if verdict else "⚠️疑点"
+        recovered_category = _json_string_unescape(category.group(1)) if category else "结构与引用"
+        recovered_item = _json_string_unescape(item.group(1)) if item else "LLM输出结构异常"
         return {
-            "parse_error": True,
-            "schema_error": True,
+            "summary": recovered_summary,
+            "risk_level": recovered_risk,
+            "detection_score": recovered_score,
+            "checks": [{
+                "category": recovered_category,
+                "item": recovered_item,
+                "verdict": recovered_verdict,
+                "source": "LLM分块输出",
+                "source_text": "该分块模型返回了截断或非严格JSON，需人工复核原文和模型原始输出。",
+                "evidence": _brief_text(content, 240),
+                "reason": "模型返回内容包含审查结论但不满足严格JSON schema；为避免丢弃该分块，保留为需人工复核项。",
+                "recommendation": "人工复核该分块原文；必要时更换更稳定的文本LLM后重跑。",
+                "confidence": 0.2,
+                "detail": "由截断/非严格JSON自动恢复，不能作为单独定论。",
+            }],
+            "conclusion": "该分块存在LLM输出结构异常，已降级为人工复核项纳入合并报告。",
+            "_schema_recovered": True,
             "schema_errors": ["truncated_json"],
             "partial_fields": {
-                "summary": _json_string_unescape(summary.group(1)) if summary else "",
-                "risk_level": _json_string_unescape(risk.group(1)) if risk else "",
-                "detection_score": int(score.group(1)) if score else 0,
-                "category": _json_string_unescape(category.group(1)) if category else "",
-                "item": _json_string_unescape(item.group(1)) if item else "",
-                "verdict": _json_string_unescape(verdict.group(1)) if verdict else "",
+                "summary": recovered_summary,
+                "risk_level": recovered_risk,
+                "detection_score": recovered_score,
+                "category": recovered_category,
+                "item": recovered_item,
+                "verdict": recovered_verdict,
             },
             "raw_output": content,
         }
@@ -2751,7 +3328,7 @@ def split_references_from_text(text):
     """Remove reference sections from main audit text and return parsed tail text."""
     text = str(text or "")
     pattern = re.compile(
-        r"(?im)^(?:#+\s*)?(?:references|bibliography|参考文献|参考资料|works cited)\s*$"
+        r"(?im)^(?:\[\[BLOCK[^\]]*\]\]\s*)?(?:#+\s*)?(?:references?|bibliography|参考文献|参考资料|works cited)\s*(?:\[\[/BLOCK\]\]\s*)?$"
     )
     matches = list(pattern.finditer(text))
     if not matches:
@@ -2766,41 +3343,88 @@ def audit_references(references_text, online=False, online_limit=50, timeout=10,
     """Reference plausibility check with optional online scholarly database verification."""
     refs = parse_references(references_text)
     effective_online_limit = _effective_limit(online_limit, len(refs))
-    issues = []
     online_checked = 0
     online_cache = cache if isinstance(cache, dict) else {}
 
-    for idx, ref in enumerate(refs, 1):
+    def base_issues_for(ref):
         ref_issues = []
-        if not ref.get("year"):
+        year = ref.get("year")
+        if not year:
             ref_issues.append("missing_year")
+        else:
+            try:
+                if int(year) > runtime_utc_year():
+                    ref_issues.append("future_year")
+            except (TypeError, ValueError):
+                pass
         if not ref.get("doi"):
             ref_issues.append("missing_doi")
         if not ref.get("has_journal_hint"):
             ref_issues.append("missing_journal_or_source")
         if len(ref.get("text", "")) < 25:
             ref_issues.append("too_short")
+        return ref_issues
 
-        if online and online_checked < effective_online_limit:
+    if online:
+        fetch_jobs = []
+        for idx, ref in enumerate(refs, 1):
+            if idx <= effective_online_limit:
+                cache_key = reference_cache_key(ref)
+                online_result = online_cache.get(cache_key)
+                if online_result:
+                    ref["online"] = online_result
+                else:
+                    fetch_jobs.append((idx, ref, cache_key))
+            else:
+                ref["online"] = {
+                    "online_status": "skipped",
+                    "confidence": 0.0,
+                    "problems": ["online_limit_reached"],
+                    "matched_sources": [],
+                    "query": build_reference_query(ref),
+                }
+
+        if fetch_jobs:
+            workers = min(4, len(fetch_jobs))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                future_map = {
+                    executor.submit(verify_reference_online, ref, timeout=timeout): (idx, ref, cache_key)
+                    for idx, ref, cache_key in fetch_jobs
+                }
+                for future in concurrent.futures.as_completed(future_map):
+                    idx, ref, cache_key = future_map[future]
+                    try:
+                        online_result = future.result()
+                    except Exception as e:
+                        online_result = {
+                            "online_status": "error",
+                            "confidence": 0.0,
+                            "query": build_reference_query(ref),
+                            "matched_sources": [],
+                            "problems": ["all_sources_error"],
+                            "source_errors": [f"verify_reference_online: {type(e).__name__}"],
+                            "error_message": _brief_text(str(e), 240),
+                        }
+                    online_cache[cache_key] = online_result
+                    ref["online"] = online_result
+
+        online_checked = sum(
+            1 for idx, ref in enumerate(refs, 1)
+            if idx <= effective_online_limit and (ref.get("online") or {}).get("online_status") != "skipped"
+        )
+
+    issues = []
+    for idx, ref in enumerate(refs, 1):
+        ref_issues = base_issues_for(ref)
+
+        if online and idx <= effective_online_limit:
             cache_key = reference_cache_key(ref)
-            online_result = online_cache.get(cache_key)
-            if not online_result:
-                online_result = verify_reference_online(ref, timeout=timeout)
-                online_cache[cache_key] = online_result
+            online_result = ref.get("online") or online_cache.get(cache_key) or {}
             ref["online"] = online_result
-            online_checked += 1
             online_status = online_result.get("online_status")
             if online_status in {"not_found", "weak", "error"}:
                 ref_issues.append(f"online_{online_status}")
             ref_issues.extend(online_result.get("problems") or [])
-        elif online:
-            ref["online"] = {
-                "online_status": "skipped",
-                "confidence": 0.0,
-                "problems": ["online_limit_reached"],
-                "matched_sources": [],
-                "query": build_reference_query(ref),
-            }
 
         if ref_issues:
             issues.append({"index": idx, "issues": ref_issues, "text": ref.get("text", "")})
@@ -2814,6 +3438,15 @@ def audit_references(references_text, online=False, online_limit=50, timeout=10,
         ]
         if hard_online_issues:
             status = "online_needs_review" if len(hard_online_issues) < max(3, len(refs) // 3) else "online_weak"
+        elif effective_online_limit >= len(refs):
+            online_statuses = [
+                (ref.get("online") or {}).get("online_status")
+                for ref in refs
+            ]
+            if online_statuses and all(item == "verified" for item in online_statuses):
+                status = "ok"
+            elif online_statuses and all(item in {"verified", "likely"} for item in online_statuses):
+                status = "needs_review"
     return {
         "status": status,
         "reference_count": len(refs),
@@ -2834,33 +3467,102 @@ def audit_references(references_text, online=False, online_limit=50, timeout=10,
 
 def parse_references(references_text):
     text = _clean_reference_text(references_text)
-    text = re.sub(r"(?im)^(?:#+\s*)?(?:references|bibliography|参考文献|参考资料|works cited)\s*$", "", text).strip()
+    text = _truncate_reference_suffix(text)
+    text = re.sub(r"(?im)^(?:#+\s*)?(?:references?|bibliography|参考文献|参考资料|works cited)\s*$", "", text).strip()
     if not text:
         return []
-    raw_items = re.split(r"\n\s*(?=(?:\[\d+\]|\d+\.|\(\d+\))\s*)", text)
+    raw_items = _reference_items_from_numbered_lines(text)
     if len(raw_items) <= 1:
         raw_items = re.split(r"\n{2,}", text)
     refs = []
     for item in raw_items:
         item = re.sub(r"\s+", " ", item).strip()
         item = re.sub(r"^(?:\[\d+\]|\d+\.|\(\d+\))\s*", "", item)
+        item = re.sub(r"^\d+\.\s*", "", item)
         if len(item) < 8:
             continue
         if _looks_like_reference_table_noise(item):
             continue
         doi_match = re.search(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+\b", item, re.IGNORECASE)
-        year_match = re.search(r"\b(19|20)\d{2}\b", item)
+        year = extract_reference_year_hint(item)
         has_journal_hint = bool(re.search(r"\b(?:journal|j\.|proc\.|nature|science|cell|ieee|acm|springer|elsevier|frontiers|plos|bmc|lancet)\b", item, re.IGNORECASE))
         doi = _normalize_doi(doi_match.group(0)) if doi_match else ""
         refs.append({
             "text": item,
             "doi": doi,
-            "year": year_match.group(0) if year_match else "",
+            "year": year,
             "has_journal_hint": has_journal_hint,
             "title_hint": extract_reference_title(item),
             "author_hint": extract_reference_author_hint(item),
+            "container_hint": extract_reference_container_hint(item),
         })
     return refs
+
+
+def _truncate_reference_suffix(text):
+    """Drop non-reference sections accidentally captured after References."""
+    text = str(text or "")
+    suffix_heading = re.search(
+        r"(?im)^\s*(?:figure\s+legends?|figures?|tables?|supplementary\s+(?:material|information)|acknowledg(?:e)?ments?)\s*$",
+        text,
+    )
+    if suffix_heading:
+        return text[:suffix_heading.start()].rstrip()
+    return text
+
+
+def _reference_items_from_numbered_lines(text):
+    """Build reference items while tolerating MinerU per-page list numbering.
+
+    MinerU can emit each page's reference_list with local numbering that restarts
+    at 1, while the actual global reference number remains in the text, e.g.
+    "2. 15.Liu...". Continuation lines can therefore look like "1. black-box...".
+    Treat a numbered line as a new reference only when its visible/global number
+    matches the next expected reference number; otherwise append it to the current
+    item.
+    """
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    items = []
+    current = []
+    expected_number = 1
+
+    def flush():
+        nonlocal current
+        if current:
+            items.append(" ".join(current).strip())
+            current = []
+
+    for line in lines:
+        if re.fullmatch(r"(?i)(?:article\s+in\s+press|references?|bibliography|参考文献|参考资料|works cited)", line):
+            continue
+        bracketed = re.match(r"^\[(\d+)\]\s*(.+)$", line)
+        if bracketed:
+            visible_number = int(bracketed.group(1))
+            body = bracketed.group(2).strip()
+        else:
+            numbered = re.match(r"^(\d+)\.\s*(.+)$", line)
+            if not numbered:
+                if current:
+                    current.append(line)
+                continue
+            local_number = int(numbered.group(1))
+            rest = numbered.group(2).strip()
+            nested = re.match(r"^(\d+)\.?\s*(.+)$", rest)
+            if nested:
+                visible_number = int(nested.group(1))
+                body = nested.group(2).strip()
+            else:
+                visible_number = local_number
+                body = rest
+
+        if not current or visible_number == expected_number:
+            flush()
+            current = [body]
+            expected_number = visible_number + 1
+        else:
+            current.append(body)
+    flush()
+    return items
 
 
 def _looks_like_reference_table_noise(item):
@@ -2923,6 +3625,77 @@ def _token_similarity(a, b):
     return len(left & right) / max(len(left), len(right))
 
 
+REFERENCE_CONTAINER_WORD_RE = re.compile(
+    r"\b(?:journal|jclin|proc\.?|proceedings|nature|science|cell|frontiers|plos|bmc|"
+    r"lancet|thyroid|oncology|endocrinology|communications?|commun|annals|cancers|"
+    r"cancer\s+letters?|cancer\s+lett|mol\s+cancer|jama|esmo)\b",
+    re.I,
+)
+
+
+def _looks_like_reference_container_part(part):
+    part = str(part or "").strip()
+    if not REFERENCE_CONTAINER_WORD_RE.search(part):
+        return False
+    normalized = _normalize_title(part)
+    known_short = {
+        "ca cancer jclin",
+        "nat commun",
+        "mol cancer",
+        "cancer lett",
+        "cancer letters",
+        "jama",
+        "the lancet",
+        "thyroid",
+        "cancers basel",
+        "esmo open",
+    }
+    if normalized in known_short:
+        return True
+    if len(_title_tokens(part)) > 6:
+        return False
+    return bool(re.search(
+        r"\b(?:vol\.?|volume)\b|\b\d+\s*,|\b\d+\s+\d+|\(\d{4}\)|\b\d{1,5}\s*[-–]\s*\d{1,5}\b",
+        part,
+        re.I,
+    ))
+
+
+def _looks_like_reference_author_fragment(part):
+    part = str(part or "").strip()
+    if not part:
+        return False
+    if re.fullmatch(r"(?:[A-Z]\.?){1,4}", part):
+        return True
+    if re.search(r"\bet\s+al\b", part, re.I):
+        return True
+    if re.search(r"(?:^|[\s,&])(?:[A-Z]\.){1,3}(?:,|\s|$)", part):
+        return True
+    if re.search(r"\b[A-Z][A-Za-z'’-]+,\s*[A-Z](?:\.|$)", part):
+        return True
+    return False
+
+
+def _name_tokens(value):
+    return {
+        token
+        for token in re.findall(r"[a-z\u4e00-\u9fff]+", _normalize_title(value))
+        if len(token) >= 3
+    }
+
+
+def _author_similarity(query_author, match_authors):
+    left = _name_tokens(query_author)
+    if not left:
+        return 0.0
+    right = set()
+    for author in match_authors or []:
+        right.update(_name_tokens(author))
+    if not right:
+        return 0.0
+    return len(left & right) / max(len(left), 1)
+
+
 def _reference_year(ref):
     if isinstance(ref, dict):
         value = ref.get("year") or ref.get("publication_year") or ""
@@ -2930,6 +3703,15 @@ def _reference_year(ref):
         value = str(ref or "")
     match = re.search(r"\b(19|20)\d{2}\b", str(value))
     return match.group(0) if match else ""
+
+
+def extract_reference_year_hint(text):
+    text = str(text or "")
+    parenthetical = re.findall(r"\(((?:19|20)\d{2})\)", text)
+    if parenthetical:
+        return parenthetical[-1]
+    years = re.findall(r"\b((?:19|20)\d{2})\b", text)
+    return years[-1] if years else ""
 
 
 def extract_reference_author_hint(text):
@@ -2940,24 +3722,39 @@ def extract_reference_author_hint(text):
     return " ".join(names[:3])
 
 
+def extract_reference_container_hint(text):
+    text = re.sub(r"^(?:\[\d+\]|\d+\.|\(\d+\))\s*", "", str(text or "")).strip()
+    text = re.sub(r"https?://\S+", "", text, flags=re.I)
+    parts = [p.strip(" .;:") for p in re.split(r"\.\s+", text) if p.strip(" .;:")]
+    for part in parts:
+        if _looks_like_reference_author_fragment(part):
+            continue
+        if len(_title_tokens(part)) > 8:
+            continue
+        if _looks_like_reference_container_part(part):
+            container = re.split(r"\b(?:vol\.?|volume|\d+\s*,|\d+\s+\d|\(\d{4}\))", part, maxsplit=1, flags=re.I)[0]
+            return container.strip(" .;:")[:160]
+    return ""
+
+
 def extract_reference_title(text):
     text = re.sub(r"^(?:\[\d+\]|\d+\.|\(\d+\))\s*", "", str(text or "")).strip()
     text = re.sub(r"\bdoi\s*[:：]?\s*10\.\S+", "", text, flags=re.I).strip()
+    text = re.sub(r"https?://\S+", "", text, flags=re.I).strip()
     parts = [p.strip(" .;:") for p in re.split(r"\.\s+", text) if p.strip(" .;:")]
     if not parts:
         return _brief_text(text, 160)
     candidates = []
     for part in parts:
-        lowered = part.lower()
-        if re.search(r"\b(19|20)\d{2}\b", part):
+        if _looks_like_reference_author_fragment(part):
             continue
-        if any(word in lowered for word in ("journal", "nature", "science", "cell", "proc", "plos", "bmc", "lancet")):
+        if _looks_like_reference_container_part(part):
             continue
-        if len(_title_tokens(part)) >= 3:
+        if len(_title_tokens(part)) >= 2:
             candidates.append(part)
     if candidates:
-        return candidates[0][:220]
-    return parts[min(1, len(parts) - 1)][:220]
+        return candidates[0][:360]
+    return parts[min(1, len(parts) - 1)][:360]
 
 
 def build_reference_query(ref):
@@ -2965,13 +3762,18 @@ def build_reference_query(ref):
     author = ref.get("author_hint") or extract_reference_author_hint(ref.get("text", ""))
     year = _reference_year(ref)
     doi = _normalize_doi(ref.get("doi", ""))
-    query_parts = [p for p in (title, author, year) if p]
+    container = ref.get("container_hint") or extract_reference_container_hint(ref.get("text", ""))
+    query_parts = [p for p in (title, author, year, container) if p]
+    bibliographic = " ".join(query_parts) or ref.get("text", "")[:240]
+    if not doi and ref.get("text"):
+        bibliographic = ref.get("text", "")[:600]
     return {
         "doi": doi,
         "title": title,
         "author": author,
+        "container": container,
         "year": year,
-        "bibliographic": " ".join(query_parts) or ref.get("text", "")[:240],
+        "bibliographic": bibliographic,
     }
 
 
@@ -2984,6 +3786,9 @@ def reference_cache_key(ref):
 
 
 def _reference_get_json(url, timeout=10, headers=None):
+    # Reference verification already fans out across Crossref, OpenAlex, PubMed,
+    # DOI landing pages, and official publisher sites. Keep each individual
+    # source fast-fail so a full bibliography cannot hang on one slow provider.
     data, _ = _http_request(url, "GET", headers=headers or {}, timeout=timeout)
     return json.loads(data.decode("utf-8", errors="replace"))
 
@@ -3064,39 +3869,75 @@ def _pubmed_summary_to_match(uid, item):
 def lookup_crossref_reference(ref, timeout=10):
     query = build_reference_query(ref)
     matches = []
+    last_error = None
     if query.get("doi"):
-        url = "https://api.crossref.org/works/" + urllib.parse.quote(query["doi"], safe="")
-        data = _reference_get_json(url, timeout=timeout)
-        work = data.get("message") or {}
-        if work:
-            matches.append(_crossref_work_to_match(work))
-            return matches
+        try:
+            url = "https://api.crossref.org/works/" + urllib.parse.quote(query["doi"], safe="")
+            data = _reference_get_json(url, timeout=timeout)
+            work = data.get("message") or {}
+            if work:
+                matches.append(_crossref_work_to_match(work))
+                return matches
+        except Exception as e:
+            last_error = e
+    if query.get("title"):
+        try:
+            title = urllib.parse.quote(query["title"])
+            url = f"https://api.crossref.org/works?query.title={title}&rows=5"
+            data = _reference_get_json(url, timeout=timeout)
+            for work in (data.get("message") or {}).get("items") or []:
+                matches.append(_crossref_work_to_match(work))
+        except Exception as e:
+            last_error = e
     bibliographic = urllib.parse.quote(query.get("bibliographic") or "")
     if not bibliographic:
         return matches
-    url = f"https://api.crossref.org/works?query.bibliographic={bibliographic}&rows=3"
-    data = _reference_get_json(url, timeout=timeout)
-    for work in (data.get("message") or {}).get("items") or []:
-        matches.append(_crossref_work_to_match(work))
+    try:
+        url = f"https://api.crossref.org/works?query.bibliographic={bibliographic}&rows=5"
+        data = _reference_get_json(url, timeout=timeout)
+        for work in (data.get("message") or {}).get("items") or []:
+            matches.append(_crossref_work_to_match(work))
+    except Exception as e:
+        last_error = e
+    if last_error and not matches:
+        raise last_error
     return matches
 
 
 def lookup_openalex_reference(ref, timeout=10):
     query = build_reference_query(ref)
     matches = []
+    last_error = None
     if query.get("doi"):
-        url = "https://api.openalex.org/works/doi:" + urllib.parse.quote(query["doi"], safe="")
-        data = _reference_get_json(url, timeout=timeout)
-        if data:
-            matches.append(_openalex_work_to_match(data))
-            return matches
+        try:
+            url = "https://api.openalex.org/works/doi:" + urllib.parse.quote(query["doi"], safe="")
+            data = _reference_get_json(url, timeout=timeout)
+            if data:
+                matches.append(_openalex_work_to_match(data))
+                return matches
+        except Exception as e:
+            last_error = e
+    if query.get("title"):
+        try:
+            title = urllib.parse.quote(query["title"])
+            url = f"https://api.openalex.org/works?filter=title.search:{title}&per-page=5"
+            data = _reference_get_json(url, timeout=timeout)
+            for work in (data.get("results") or []):
+                matches.append(_openalex_work_to_match(work))
+        except Exception as e:
+            last_error = e
     search = urllib.parse.quote(query.get("bibliographic") or "")
     if not search:
         return matches
-    url = f"https://api.openalex.org/works?search={search}&per-page=3"
-    data = _reference_get_json(url, timeout=timeout)
-    for work in (data.get("results") or []):
-        matches.append(_openalex_work_to_match(work))
+    try:
+        url = f"https://api.openalex.org/works?search={search}&per-page=5"
+        data = _reference_get_json(url, timeout=timeout)
+        for work in (data.get("results") or []):
+            matches.append(_openalex_work_to_match(work))
+    except Exception as e:
+        last_error = e
+    if last_error and not matches:
+        raise last_error
     return matches
 
 
@@ -3107,10 +3948,10 @@ def lookup_pubmed_reference(ref, timeout=10):
         return []
     search_url = (
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-        f"?db=pubmed&retmode=json&retmax=3&term={urllib.parse.quote(term)}"
+        f"?db=pubmed&retmode=json&retmax=5&term={urllib.parse.quote(term)}"
     )
     search = _reference_get_json(search_url, timeout=timeout)
-    ids = ((search.get("esearchresult") or {}).get("idlist") or [])[:3]
+    ids = ((search.get("esearchresult") or {}).get("idlist") or [])[:5]
     if not ids:
         return []
     summary_url = (
@@ -3122,12 +3963,138 @@ def lookup_pubmed_reference(ref, timeout=10):
     return [_pubmed_summary_to_match(uid, result.get(uid) or {}) for uid in ids if result.get(uid)]
 
 
+REFERENCE_OFFICIAL_SITE_RULES = [
+    (("ca cancer", "international journal of cancer"), "Wiley Online Library", "https://onlinelibrary.wiley.com/action/doSearch?AllField={query}"),
+    (("thyroid",), "Mary Ann Liebert", "https://www.liebertpub.com/action/doSearch?AllField={query}"),
+    (("nature reviews", "nat commun", "nature communications"), "Nature", "https://www.nature.com/search?q={query}"),
+    (("current opinion in oncology", "lww",), "LWW Journals", "https://journals.lww.com/pages/results.aspx?txtKeywords={query}"),
+    (("journal of clinical endocrinology", "endocrinology and metabolism"), "Oxford Academic", "https://academic.oup.com/search-results?page=1&q={query}"),
+    (("annals of oncology", "esmo open"), "Elsevier ClinicalKey", "https://www.annalsofoncology.org/action/doSearch?AllField={query}"),
+    (("lancet",), "The Lancet", "https://www.thelancet.com/action/doSearch?AllField={query}"),
+    (("cancers basel", "mdpi",), "MDPI", "https://www.mdpi.com/search?q={query}"),
+    (("proceedings of the national academy", "pnas"), "PNAS", "https://www.pnas.org/action/doSearch?AllField={query}"),
+    (("mol cancer", "molecular cancer"), "BMC Molecular Cancer", "https://molecular-cancer.biomedcentral.com/search?query={query}"),
+    (("jama",), "JAMA Network", "https://jamanetwork.com/searchresults?q={query}"),
+    (("endocrine", "hashimoto", "papillary thyroid carcinoma"), "Springer Link", "https://link.springer.com/search?query={query}"),
+    (("kolmogorov arnold networks", "arxiv"), "arXiv", "https://arxiv.org/search/?query={query}&searchtype=all&source=header"),
+]
+
+
+def _html_to_searchable_text(content):
+    raw = content.decode("utf-8", errors="replace") if isinstance(content, (bytes, bytearray)) else str(content or "")
+    raw = re.sub(r"(?is)<(script|style|noscript).*?</\1>", " ", raw)
+    raw = re.sub(r"(?is)<[^>]+>", " ", raw)
+    return re.sub(r"\s+", " ", html.unescape(raw)).strip()
+
+
+def _html_title(content):
+    raw = content.decode("utf-8", errors="replace") if isinstance(content, (bytes, bytearray)) else str(content or "")
+    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw)
+    if not match:
+        return ""
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", match.group(1)))).strip()
+
+
+def _official_page_matches_reference(ref, page_text):
+    query = build_reference_query(ref)
+    title_tokens = _title_tokens(query.get("title") or "")
+    page_tokens = _title_tokens(page_text)
+    if not title_tokens or not page_tokens:
+        return False
+    coverage = len(title_tokens & page_tokens) / max(len(title_tokens), 1)
+    year = query.get("year")
+    if not year:
+        return coverage >= 0.82
+    years = {_reference_year(token) for token in re.findall(r"\b(?:19|20)\d{2}\b", page_text)}
+    years.discard("")
+    year_ok = year in years or any(abs(int(year) - int(item)) <= 1 for item in years)
+    return (coverage >= 0.72 and year_ok) or coverage >= 0.9
+
+
+def _official_site_search_urls(ref):
+    query = build_reference_query(ref)
+    probe = _normalize_title(" ".join([
+        query.get("container", ""),
+        query.get("title", ""),
+        ref.get("text", ""),
+    ]))
+    title = query.get("title") or ""
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'’-]*", title)
+    search_terms = [title or query.get("bibliographic") or ref.get("text", "")[:180]]
+    if len(words) >= 7:
+        # OCR can damage the first word of a title; retry with the distinctive
+        # title tail before declaring that the publisher site cannot find it.
+        search_terms.append(" ".join(words[1:]))
+    if len(words) >= 11:
+        distinctive = [word for word in words if len(word) >= 4][:12]
+        if len(distinctive) >= 4:
+            search_terms.append(" ".join(distinctive))
+    seen = set()
+    urls = []
+    for needles, label, template in REFERENCE_OFFICIAL_SITE_RULES:
+        if any(needle in probe for needle in needles):
+            for term in search_terms:
+                search = urllib.parse.quote(term)
+                url = template.format(query=search)
+                if url not in seen:
+                    urls.append((label, url))
+                    seen.add(url)
+    return urls
+
+
+def lookup_official_site_reference(ref, timeout=10):
+    """Verify references from DOI landing pages and publisher/official site searches."""
+    query = build_reference_query(ref)
+    matches = []
+    if query.get("doi"):
+        doi_url = "https://doi.org/" + urllib.parse.quote(query["doi"], safe="/")
+        data, _ = _http_request(doi_url, "GET", headers={"Accept": "text/html,*/*;q=0.8"}, timeout=timeout)
+        page_text = _html_to_searchable_text(data)
+        title = _html_title(data) or query.get("title") or query.get("doi")
+        if query.get("doi") or _official_page_matches_reference(ref, page_text):
+            matches.append({
+                "source": "DOI landing page",
+                "title": query.get("title") or title,
+                "year": query.get("year"),
+                "doi": query.get("doi"),
+                "authors": [query.get("author")] if query.get("author") else [],
+                "container": query.get("container"),
+                "url": doi_url,
+                "retracted": False,
+                "official_site": True,
+            })
+
+    for label, url in _official_site_search_urls(ref):
+        data, _ = _http_request(url, "GET", headers={"Accept": "text/html,*/*;q=0.8"}, timeout=timeout)
+        page_text = _html_to_searchable_text(data)
+        if not _official_page_matches_reference(ref, page_text):
+            continue
+        matches.append({
+            "source": f"Official site: {label}",
+            "title": query.get("title") or _html_title(data),
+            "year": query.get("year"),
+            "doi": query.get("doi"),
+            "authors": [query.get("author")] if query.get("author") else [],
+            "container": query.get("container") or label,
+            "url": url,
+            "retracted": False,
+            "official_site": True,
+        })
+    return matches
+
+
 def _score_reference_match(ref, match):
     query = build_reference_query(ref)
     problems = []
     score = 0.0
     ref_doi = query.get("doi")
     match_doi = _normalize_doi(match.get("doi", ""))
+    title_sim = max(
+        _token_similarity(query.get("title") or "", match.get("title", "")),
+        _token_similarity(ref.get("text", ""), match.get("title", "")),
+    )
+    author_sim = _author_similarity(query.get("author"), match.get("authors") or [])
+    container_sim = _token_similarity(query.get("container") or "", match.get("container", ""))
     if ref_doi:
         if match_doi and ref_doi == match_doi:
             score += 0.72
@@ -3136,60 +4103,93 @@ def _score_reference_match(ref, match):
             score -= 0.2
         else:
             problems.append("doi_missing_in_source")
-    title_sim = _token_similarity(query.get("title") or ref.get("text", ""), match.get("title", ""))
-    score += min(title_sim, 1.0) * 0.22
+        score += min(title_sim, 1.0) * 0.18
+        score += min(author_sim, 1.0) * 0.04
+    else:
+        score += min(title_sim, 1.0) * 0.62
+        score += min(author_sim, 1.0) * 0.14
+        score += min(container_sim, 1.0) * 0.08
     if title_sim < 0.45 and not ref_doi:
         problems.append("title_low_similarity")
     ref_year = query.get("year")
     match_year = _reference_year(match.get("year", ""))
     if ref_year and match_year:
         if ref_year == match_year:
-            score += 0.06
+            score += 0.06 if ref_doi else 0.16
         elif abs(int(ref_year) - int(match_year)) <= 1:
-            score += 0.03
+            score += 0.03 if ref_doi else 0.08
             problems.append("year_near_mismatch")
         else:
             problems.append("year_mismatch")
             score -= 0.1
     elif ref_year and not match_year:
         problems.append("year_missing_in_source")
+    if (
+        not ref_doi
+        and match_doi
+        and ref_year
+        and match_year
+        and (ref_year == match_year or abs(int(ref_year) - int(match_year)) <= 1)
+        and title_sim >= 0.78
+    ):
+        score = max(score, 0.93)
+    if match.get("source") == "DOI landing page" and ref_doi and ref_doi == match_doi:
+        score = max(score, 0.95)
+    if match.get("official_site") and title_sim >= 0.82 and (not ref_year or not match_year or abs(int(ref_year) - int(match_year)) <= 1):
+        score = max(score, 0.94)
     if match.get("retracted"):
         problems.append("source_marks_retracted")
     return max(0.0, min(1.0, score)), problems
+
+
+def _score_reference_matches(ref, raw_matches):
+    scored = []
+    for match in raw_matches:
+        score, problems = _score_reference_match(ref, match)
+        enriched = dict(match)
+        enriched["match_score"] = round(score, 3)
+        enriched["_match_problems"] = problems
+        scored.append(enriched)
+    scored.sort(key=lambda m: m.get("match_score", 0), reverse=True)
+    return scored
 
 
 def verify_reference_online(ref, timeout=10):
     query = build_reference_query(ref)
     source_errors = []
     raw_matches = []
+    standard_sources_ok = 0
     for lookup in (lookup_crossref_reference, lookup_openalex_reference, lookup_pubmed_reference):
         try:
             raw_matches.extend(lookup(ref, timeout=timeout))
+            standard_sources_ok += 1
         except Exception as e:
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status not in {404, 410}:
                 source_errors.append(f"{lookup.__name__.replace('lookup_', '').replace('_reference', '')}: {type(e).__name__}")
 
-    scored = []
-    all_problems = []
-    for match in raw_matches:
-        score, problems = _score_reference_match(ref, match)
-        enriched = dict(match)
-        enriched["match_score"] = round(score, 3)
-        scored.append(enriched)
-        all_problems.extend(problems)
-    scored.sort(key=lambda m: m.get("match_score", 0), reverse=True)
+    scored = _score_reference_matches(ref, raw_matches)
+    if standard_sources_ok and (not scored or scored[0].get("match_score", 0) < 0.92):
+        try:
+            official_matches = lookup_official_site_reference(ref, timeout=timeout)
+            if official_matches:
+                raw_matches.extend(official_matches)
+                scored = _score_reference_matches(ref, raw_matches)
+        except Exception as e:
+            source_errors.append(f"official_site: {type(e).__name__}")
 
     best = scored[0] if scored else None
     confidence = float(best.get("match_score", 0.0)) if best else 0.0
     problems = []
     if not scored:
         problems.append("doi_not_found" if query.get("doi") else "no_online_match")
-    if source_errors and not scored:
+    if source_errors and not scored and not standard_sources_ok:
         problems.append("all_sources_error")
     elif source_errors:
         problems.append("partial_source_error")
-    problems.extend(dict.fromkeys(all_problems[:8]))
+    if best:
+        problems.extend(best.get("_match_problems") or [])
+    problems = list(dict.fromkeys(problems[:8]))
 
     if confidence >= 0.92:
         status = "verified"
@@ -3206,7 +4206,7 @@ def verify_reference_online(ref, timeout=10):
         "online_status": status,
         "confidence": round(confidence, 3),
         "query": query,
-        "matched_sources": scored[:5],
+        "matched_sources": [{k: v for k, v in match.items() if k != "_match_problems"} for match in scored[:5]],
         "problems": problems,
         "source_errors": source_errors,
     }
@@ -3228,6 +4228,7 @@ def _reference_online_summary(online):
 
 REFERENCE_ISSUE_LABELS = {
     "missing_year": "缺少年份",
+    "future_year": "年份晚于运行时当前年份",
     "missing_doi": "缺少DOI",
     "missing_journal_or_source": "缺少期刊/来源",
     "too_short": "引用过短",
@@ -3363,6 +4364,242 @@ def format_reference_audit_html(reference_audit):
     <p><strong>状态</strong>: {_html_escape(reference_audit.get('status', 'N/A'))} | <strong>数量</strong>: {reference_audit.get('reference_count', 0)} | <strong>DOI</strong>: {reference_audit.get('doi_count', 0)} | <strong>年份</strong>: {reference_audit.get('year_count', 0)} | <strong>在线检索</strong>: {'启用' if reference_audit.get('online_enabled') else '未启用'}（{reference_audit.get('online_checked', 0)}条）</p>
     <p class="section-hint">{_html_escape(reference_audit.get('note', ''))}</p>
     <div class="reference-list">{cards}</div>
+  </div>"""
+
+
+RESOURCE_STATUS_LABELS = {
+    "available": "可访问",
+    "unavailable": "不可访问",
+    "access_restricted": "访问受限",
+    "malformed": "链接格式错误",
+    "error": "检测异常",
+    "skipped": "未检测",
+}
+
+
+def extract_paper_resources(text):
+    """Extract code repositories and deployed online resources mentioned by the paper text."""
+    raw_text = str(text or "")
+    resources = []
+    seen = set()
+    url_pattern = re.compile(r"\b(?:https?|htps)://[^\s<>'\"\]\)）}]+", re.I)
+    for match in url_pattern.finditer(raw_text):
+        raw_url = _clean_resource_url(match.group(0))
+        if not raw_url:
+            continue
+        start, end = match.span()
+        context = _resource_context(raw_text, start, end)
+        resource_type = _classify_resource(raw_url, context)
+        if resource_type == "other":
+            continue
+        key = raw_url.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        resources.append({
+            "url": raw_url,
+            "type": resource_type,
+            "context": context,
+        })
+    return resources
+
+
+def _clean_resource_url(url):
+    url = html.unescape(str(url or "")).strip()
+    url = url.replace("\\_", "_")
+    url = re.sub(r"[`*_]+$", "", url)
+    url = url.rstrip(".,;:，。；：")
+    while url.endswith((")", "）", "]", "}")) and url.count("(") < url.count(")"):
+        url = url[:-1].rstrip()
+    return url
+
+
+def _resource_context(text, start, end, radius=180):
+    snippet = str(text or "")[max(0, start - radius):min(len(text), end + radius)]
+    snippet = re.sub(r"\[\[/?(?:BLOCK|FIGURE|TABLE_START|TABLE_END|TABLE_CONTINUATION|EXTRACTION_NOTE)[^\]]*\]\]", " ", snippet, flags=re.I)
+    snippet = re.sub(r"\s+", " ", snippet).strip()
+    return _brief_text(snippet, 420)
+
+
+def _classify_resource(url, context=""):
+    lowered = (str(url or "") + " " + str(context or "")).lower()
+    host = urllib.parse.urlparse(url if not url.lower().startswith("htps://") else "https://" + url[7:]).netloc.lower()
+    if any(domain in host for domain in ("github.com", "gitlab.com", "bitbucket.org")):
+        return "code_repository"
+    if any(domain in host for domain in ("zenodo.org", "figshare.com", "osf.io", "ncbi.nlm.nih.gov", "portal.gdc.cancer.gov")):
+        return "data_repository"
+    if any(domain in host for domain in (
+        "streamlit.app", "huggingface.co", "shinyapps.io", "herokuapp.com",
+        "vercel.app", "netlify.app", "github.io",
+    )):
+        return "deployed_resource"
+    if re.search(r"\b(code availability|code available|source code|github|repository|repo)\b", lowered):
+        return "code_repository"
+    if re.search(r"\b(streamlit|web calculator|web-based calculator|online platform|online predictive|publicly accessible|deployed)\b", lowered):
+        return "deployed_resource"
+    return "other"
+
+
+def verify_resource_availability(resource, timeout=10):
+    url = _clean_resource_url((resource or {}).get("url", ""))
+    if not re.match(r"^https?://", url, flags=re.I):
+        return {
+            "status": "malformed",
+            "http_status": None,
+            "problem": "malformed_url",
+            "message": "URL scheme is malformed or unsupported.",
+        }
+    headers = {"Accept": "text/html,application/json,*/*;q=0.8"}
+    try:
+        _, status = _http_request(url, "GET", headers=headers, timeout=timeout)
+        return {
+            "status": "available" if 200 <= int(status) < 400 else "unavailable",
+            "http_status": int(status),
+            "problem": "",
+            "message": "reachable",
+        }
+    except Exception as e:
+        response = getattr(e, "response", None)
+        status = getattr(response, "status_code", None)
+        if status in {401, 403}:
+            availability = "access_restricted"
+            problem = "access_restricted"
+        elif status in {404, 410}:
+            availability = "unavailable"
+            problem = "not_found"
+        elif status:
+            availability = "error"
+            problem = f"http_{status}"
+        else:
+            availability = "error"
+            problem = type(e).__name__
+        return {
+            "status": availability,
+            "http_status": status,
+            "problem": problem,
+            "message": _brief_text(str(e), 240),
+        }
+
+
+def audit_resources(text, online=True, timeout=10, cache=None):
+    resources = extract_paper_resources(text)
+    resource_cache = cache if isinstance(cache, dict) else {}
+    checked = 0
+    issues = []
+    for idx, resource in enumerate(resources, 1):
+        if online:
+            cache_key = resource["url"].lower()
+            result = resource_cache.get(cache_key)
+            if not result:
+                result = verify_resource_availability(resource, timeout=timeout)
+                resource_cache[cache_key] = result
+            resource["availability"] = result
+            checked += 1
+            if result.get("status") in {"unavailable", "access_restricted", "malformed", "error"}:
+                issues.append({
+                    "index": idx,
+                    "url": resource.get("url", ""),
+                    "type": resource.get("type", ""),
+                    "status": result.get("status", ""),
+                    "problem": result.get("problem", ""),
+                    "context": resource.get("context", ""),
+                })
+        else:
+            resource["availability"] = {"status": "skipped", "problem": "online_disabled"}
+
+    status = "ok"
+    if issues:
+        error_count = sum(1 for item in issues if item.get("status") == "error")
+        status = "error" if resources and online and error_count == len(resources) else "needs_review"
+    return {
+        "status": status,
+        "resource_count": len(resources),
+        "online_enabled": bool(online),
+        "online_checked": checked,
+        "issues": issues,
+        "resources": resources[:200],
+        "note": "校检论文声明的代码仓库、在线计算器、部署平台等资源是否可访问；URL格式错误会单独标记。",
+    }
+
+
+def _resource_status_text(status):
+    return RESOURCE_STATUS_LABELS.get(str(status or ""), str(status or "N/A"))
+
+
+def _resource_type_text(resource_type):
+    mapping = {
+        "code_repository": "代码仓库",
+        "data_repository": "数据资源库",
+        "deployed_resource": "在线资源/部署平台",
+    }
+    return mapping.get(str(resource_type or ""), str(resource_type or "N/A"))
+
+
+def format_resource_audit_markdown(resource_audit):
+    if resource_audit is None:
+        return []
+    lines = [
+        "## 🔗 代码仓库与在线资源可用性校检",
+        "",
+        f"**状态**: {resource_audit.get('status', 'N/A')}",
+        f"**资源数量**: {resource_audit.get('resource_count', 0)}",
+        f"**在线检测**: {'启用' if resource_audit.get('online_enabled') else '未启用'}"
+        + (f"（已检测 {resource_audit.get('online_checked', 0)} 项）" if resource_audit.get("online_enabled") else ""),
+        f"> {resource_audit.get('note', '')}",
+        "",
+    ]
+    resources = resource_audit.get("resources") or []
+    if resources:
+        lines.append("| # | 类型 | URL | 可用性 | 问题 | 上下文 |")
+        lines.append("|---|------|-----|--------|------|--------|")
+        for idx, resource in enumerate(resources[:40], 1):
+            availability = resource.get("availability") or {}
+            lines.append(
+                f"| {idx} | {_md_escape_cell(_resource_type_text(resource.get('type')))} | "
+                f"{_md_escape_cell(resource.get('url', ''))} | "
+                f"{_md_escape_cell(_resource_status_text(availability.get('status')))} | "
+                f"{_md_escape_cell(availability.get('problem', '') or '-')} | "
+                f"{_md_escape_cell(_brief_text(resource.get('context', ''), 180))} |"
+            )
+    else:
+        lines.append("> 未识别到代码仓库或论文部署的在线资源链接。")
+    lines.append("")
+    return lines
+
+
+def format_resource_audit_html(resource_audit):
+    if resource_audit is None:
+        return ""
+    rows = ""
+    for idx, resource in enumerate((resource_audit.get("resources") or [])[:80], 1):
+        availability = resource.get("availability") or {}
+        url = resource.get("url", "")
+        href = _html_escape(url) if re.match(r"^https?://", url, flags=re.I) else ""
+        url_html = f'<a href="{href}" target="_blank" rel="noopener">{_html_escape(url)}</a>' if href else _html_escape(url)
+        rows += (
+            "<tr>"
+            f"<td>{idx}</td>"
+            f"<td>{_html_escape(_resource_type_text(resource.get('type')))}</td>"
+            f"<td>{url_html}</td>"
+            f"<td>{_html_escape(_resource_status_text(availability.get('status')))}</td>"
+            f"<td>{_html_escape(availability.get('problem', '') or '-')}</td>"
+            f"<td>{_html_escape(_brief_text(resource.get('context', ''), 220))}</td>"
+            "</tr>"
+        )
+    if rows:
+        body = f"""
+    <table>
+      <thead><tr><th>#</th><th>类型</th><th>URL</th><th>可用性</th><th>问题</th><th>上下文</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"""
+    else:
+        body = '<p class="section-hint">未识别到代码仓库或论文部署的在线资源链接。</p>'
+    return f"""
+  <div class="section resource-section">
+    <h2>代码仓库与在线资源可用性校检</h2>
+    <p><strong>状态</strong>: {_html_escape(resource_audit.get('status', 'N/A'))} | <strong>数量</strong>: {resource_audit.get('resource_count', 0)} | <strong>在线检测</strong>: {'启用' if resource_audit.get('online_enabled') else '未启用'}（{resource_audit.get('online_checked', 0)}项）</p>
+    <p class="section-hint">{_html_escape(resource_audit.get('note', ''))}</p>
+    {body}
   </div>"""
 
 
@@ -3621,6 +4858,59 @@ def _check_suspicion_score(c):
     return max(score, 0)
 
 
+def _check_source_tags(c: Dict[str, Any]) -> List[str]:
+    text = _check_text_blob(c).lower()
+    tags = []
+    if c.get("_runtime_year_check"):
+        tags.append("本地规则")
+    if any(term in text for term in ("crossref", "openalex", "pubmed", "doi", "在线", "元数据")):
+        tags.append("在线核验")
+    if any(term in text for term in ("imagedetector", "ai概率", "ai probability")):
+        tags.append("imagedetector")
+    if any(term in text for term in ("图像语义", "visible_text", "semantic", "多模态")):
+        tags.append("图像语义")
+    if any(term in text for term in ("benford", "p值", "p-value", "统计")):
+        tags.append("统计线索")
+    if _is_extraction_limited_check(c):
+        tags.append("MinerU/OCR提取")
+    if not tags:
+        tags.append("LLM语义")
+    return list(dict.fromkeys(tags))
+
+
+def _merged_group_summary_text(c: Dict[str, Any]) -> str:
+    group = c.get("merged_group") or {}
+    if not group:
+        return ""
+    chunks = "/".join(str(item) for item in group.get("source_chunks") or [])
+    items = "、".join(str(item) for item in (group.get("items") or [])[:5] if item)
+    return f"已合并 {group.get('count', 0)} 条相近疑点；来源分块: {chunks or 'N/A'}；原始项: {items or 'N/A'}"
+
+
+def _merged_group_html(c: Dict[str, Any]) -> str:
+    group = c.get("merged_group") or {}
+    if not group:
+        return ""
+    rows = ""
+    for idx, member in enumerate(group.get("members") or [], 1):
+        rows += f"""
+        <tr>
+          <td>{idx}</td>
+          <td>{_html_escape(member.get('chunk', '-'))}</td>
+          <td>{_html_escape(member.get('item', '-'))}</td>
+          <td>{_html_escape(member.get('verdict', '-'))}</td>
+          <td>{_html_escape(_brief_text(member.get('evidence') or member.get('source_text') or '', 160))}</td>
+        </tr>"""
+    return f"""
+    <details class="merged-group">
+      <summary>{_html_escape(_merged_group_summary_text(c))}</summary>
+      <table>
+        <thead><tr><th>#</th><th>分块</th><th>原始项</th><th>原判定</th><th>证据摘要</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </details>"""
+
+
 def _check_sort_key(c):
     return (-_check_suspicion_score(c), str(c.get("category", "")), str(c.get("item", "")))
 
@@ -3735,6 +5025,15 @@ def build_audit_action_items(report, meta, stat_result, limit=8):
                 "title": f"{len(bad_refs)}条参考文献在线证据不足",
                 "detail": f"优先核对编号: {bad_refs[:10]}；检查DOI、题名、年份是否与数据库命中一致。",
             })
+    resource_audit = meta.get("resource_audit") or {}
+    if resource_audit.get("issues"):
+        issues = resource_audit.get("issues") or []
+        items.append({
+            "score": 235,
+            "source": "资源可用性校检",
+            "title": f"{len(issues)}项代码仓库/在线资源需复核",
+            "detail": "优先核对不可访问、格式错误或访问受限的代码仓库、Streamlit等论文声明资源。",
+        })
     image_audit = meta.get("image_audit") or {}
     image_warnings = [img for img in image_audit.get("images", []) if img.get("risk") == "local_warning"]
     semantic_warnings = []
@@ -3848,6 +5147,16 @@ def _report_action_context(report, pdf_path, meta, stat_result):
                 "semantic": _brief_text(sem.get("summary", ""), 360),
                 "detector_score": detector.get("score"),
             })
+    resource_audit = (meta or {}).get("resource_audit") or {}
+    resource_issues = []
+    for issue in (resource_audit.get("issues") or [])[:8]:
+        resource_issues.append({
+            "index": issue.get("index"),
+            "url": issue.get("url"),
+            "type": issue.get("type"),
+            "status": issue.get("status"),
+            "problem": issue.get("problem"),
+        })
     return {
         "paper": str(pdf_path),
         "summary": _brief_text(report.get("summary", ""), 1200) if isinstance(report, dict) else "",
@@ -3867,23 +5176,35 @@ def _report_action_context(report, pdf_path, meta, stat_result):
             "online_checked": reference_audit.get("online_checked"),
             "issues": ref_issues,
         },
+        "resources": {
+            "resource_count": resource_audit.get("resource_count"),
+            "online_checked": resource_audit.get("online_checked"),
+            "issues": resource_issues,
+        },
         "images": image_issues,
     }
 
 
 def format_web_action_panel_html(report, pdf_path, meta, stat_result):
-    context = _report_action_context(report, pdf_path, meta or {}, stat_result or {})
+    meta = meta or {}
+    service = meta.get("report_actions") or {}
+    host = service.get("host") or "127.0.0.1"
+    port = int(service.get("port") or 8765)
+    service_url = report_action_service_url(host, port)
+    generate_url = f"{service_url}/generate"
+    context = _report_action_context(report, pdf_path, meta, stat_result or {})
     context_json = json.dumps(context, ensure_ascii=False).replace("</", "<\\/")
+    generate_url_json = json.dumps(generate_url, ensure_ascii=False)
     return f"""
   <div class="section web-action-section">
     <h2>一键生成后续沟通草稿</h2>
-    <p class="section-hint">先启动本机动作服务，再点击按钮。草稿由本地配置的LLM生成，语言会按文献/证据主语言自动匹配，生成后仍需人工核对证据和措辞。</p>
+    <p class="section-hint">草稿由本地配置的LLM生成，语言会按文献/证据主语言自动匹配，生成后仍需人工核对证据和措辞。</p>
     <div class="web-action-toolbar">
       <button type="button" class="action-button" data-action-kind="pubpeer_comment">生成 PubPeer Comment</button>
       <button type="button" class="action-button" data-action-kind="journal_letter">生成期刊 Letter</button>
       <button type="button" class="secondary-button" id="copy-generated-draft">复制草稿</button>
     </div>
-    <div id="web-action-status" class="web-action-status">服务地址: <code>http://127.0.0.1:8765</code></div>
+    <div id="web-action-status" class="web-action-status">动作服务: <code>{_html_escape(service_url)}</code></div>
     <textarea id="generated-draft" class="generated-draft" spellcheck="false" placeholder="生成的草稿会显示在这里，可直接编辑。"></textarea>
   </div>
   <script id="paper-audit-action-context" type="application/json">{_html_escape(context_json)}</script>
@@ -3896,6 +5217,7 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
       pubpeer_comment: 'PubPeer comment',
       journal_letter: 'journal letter'
     }};
+    const generateUrl = {generate_url_json};
     function setStatus(text, isError) {{
       statusEl.textContent = text;
       statusEl.className = 'web-action-status' + (isError ? ' error' : '');
@@ -3907,7 +5229,7 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
       setStatus('正在生成 ' + actionLabels[kind] + ' ...', false);
       outputEl.value = '';
       try {{
-        const resp = await fetch('http://127.0.0.1:8765/generate', {{
+        const resp = await fetch(generateUrl, {{
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
           body: JSON.stringify({{ kind, context }})
@@ -3919,7 +5241,7 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
         outputEl.value = data.text || '';
         setStatus('已生成 ' + actionLabels[kind] + '。请人工核对后再使用。', false);
       }} catch (err) {{
-        setStatus('生成失败：请确认已运行 python paper_audit.py --serve-report-actions。详情: ' + err.message, true);
+        setStatus('生成失败：本机动作服务未响应，请重新生成报告或检查LLM配置/网络。详情: ' + err.message, true);
       }}
     }}
     document.querySelectorAll('[data-action-kind]').forEach((btn) => {{
@@ -3944,6 +5266,7 @@ def format_report(report, pdf_path, meta, stat_result):
     risk_icons = {"高": "🔴", "中": "🟡", "低": "🟢", "严重证据冲突": "⚫️"}
     artifact_type = meta.get("artifact_type") or "complete"
     artifact_label = "范围受限审查 (limited)" if artifact_type == "limited" else "完整审查 (complete)"
+    runtime = meta.get("runtime") or {}
     lines = [
         f"# 📄 学术论文审查报告 [耿同学标准]",
         f"",
@@ -3966,7 +5289,8 @@ def format_report(report, pdf_path, meta, stat_result):
             lines.append("> ⚠️ 本报告只基于成功返回的LLM分块合并，未覆盖失败分块全文；结论只能作为阶段性结果，建议稍后用 `--llm-cache-only` 或更稳定API补跑。")
         else:
             lines.append(f"**LLM覆盖率**: ✅ {meta.get('llm_coverage')} 个分块全部成功")
-    lines.append(f"**审查时间**: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"**审查时间**: {runtime.get('local_time') or time.strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"**运行时UTC年份**: {runtime.get('utc_year', runtime_utc_year())}（用于未来发表年份等非LLM日期判断）")
 
     lines.extend([
         f"",
@@ -3991,7 +5315,7 @@ def format_report(report, pdf_path, meta, stat_result):
 
     lines.append(f"## 总评: {report.get('summary', 'N/A')}")
     risk = report.get('risk_level', '未知')
-    lines.append(f"**风险等级**: {risk_icons.get(risk, '⚪')} {risk}")
+    lines.append(f"**复核优先级**: {risk_icons.get(risk, '⚪')} {risk}")
     lines.append(f"**证据风险分**: {report.get('detection_score', 0)} / 100 (辅助排序指标，越高表示越需要优先复核)")
     breakdown = report.get("score_breakdown") or {}
     if breakdown:
@@ -4011,15 +5335,18 @@ def format_report(report, pdf_path, meta, stat_result):
         lines.append("## 🚩 可疑点证据汇总表")
         lines.append("")
         if suspicious:
-            lines.append("| # | 风险判定 | 分类/检查项 | 原文证据摘录 | 可疑原因 |")
-            lines.append("|---|----------|-------------|--------------|----------|")
-            for i, c in enumerate(suspicious, 1):
+            lines.append("| # | 判定 | 来源类型 | 分类/检查项 | 原文证据摘录 | 可疑原因 |")
+            lines.append("|---|------|----------|-------------|--------------|----------|")
+            for i, c in enumerate(suspicious[:5], 1):
                 cat_item = f"{c.get('category', 'N/A')} / {c.get('item', 'N/A')}"
                 lines.append(
-                    f"| {i} | {_md_escape_cell(c.get('verdict', 'N/A'))} | {_md_escape_cell(cat_item)} | "
+                    f"| {i} | {_md_escape_cell(c.get('verdict', 'N/A'))} | {_md_escape_cell(' + '.join(_check_source_tags(c)))} | {_md_escape_cell(cat_item)} | "
                     f"{_md_escape_cell(_brief_text(_check_source_text(c), 220) or '未提供明确原文摘录')} | "
                     f"{_md_escape_cell(_brief_text(_check_reason(c), 220) or '未提供详细原因')} |"
                 )
+            if len(suspicious) > 5:
+                lines.append("")
+                lines.append(f"> 仅显示 Top 5 可疑点；完整 {len(suspicious)} 条见下方全部检查项和 HTML/JSON。")
         else:
             lines.append("> 未发现红旗/疑点项；仍建议人工核验关键数据、图表和引用。")
         lines.append("")
@@ -4044,6 +5371,9 @@ def format_report(report, pdf_path, meta, stat_result):
                 lines.append("> **原文/证据摘录**: LLM未提供明确原文摘录，请人工回查对应段落。")
             if reason:
                 lines.append(f"\n**可疑原因/详细说明**：{reason}")
+            merged_summary = _merged_group_summary_text(c)
+            if merged_summary:
+                lines.append(f"\n**相近疑点统合**：{merged_summary}。完整成员见 HTML 展开区或 JSON `merged_group.members`。")
             lines.append("")
 
     if report.get("conclusion"):
@@ -4052,6 +5382,7 @@ def format_report(report, pdf_path, meta, stat_result):
         lines.append("")
 
     lines.extend(format_image_audit_markdown(meta.get("image_audit")))
+    lines.extend(format_resource_audit_markdown(meta.get("resource_audit")))
     lines.extend(format_reference_audit_markdown(meta.get("reference_audit")))
 
     return "\n".join(lines)
@@ -4061,12 +5392,15 @@ def format_html_report(report, pdf_path, meta, stat_result):
     """将审查结果格式化为紧凑、可审阅的HTML报告"""
     meta = normalize_run_meta(meta, pdf_path)
     risk_colors = {"高": "#b42318", "中": "#a16207", "低": "#166534", "严重证据冲突": "#111827"}
-    risk_icons = {"高": "高风险", "中": "中风险", "低": "低风险", "严重证据冲突": "严重证据冲突"}
+    risk_icons = {"高": "高复核优先级", "中": "中复核优先级", "低": "低复核优先级", "严重证据冲突": "严重证据冲突"}
     risk = report.get('risk_level', '未知')
     risk_color = risk_colors.get(risk, "#6b7280")
     risk_icon = risk_icons.get(risk, "未知风险")
     artifact_type = meta.get("artifact_type") or "complete"
     artifact_label = "范围受限审查 (limited)" if artifact_type == "limited" else "完整审查 (complete)"
+    artifact_badge = "范围受限 limited" if artifact_type == "limited" else "完整审查 complete"
+    artifact_color = "#8a5a00" if artifact_type == "limited" else "#166534"
+    runtime = meta.get("runtime") or {}
     limited_notice = ""
     if meta.get("limited_reasons"):
         limited_notice = f"""
@@ -4119,6 +5453,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
     <p>{_html_escape(meta.get('llm_coverage'))} 个分块全部成功。</p>
   </div>"""
     action_summary_html = format_audit_action_summary_html(report, meta, stat_result) if not report.get("parse_error") else ""
+    resource_audit_html = format_resource_audit_html(meta.get("resource_audit"))
     reference_audit_html = format_reference_audit_html(meta.get("reference_audit"))
     image_audit_html = format_image_audit_html(meta.get("image_audit"))
     web_action_panel_html = format_web_action_panel_html(report, pdf_path, meta, stat_result) if not report.get("parse_error") else ""
@@ -4147,7 +5482,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
         suspicious = [c for c in checks if _is_suspicious_check(c)]
 
         suspicious_items = ""
-        for i, c in enumerate(suspicious, 1):
+        for i, c in enumerate(suspicious[:5], 1):
             verdict = c.get('verdict', 'N/A')
             verdict_class = _check_verdict_class(verdict)
             cat_item = f"{c.get('category', 'N/A')} / {c.get('item', 'N/A')}"
@@ -4155,21 +5490,26 @@ def format_html_report(report, pdf_path, meta, stat_result):
             reason = _check_reason(c)
             brief = _brief_text(reason or source or "未提供详细原因", 120)
             suspicion_score = _check_suspicion_score(c)
+            source_tags = " + ".join(_check_source_tags(c))
+            merged_html = _merged_group_html(c)
             suspicious_items += f"""
             <details class="suspicion-card">
                 <summary class="suspicion-summary">
                     <span class="suspicion-rank">#{i}</span>
                     <span class="{verdict_class} suspicion-verdict">{_html_escape(verdict)}</span>
                     <span class="suspicion-title">{_html_escape(cat_item)}</span>
-                    <span class="suspicion-score">可疑度 {suspicion_score}</span>
-                    <span class="suspicion-brief">{_html_escape(brief)}</span>
+                    <span class="suspicion-score">复核分 {suspicion_score}</span>
+                    <span class="suspicion-brief"><strong>{_html_escape(source_tags)}</strong> · {_html_escape(brief)}</span>
                     <span class="summary-action">查看详情</span>
                 </summary>
                 <div class="suspicion-body">
+                    {merged_html}
                     <div class="detail-evidence"><strong>原文/证据摘录</strong>{render_evidence_html(source or 'LLM未提供明确原文摘录，请人工回查对应段落。')}</div>
                     <div class="detail-text"><strong>可疑原因/详细说明</strong><p>{_html_escape(reason or 'LLM未提供详细说明。')}</p></div>
                 </div>
             </details>"""
+        if len(suspicious) > 5:
+            suspicious_items += f'<div class="muted">仅显示 Top 5；完整 {len(suspicious)} 条见下方全部检查项。</div>'
         if not suspicious_items:
             suspicious_items = '<div class="muted">未发现红旗/疑点项；仍建议人工核验关键数据、图表和引用。</div>'
 
@@ -4193,6 +5533,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
             source = _check_source_text(c)
             reason = _check_reason(c)
             source_html = render_evidence_html(source or 'LLM未提供明确原文摘录，请人工回查对应段落。')
+            merged_html = _merged_group_html(c)
             detail_cards += f"""
             <details class="detail-card">
                 <summary class="detail-header detail-summary">
@@ -4204,6 +5545,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
                     <span class="summary-action">查看详情</span>
                 </summary>
                 <div class="detail-body">
+                    {merged_html}
                     <div class="detail-evidence"><strong>原文/证据摘录</strong>{source_html}</div>
                     <div class="detail-text"><strong>可疑原因/详细说明</strong><p>{_html_escape(reason or 'LLM未提供详细说明。')}</p></div>
                 </div>
@@ -4211,8 +5553,8 @@ def format_html_report(report, pdf_path, meta, stat_result):
 
         checks_html = f"""
         <div class="section evidence-summary">
-            <h2>可疑点证据汇总</h2>
-            <p class="section-hint">按可疑程度由高到低排列；默认仅显示简要摘要，展开后查看原文证据、判断理由和完整表格。</p>
+            <h2>Top 可复核证据</h2>
+            <p class="section-hint">按可复核性和证据强度排序；默认显示前5项，展开后查看原文证据、判断理由和相近疑点统合来源。</p>
             <div class="suspicion-list">{suspicious_items}</div>
         </div>
         <div class="section">
@@ -4285,6 +5627,16 @@ def format_html_report(report, pdf_path, meta, stat_result):
     color: #fff;
     background: {risk_color};
     margin: 8px 0;
+  }}
+  .artifact-badge {{
+    display: inline-block;
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
   }}
   .meta-grid {{
     display: grid;
@@ -4788,6 +6140,11 @@ def format_html_report(report, pdf_path, meta, stat_result):
     font-size: 12px;
     margin-top: 4px;
   }}
+  .priority-label {{
+    font-weight: 900;
+    color: {risk_color};
+    margin-bottom: 4px;
+  }}
   .score-bar {{
     height: 7px;
     background: #e5e5e5;
@@ -4922,6 +6279,18 @@ def format_html_report(report, pdf_path, meta, stat_result):
   .data-table th {{
     background: #ededed;
   }}
+  .merged-group {{
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fff;
+  }}
+  .merged-group summary {{
+    cursor: pointer;
+    font-weight: 800;
+    color: #111111;
+  }}
   .coverage-warning, .coverage-ok, .conclusion-section, .action-section, .web-action-section {{
     border-left-width: 3px;
     background: #ffffff;
@@ -4981,7 +6350,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
         <h1>学术论文审查报告</h1>
         <div class="report-summary">{summary_text}</div>
       </div>
-      <div class="risk-badge" style="background:{risk_color};">{risk_icon}</div>
+      <div class="artifact-badge" style="background:{artifact_color};">{_html_escape(artifact_badge)}</div>
     </div>
     <div class="score-panel">
       <div>
@@ -4989,6 +6358,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
         <div class="score-caption">证据风险分 / 100，越高表示越需要优先复核</div>
       </div>
       <div>
+        <div class="priority-label">复核优先级：{_html_escape(risk_icon)}</div>
         <div class="score-bar"><div class="score-fill" style="width:{min(report.get('detection_score', 0), 100)}%; background:{risk_color};"></div></div>
       {score_breakdown_html}
       </div>
@@ -5004,7 +6374,8 @@ def format_html_report(report, pdf_path, meta, stat_result):
       <div><span>提取字符数</span><strong>{extracted_chars}</strong></div>
       <div><span>提取方式</span><strong>{extraction_method}</strong></div>
       {chunk_info if chunk_info else ''}
-      <div><span>审查时间</span><strong>{time.strftime('%Y-%m-%d %H:%M:%S')}</strong></div>
+      <div><span>审查时间</span><strong>{_html_escape(runtime.get('local_time') or time.strftime('%Y-%m-%d %H:%M:%S'))}</strong></div>
+      <div><span>运行时UTC年份</span><strong>{_html_escape(runtime.get('utc_year', runtime_utc_year()))}</strong></div>
     </div>
   </div>
 
@@ -5030,6 +6401,7 @@ def format_html_report(report, pdf_path, meta, stat_result):
   {web_action_panel_html}
   {conclusion_html}
   {image_audit_html}
+  {resource_audit_html}
   {reference_audit_html}
 
   <div class="footer">
@@ -5341,6 +6713,8 @@ def collect_mineru_image_files(input_path: str, output_dir=None) -> List[str]:
     images = []
     for zip_path in _dedupe_paths(zips):
         images.extend(_extract_images_from_mineru_zip(Path(zip_path), images_dir))
+    if zips:
+        return _dedupe_paths(images)
     if images_dir.exists():
         for ext in IMAGE_EXTENSIONS:
             for image_path in images_dir.rglob(f"*{ext}"):
@@ -5471,17 +6845,45 @@ def _normalize_glm_image_result(parsed, model):
     reasonability = str(parsed.get("reasonability") or "需人工核对").strip()
     if reasonability not in {"合理", "需人工核对", "可疑"}:
         reasonability = "需人工核对"
+    summary = str(parsed.get("summary") or "GLM未返回明确摘要。").strip()
+    visible_text = str(parsed.get("visible_text") or "").strip()
+    risks = [str(r).strip() for r in risks if str(r).strip()]
+    manual_checks = [str(c).strip() for c in manual_checks if str(c).strip()]
+    joined = " ".join([summary, visible_text, " ".join(risks), " ".join(manual_checks)]).lower()
+    image_missing_markers = (
+        "no_image",
+        "未收到图片",
+        "没有收到图片",
+        "未提供图片",
+        "未检测到上传的图片",
+        "无法看到图片",
+        "看不到图片",
+        "缺少图片",
+        "缺少图像",
+        "无图片可分析",
+        "missing image",
+        "no image",
+    )
+    image_not_received = any(marker in joined for marker in image_missing_markers)
+    status = parsed.get("status") or "ok"
+    if image_not_received:
+        status = "error"
+        if "image_input_not_supported" not in risks:
+            risks.append("image_input_not_supported")
+        if not manual_checks:
+            manual_checks = ["更换支持 image_url 多模态输入的图像语义分析模型或检查 OpenAI-compatible 网关配置。"]
     return {
-        "status": parsed.get("status") or "ok",
+        "status": status,
         "model": parsed.get("model") or model,
-        "summary": str(parsed.get("summary") or "GLM未返回明确摘要。").strip(),
+        "summary": summary,
         "image_type": str(parsed.get("image_type") or "").strip(),
         "scientific_context": str(parsed.get("scientific_context") or "").strip(),
-        "visible_text": str(parsed.get("visible_text") or "").strip(),
+        "visible_text": visible_text,
         "reasonability": reasonability,
-        "risks": [str(r).strip() for r in risks if str(r).strip()],
-        "manual_checks": [str(c).strip() for c in manual_checks if str(c).strip()],
+        "risks": risks,
+        "manual_checks": manual_checks,
         "confidence": confidence,
+        **({"error_reason": "image_input_not_received"} if image_not_received else {}),
     }
 
 
@@ -5576,8 +6978,68 @@ def _normalize_detector_result(data):
     }
 
 
+class _ExternalCapabilityTimeout(BaseException):
+    pass
+
+
+def _run_with_alarm_timeout(func, timeout, timeout_result):
+    """Bound third-party calls that may ignore socket timeouts."""
+    try:
+        seconds = max(1, int(timeout or 1))
+    except Exception:
+        seconds = 1
+    if threading.current_thread() is not threading.main_thread() or not hasattr(signal, "SIGALRM"):
+        return func()
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def _raise_timeout(signum, frame):
+        raise _ExternalCapabilityTimeout(f"operation exceeded {seconds}s")
+
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.alarm(seconds)
+    try:
+        return func()
+    except _ExternalCapabilityTimeout:
+        return timeout_result()
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _glm_timeout_result(model, timeout):
+    return {
+        "status": "error",
+        "model": model,
+        "summary": f"GLM图像语义理解超过{timeout}s未返回，建议检查第三方服务或网络后重试。",
+        "reasonability": "需人工核对",
+        "risks": ["glm_timeout"],
+        "manual_checks": ["检查图像语义分析服务配置、网络情况和服务商状态后重试。"],
+        "confidence": 0,
+        "error_reason": "timeout",
+        "error_message": f"timeout>{timeout}s",
+        "http_status": None,
+    }
+
+
+def _detector_timeout_result(timeout):
+    return {
+        "status": "error",
+        "provider": "imagedetector.com",
+        "reason": "timeout",
+        "summary": f"imagedetector自动检测超过{timeout}s未返回，建议检查第三方服务或网络后重试。",
+    }
+
+
 def call_imagedetector(image_path: str, timeout=60):
     """Upload an image to imagedetector.com using the site's public web flow."""
+    def _call():
+        return _call_imagedetector_unbounded(image_path, timeout=timeout)
+
+    return _run_with_alarm_timeout(_call, timeout, lambda: _detector_timeout_result(timeout))
+
+
+def _call_imagedetector_unbounded(image_path: str, timeout=60):
     try:
         file_name, mime, content = _prepare_detector_upload_file(image_path)
         if len(content) < 1024:
@@ -5668,6 +7130,15 @@ def call_glm_image_semantics(image_path: str, timeout=45, api_key=None, model=No
     """Use GLM-4.6V-Flash to understand image semantics and flag visual reasonability risks."""
     api_key = api_key or GLM_API_KEY
     model = model or GLM_VISION_MODEL
+
+    def _call():
+        return _call_glm_image_semantics_unbounded(image_path, timeout=timeout, api_key=api_key, model=model)
+
+    return _run_with_alarm_timeout(_call, timeout, lambda: _glm_timeout_result(model, timeout))
+
+
+def _call_glm_image_semantics_unbounded(image_path: str, timeout=45, api_key=None, model=None):
+    """Unbounded implementation; call through call_glm_image_semantics in orchestration."""
     path = Path(image_path)
     if not api_key:
         return {
@@ -5692,9 +7163,12 @@ def call_glm_image_semantics(image_path: str, timeout=45, api_key=None, model=No
         pass
 
     prompt = (
-        "你是科研论文图像审查助手。请只基于这张图片本身做语义理解与合理性审查，"
+        "你是科研论文图像审查助手。请只基于这张图片本身做语义理解与合理性审查。"
+        "不要输出推理过程、解释、Markdown或代码块；只返回一个合法JSON对象。"
         "不要把低分辨率、OCR错误、压缩噪声、表格截断或排版问题直接当作造假证据。"
-        "如果图片是表格/局部截图，请重点说明可读内容和截断风险。请返回严格JSON："
+        "如果图片是表格/局部截图，请重点说明可读内容和截断风险。"
+        "reasonability字段必须严格取值为：合理、需人工核对、可疑。"
+        "请返回严格JSON："
         "{\"summary\":\"一句话描述图片内容\","
         "\"image_type\":\"图/表/显微图/热图/流程图/照片/其他\","
         "\"scientific_context\":\"可能对应的科研用途\","
@@ -5716,16 +7190,22 @@ def call_glm_image_semantics(image_path: str, timeout=45, api_key=None, model=No
             }
         ],
         "temperature": 0.1,
-        "max_tokens": 800,
+        "max_tokens": 10000,
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     try:
-        data, _ = _http_request(GLM_API_URL, "POST", headers=headers, data=json.dumps(payload).encode("utf-8"), timeout=timeout)
+        data, _ = _http_request(_chat_completions_endpoint(GLM_API_URL), "POST", headers=headers, data=json.dumps(payload).encode("utf-8"), timeout=timeout)
         result = json.loads(data.decode("utf-8", errors="replace"))
-        content = (((result.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        message = ((result.get("choices") or [{}])[0].get("message") or {})
+        content = (
+            message.get("content")
+            or message.get("reasoning_content")
+            or message.get("reasoning")
+            or ""
+        ).strip()
         parsed = _extract_json_object(content)
         if not isinstance(parsed, dict):
             parsed = {"summary": _brief_text(content, 260), "risks": ["glm_json_parse_failed"], "confidence": 0}
@@ -5805,13 +7285,15 @@ def build_image_audit(
     semantic_checked = 0
     if semantic:
         semantic_candidates = sorted(analyses, key=_image_semantic_priority_key)
-        for item in semantic_candidates[:_effective_limit(semantic_limit, len(semantic_candidates))]:
+        semantic_queue = semantic_candidates[:_effective_limit(semantic_limit, len(semantic_candidates))]
+        for idx, item in enumerate(semantic_queue, 1):
             cache_key = _image_file_fingerprint(item.get("path", ""))
             semantic_result = semantic_cache.get(cache_key)
             if isinstance(semantic_result, dict) and semantic_result.get("status") == "error":
                 semantic_cache.pop(cache_key, None)
                 semantic_result = None
             if not semantic_result:
+                print(f"  🖼️ GLM图像语义分析 [{idx}/{len(semantic_queue)}] {item.get('file', '')}")
                 semantic_result = call_glm_image_semantics(item.get("path", ""), timeout=semantic_timeout)
                 if semantic_result.get("status") != "error":
                     semantic_cache[cache_key] = semantic_result
@@ -5820,13 +7302,15 @@ def build_image_audit(
     detector_checked = 0
     if detector:
         detector_candidates = sorted(analyses, key=_image_detector_priority_key)
-        for item in detector_candidates[:_effective_limit(detector_limit, len(detector_candidates))]:
+        detector_queue = detector_candidates[:_effective_limit(detector_limit, len(detector_candidates))]
+        for idx, item in enumerate(detector_queue, 1):
             cache_key = _image_file_fingerprint(item.get("path", "")) + ":imagedetector_v1"
             detector_result = detector_cache.get(cache_key)
             if isinstance(detector_result, dict) and detector_result.get("status") == "error":
                 detector_cache.pop(cache_key, None)
                 detector_result = None
             if not detector_result:
+                print(f"  🖼️ imagedetector自动检测 [{idx}/{len(detector_queue)}] {item.get('file', '')}")
                 detector_result = call_imagedetector(item.get("path", ""), timeout=detector_timeout)
                 if detector_result.get("status") != "error":
                     detector_cache[cache_key] = detector_result
@@ -6209,7 +7693,18 @@ def launch_image_ai_detect(
 
 
 
+def _failed_artifact_options(input_path: Path, output_dir: Path, args) -> Dict[str, Any]:
+    if not getattr(args, "output", None):
+        return {}
+    output_override = Path(args.output)
+    if not output_override.is_absolute():
+        output_override = Path(output_dir) / output_override
+    base = _artifact_base_from_output(output_override)
+    return {"output_dir": base.parent, "output_stem": base.name}
+
+
 def run_audit(run_request: RunRequest, args) -> RunResult:
+    global _RESUME_EVENTS_ENABLED
     input_path = run_request.input_path
     if not input_path.exists():
         print(f"❌ 路径不存在: {input_path}")
@@ -6217,7 +7712,7 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
             capability="input",
             error_class="input_path_not_found",
             message=f"路径不存在: {input_path}",
-            retry_command=default_retry_command(input_path),
+            retry_command=retry_command_from_args(args, input_path),
         )
         return RunResult.failed(failure, {}, meta={"input_path": str(input_path)})
 
@@ -6231,10 +7726,19 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
         detail = "; ".join(f"{e['capability']}.{e['field']}" for e in config_errors)
         print(f"⚠️ 关键配置缺失: {detail}。关键能力预检会在对应正式阶段前停止并生成失败诊断。")
     resume_dir = get_resume_dir(output_dir, output_stem)
+    _RESUME_EVENTS_ENABLED = not bool(getattr(args, "no_resume", False))
+    if getattr(args, "fresh", False):
+        import shutil
+        print(f"🧹 --fresh: 清空断点续作缓存目录 {resume_dir}")
+        shutil.rmtree(resume_dir, ignore_errors=True)
+        resume_dir = get_resume_dir(output_dir, output_stem)
     if args.no_resume:
         print("♻️ 已禁用断点续作缓存，本次将重新执行提取和LLM审查")
     else:
         print(f"🔁 断点续作缓存目录: {resume_dir}")
+    retry_command = retry_command_from_args(args, input_path)
+    failed_artifact_kwargs = _failed_artifact_options(input_path, output_dir, args)
+    run_runtime = runtime_metadata()
     run_workspace = create_run_workspace(input_path, output_dir, output_stem)
     print(f"🗂️ 本次运行工作区: {run_workspace['run_dir']}")
     record_run_workspace_json(run_workspace, "input_manifest.json", {
@@ -6243,7 +7747,8 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
         "input_type": "directory" if input_path.is_dir() else "file",
         "exists": input_path.exists(),
         "size_bytes": input_path.stat().st_size if input_path.is_file() else None,
-        "created_at": time.strftime("%F %T"),
+        "created_at": run_runtime["local_time"],
+        "runtime": run_runtime,
     })
     allow_llm_cache_read = _allow_llm_cache_read(args.no_resume, getattr(args, "llm_cache_only", False))
     allow_llm_cache_write = not args.no_resume
@@ -6292,12 +7797,13 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
         if not mineru_preflight.ok:
             failure = preflight_failure_to_audit_failure(
                 mineru_preflight,
-                default_retry_command(input_path),
+                retry_command,
                 completed_stages,
             )
             md_path, json_path = save_failed_audit_diagnostics(
                 failure,
                 input_path,
+                **failed_artifact_kwargs,
                 meta={"preflight_results": preflight_results},
             )
             record_run_workspace_artifacts(
@@ -6435,9 +7941,9 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
                     message="未能从PDF中提取到文本（可能是扫描件或加密PDF）。",
                     fix_hints=["检查PDF是否加密或为扫描件。", "确认MinerU配置可用后重试。"],
                     completed_stages=completed_stages,
-                    retry_command=default_retry_command(input_path),
+                    retry_command=retry_command,
                 )
-                md_path, json_path = save_failed_audit_diagnostics(failure, input_path)
+                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs)
                 record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
                 return RunResult.failed(
                     failure,
@@ -6449,6 +7955,7 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
             progress_bar(1, 5, "阶段1/5 PDF文本提取完成")
 
     meta = normalize_run_meta(meta, input_path, full_text)
+    meta["runtime"] = run_runtime
     meta["preflight_results"] = preflight_results
     completed_stages.append("stage1_text_extraction")
 
@@ -6511,6 +8018,33 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
         print("📚 未识别到独立参考文献章节，主体审查不做引用剥离")
     completed_stages.append("stage1_reference_audit")
 
+    # ─── 代码仓库与在线部署资源可用性校检 ───
+    resource_online_cache_path = resume_dir / "resource_online_cache.json"
+    resource_online_cache = {} if args.no_resume else (_json_load(resource_online_cache_path, {}) or {})
+    resource_online_enabled = not getattr(args, "no_resource_online", False)
+    resource_audit = audit_resources(
+        full_text,
+        online=resource_online_enabled,
+        timeout=getattr(args, "resource_timeout", 10),
+        cache=resource_online_cache,
+    )
+    if resource_online_enabled and not args.no_resume:
+        _json_save(resource_online_cache_path, resource_online_cache)
+        resume_event(
+            resume_dir,
+            "stage1_resource_online",
+            "saved",
+            f"checked={resource_audit.get('online_checked', 0)}; cache_entries={len(resource_online_cache)}",
+            cache=str(resource_online_cache_path),
+        )
+    meta["resource_count"] = resource_audit.get("resource_count", 0)
+    meta["resource_audit"] = resource_audit
+    if resource_audit.get("resource_count"):
+        print(f"🔗 已识别代码仓库/在线资源: {resource_audit.get('resource_count')}项；在线检测{resource_audit.get('online_checked', 0)}项")
+    else:
+        print("🔗 未识别到代码仓库或论文部署的在线资源链接")
+    completed_stages.append("stage1_resource_audit")
+
     # ─── 阶段2：本地统计检测（使用全文，统计不截断） ───
     progress_bar(1, 5, "阶段2/5 开始本地统计检测")
     print(f"🔢 正在执行本地统计检测...")
@@ -6523,18 +8057,19 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
 
     # ─── 阶段3：智能分块 + LLM语义审查（冗余机制） ───
     print("🧪 关键能力预检: 文本语义审查LLM")
-    text_llm_preflight = run_preflight_once(preflight_state, "text_llm", lambda: preflight_text_llm(timeout=min(10, LLM_TIMEOUT)))
+    text_llm_preflight = run_preflight_once(preflight_state, "text_llm", lambda: preflight_text_llm(timeout=min(30, LLM_TIMEOUT)))
     _record_preflight(text_llm_preflight)
     meta["preflight_results"] = preflight_results
     if not text_llm_preflight.ok:
         failure = preflight_failure_to_audit_failure(
             text_llm_preflight,
-            default_retry_command(input_path),
+            retry_command,
             completed_stages,
         )
         md_path, json_path = save_failed_audit_diagnostics(
             failure,
             input_path,
+            **failed_artifact_kwargs,
             meta=meta,
         )
         record_run_workspace_artifacts(
@@ -6599,10 +8134,10 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
                     message=f"LLM语义审查失败或返回结构不符合证据schema: {e}",
                     fix_hints=["检查文本LLM服务稳定性和提示词输出格式。", "稍后重试或更换稳定的文本语义审查服务。"],
                     completed_stages=completed_stages,
-                    retry_command=default_retry_command(input_path),
+                    retry_command=retry_command,
                     details={"raw_error": str(e), "chunk": "1/1"},
                 )
-                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, meta=meta)
+                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs, meta=meta)
                 record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
                 return RunResult.failed(
                     failure,
@@ -6682,10 +8217,10 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
                     message="LLM分块重试后仍失败，停止生成完整审查报告: " + detail,
                     fix_hints=["检查文本LLM服务稳定性和严格证据schema输出。", "更换稳定服务或稍后重试。"],
                     completed_stages=completed_stages,
-                    retry_command=default_retry_command(input_path),
+                    retry_command=retry_command,
                     details={"failed_chunks": failed_nums, "detail": detail},
                 )
-                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, meta=meta)
+                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs, meta=meta)
                 record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
                 return RunResult.failed(
                     failure,
@@ -6716,10 +8251,10 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
                 message=message,
                 fix_hints=["检查文本LLM服务和证据schema输出。", "更换稳定服务后重试。"],
                 completed_stages=completed_stages,
-                retry_command=default_retry_command(input_path),
+                retry_command=retry_command,
                 details={"failed_chunks": failed_final},
             )
-            md_path, json_path = save_failed_audit_diagnostics(failure, input_path, meta=meta)
+            md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs, meta=meta)
             record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
             return RunResult.failed(
                 failure,
@@ -6801,10 +8336,10 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
             message=failed_message,
             fix_hints=["检查第三方服务配置、网络情况和服务商状态后重试。"],
             completed_stages=completed_stages,
-            retry_command=default_retry_command(input_path),
+            retry_command=retry_command,
             details=failed_details,
         )
-        md_path, json_path = save_failed_audit_diagnostics(failure, input_path, meta=meta)
+        md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs, meta=meta)
         record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
         return RunResult.failed(
             failure,
@@ -6819,6 +8354,13 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
     progress_bar(4, 5, "阶段5/5 开始生成报告")
     limited_reasons = audit_limited_reasons(args, meta, has_pdf_input=has_pdf_input)
     apply_audit_artifact_type(meta, limited_reasons)
+    report_actions_port = int(getattr(args, "report_actions_port", 8765) or 8765)
+    meta["report_actions"] = {
+        "host": "127.0.0.1",
+        "port": report_actions_port,
+        "url": report_action_service_url("127.0.0.1", report_actions_port),
+        "auto_start": not bool(getattr(args, "no_open", False)),
+    }
     report_input = str(input_path)
     md_report = format_report(report, report_input, meta, stat_result)
 
@@ -6849,7 +8391,7 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
 
     if args.json:
         json_path.write_text(
-            json.dumps({"report_type": meta.get("artifact_type", "complete"), "llm_report": report, "stat_result": stat_result, "meta": meta, "reference_audit": reference_audit},
+            json.dumps({"report_type": meta.get("artifact_type", "complete"), "llm_report": report, "stat_result": stat_result, "meta": meta, "reference_audit": reference_audit, "resource_audit": resource_audit},
                        ensure_ascii=False, indent=2),
             encoding="utf-8")
         print(f"✅ 原始JSON已保存: {json_path}")
@@ -6869,9 +8411,20 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
     if args.no_open:
         print(f"🌐 已跳过自动打开HTML报告: {html_output_path}")
     else:
+        action_status = ensure_report_action_service(
+            port=report_actions_port,
+            log_path=Path(run_workspace["run_dir"]) / "report_actions.log",
+        )
+        meta["report_actions"]["service_status"] = action_status.get("status")
+        if action_status.get("ok"):
+            if action_status.get("status") == "already_running":
+                print(f"🌐 HTML动作服务已在运行: {action_status.get('url')}")
+            else:
+                print(f"🌐 HTML动作服务已自动启动: {action_status.get('url')}")
+        else:
+            print(f"⚠️ HTML动作服务自动启动失败: {action_status.get('error') or action_status.get('status')}，报告仍可打开")
         try:
-            html_abs = str(html_output_path.resolve())
-            webbrowser.open(f"file:///{html_abs}" if platform.system() == "Windows" else f"file://{html_abs}")
+            open_html_artifact(html_output_path)
             print(f"🌐 已在浏览器中打开HTML报告")
         except Exception as e:
             print(f"⚠️ 自动打开浏览器失败: {e}，请手动打开: {html_output_path}")
@@ -6879,7 +8432,7 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
     # 打印摘要
     if not report.get("parse_error"):
         risk = report.get("risk_level", "未知")
-        print(f"\n📊 风险等级: {risk} | 总评: {report.get('summary', 'N/A')}")
+        print(f"\n📊 复核优先级: {risk} | 总评: {report.get('summary', 'N/A')}")
 
     artifact_paths = {"markdown": str(output_path), "html": str(html_output_path)}
     if json_path.exists():
@@ -6948,8 +8501,14 @@ def main():
                         help="参考文献在线检索条数上限（默认全部；设置后为范围受限审查）")
     parser.add_argument("--reference-timeout", type=int, default=10,
                         help="单个参考文献外部检索源超时时间秒数（默认10）")
+    parser.add_argument("--no-resource-online", action="store_true",
+                        help="调试/范围受限：关闭代码仓库与在线资源可用性校检；识别到资源时不能作为完整正式审查")
+    parser.add_argument("--resource-timeout", type=int, default=10,
+                        help="单个代码仓库/在线资源可用性请求超时时间秒数（默认10）")
     parser.add_argument("--no-resume", action="store_true",
                         help="禁用断点续作缓存，强制重新提取文本和重新LLM审查")
+    parser.add_argument("--fresh", action="store_true",
+                        help="运行前清空本输入的断点续作缓存，然后重新开始；默认不清空缓存并自动续跑")
     parser.add_argument("--llm-timeout", type=int, default=LLM_TIMEOUT,
                         help=f"单次LLM请求超时时间秒数（默认{LLM_TIMEOUT}；不稳定网关可调小以更快跳过）")
     parser.add_argument("--llm-retries", type=int, default=LLM_RETRIES,
