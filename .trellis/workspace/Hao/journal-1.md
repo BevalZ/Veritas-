@@ -72,3 +72,36 @@ Created a local Codex karpathy-guidelines skill from the upstream Andrej Karpath
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Fix image semantic cache resume
+
+**Date**: 2026-06-02
+**Task**: Fix image semantic cache resume
+**Branch**: `main`
+
+### Summary
+
+Made image semantic cache keys service-aware, merged visible and hidden resume caches, documented the cache contract, and verified focused plus full core tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `175131e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
