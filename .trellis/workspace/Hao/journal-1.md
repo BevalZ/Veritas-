@@ -138,3 +138,36 @@ Added the HTML-first PubPeer and journal Letter follow-up workflow with article 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Support direct Word file input
+
+**Date**: 2026-06-02
+**Task**: Support direct Word file input
+**Branch**: `main`
+
+### Summary
+
+Added direct .docx single-file audit support through the existing multi-format extractor, rejected legacy .doc with a clear diagnostic, documented the input contract, and verified full core tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6adaea6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
