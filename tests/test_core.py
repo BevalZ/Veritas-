@@ -2801,7 +2801,12 @@ def test_format_html_report_sorts_checks_and_uses_collapsible_details():
     assert "English" in rendered
     assert "paper-audit-action-context" in rendered
     assert "127.0.0.1:8765" in rendered
-    assert "--serve-report-actions" not in rendered
+    assert "--serve-report-actions" in rendered
+    assert 'id="followup-title"' in rendered
+    assert 'id="draft-tone"' in rendered
+    assert 'id="followup-evidence-list"' in rendered
+    assert 'id="manual-review-confirmation"' in rendered
+    assert "http://127.0.0.1:8765/followups" in rendered
     assert "证据型疑点 1" in rendered
 
 
@@ -2815,6 +2820,7 @@ def test_web_action_panel_uses_report_action_port():
 
     assert "http://127.0.0.1:9123" in rendered
     assert "http://127.0.0.1:9123/generate" in rendered
+    assert "http://127.0.0.1:9123/followups" in rendered
     assert "127.0.0.1:8765" not in rendered
 
 
@@ -2978,3 +2984,113 @@ def test_build_followup_prompt_uses_requested_kind_and_context():
     assert "journal name" in pubpeer_messages[1]["content"]
     assert "author information" in pubpeer_messages[1]["content"]
     assert "发现一个疑点" in pubpeer_messages[1]["content"]
+
+
+def test_build_followup_generation_context_blocks_failed_report():
+    try:
+        paper_audit.build_followup_generation_context({"artifact_type": "failed"})
+    except ValueError as exc:
+        assert "failed_report_followup_blocked" in str(exc)
+    else:
+        raise AssertionError("expected failed reports to block follow-up generation")
+
+
+def test_build_followup_prompt_includes_tone_scope_and_user_concerns():
+    context = paper_audit.build_followup_generation_context(
+        {
+            "artifact_type": "limited",
+            "limited_reasons": ["图像语义分析未覆盖全部图片"],
+            "paper_identity": {
+                "title": "Original title",
+                "journal": "Journal X",
+                "authors": ["Alice Zhang"],
+            },
+            "top_issues": [{"id": "a", "category": "数据", "item": "p值", "verdict": "🚩红旗", "reason": "p值异常"}],
+        },
+        identity={"title": "Confirmed title", "journal": "Confirmed Journal", "authors": "Alice Zhang, Bob Smith", "doi": "10.1/test", "year": "2024"},
+        selected_issues=[{"id": "a", "category": "数据", "item": "p值", "verdict": "🚩红旗", "reason": "p值异常"}],
+        custom_concerns=["图2图注与正文描述不一致"],
+        tone="firm",
+    )
+
+    messages = paper_audit.build_followup_prompt("pubpeer_comment", context, language="en")
+    content = messages[1]["content"]
+
+    assert "Confirmed title" in content
+    assert "Confirmed Journal" in content
+    assert "selected_issues" in content
+    assert "source=user_added" in content
+    assert "limited" in content
+    assert "firm" in content
+    assert "图2图注与正文描述不一致" in content
+
+
+def test_generate_and_save_followup_draft_persists_formal_artifacts(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_generate(kind, context, language="zh", tone=None, timeout=None):
+        captured["kind"] = kind
+        captured["context"] = context
+        captured["language"] = language
+        captured["tone"] = tone
+        return "基于对这篇文章的阅读和理解，我注意到以下问题。"
+
+    monkeypatch.setattr(paper_audit, "generate_followup_draft", fake_generate)
+    context = {
+        "artifact_type": "complete",
+        "followups_dir": str(tmp_path / "followups"),
+        "paper_identity": {"title": "Original", "journal": "Journal", "authors": ["Alice"]},
+        "top_issues": [{"id": "issue-1", "category": "数据", "item": "异常", "verdict": "🚩红旗", "reason": "异常"}],
+    }
+
+    result = paper_audit.generate_and_save_followup_draft(
+        "pubpeer_comment",
+        context,
+        language="zh",
+        identity={"title": "Confirmed", "journal": "Confirmed Journal", "authors": ["Alice", "Bob"], "doi": "10.1/test", "year": "2024"},
+        selected_issues=context["top_issues"],
+        custom_concerns=["人工补充问题"],
+        tone="standard",
+        disclaimer_confirmed=True,
+    )
+
+    followups_dir = tmp_path / "followups"
+    identity_payload = json.loads((followups_dir / "article_identity.json").read_text(encoding="utf-8"))
+    log_payload = json.loads((followups_dir / "followup_generation_log.json").read_text(encoding="utf-8"))
+
+    assert result["paths"]["draft_path"].endswith("pubpeer_comment.zh.md")
+    assert (followups_dir / "pubpeer_comment.zh.md").read_text(encoding="utf-8").startswith("基于对这篇文章")
+    assert identity_payload["title"] == "Confirmed"
+    assert identity_payload["journal"] == "Confirmed Journal"
+    assert identity_payload["language"] == "zh"
+    assert log_payload[-1]["kind"] == "pubpeer_comment"
+    assert log_payload[-1]["tone"] == "standard"
+    assert captured["context"]["custom_concerns"][0]["source"] == "user_added"
+    assert captured["context"]["selected_issues"][0]["id"] == "issue-1"
+
+
+def test_generate_and_save_followup_requires_manual_confirmation(tmp_path):
+    try:
+        paper_audit.generate_and_save_followup_draft(
+            "journal_letter",
+            {"artifact_type": "complete", "followups_dir": str(tmp_path / "followups")},
+            disclaimer_confirmed=False,
+        )
+    except ValueError as exc:
+        assert "manual_review_confirmation_required" in str(exc)
+    else:
+        raise AssertionError("expected manual confirmation to be required")
+
+
+def test_load_existing_followups_reads_saved_files(tmp_path):
+    followups_dir = tmp_path / "followups"
+    followups_dir.mkdir()
+    (followups_dir / "pubpeer_comment.en.md").write_text("Existing PubPeer draft", encoding="utf-8")
+    (followups_dir / "article_identity.json").write_text(json.dumps({"title": "Confirmed"}, ensure_ascii=False), encoding="utf-8")
+
+    loaded = paper_audit.load_existing_followups({"followups_dir": str(followups_dir)}, language="en")
+
+    assert loaded["ok"] is True
+    assert loaded["identity"]["title"] == "Confirmed"
+    assert loaded["drafts"]["pubpeer_comment"]["text"] == "Existing PubPeer draft"
+    assert "journal_letter" not in loaded["drafts"]

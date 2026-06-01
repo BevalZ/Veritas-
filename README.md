@@ -133,11 +133,28 @@ python paper_audit.py --update-patterns pubpeer_comments.txt
 - 审查成功生成HTML后，会自动打开浏览器查看报告。
 - 打开HTML前，程序会自动启动或复用本机动作服务：`http://127.0.0.1:8765`。
 - HTML里的“生成 PubPeer Comment”和“生成期刊 Letter”按钮会直接调用该本机服务生成草稿，不需要再手动运行额外脚本。
+- 生成前需要确认或修改文章标题、期刊、作者、DOI、年份，选择语言、语气和写入草稿的证据，并勾选人工复核确认。
+- PubPeer Comment 和期刊 Letter 支持中文/英文；语气支持保守、标准、强硬，默认保守。
+- 报告中的高风险证据会默认勾选；也可以补充“自定义关注点”，这类内容会标记为用户补充而不是自动检测结论。
 - 动作服务只监听 `127.0.0.1`，用于本机浏览器和本机Python进程通信；草稿仍由你在 `config.py` 中配置的LLM生成，使用前必须人工核对证据和措辞。
+
+生成产物会写入报告输出目录的 `followups/`：
+```text
+followups/
+  article_identity.json
+  pubpeer_comment.zh.md
+  pubpeer_comment.en.md
+  journal_letter.zh.md
+  journal_letter.en.md
+  followup_generation_log.json
+```
+
+重新打开旧HTML时，只要本机动作服务正在运行，页面会尝试读取已有 `followups/` 文件并回填已生成草稿。
+`*.failed.*` 失败诊断报告不允许生成 PubPeer Comment 或期刊 Letter；`*.limited.*` 范围受限报告可生成草稿，但提示词会要求写明审查范围限制。
 
 旧HTML报告的边界：
 - 如果审查脚本正常运行结束，后台动作服务通常会继续存在；之后单独打开同一份HTML，按钮仍可直接生成草稿。
-- 如果电脑重启、动作服务被手动结束、端口被占用，或服务异常退出，浏览器里的静态HTML不能自行启动本地Python脚本；此时按钮会提示服务未响应。
+- 如果电脑重启、动作服务被手动结束、端口被占用，或服务异常退出，浏览器里的静态HTML不能自行启动本地Python脚本；此时页面会提示服务地址和可复制启动命令。
 - 兜底方式是重新启动动作服务：
 ```bash
 python paper_audit.py --serve-report-actions
@@ -155,9 +172,10 @@ python paper_audit.py ./my_paper_project/ --report-actions-port 8876
 python paper_audit.py Test_paper -o full_risk_from_scratch --json
 ```
 2. 打开生成后的 `Test_paper/full_risk_from_scratch.audit.html`。
-3. 在草稿区先选 `中文` 或 `English`。
-4. 点击 `生成 PubPeer Comment` 或 `生成期刊 Letter`。
-5. 如果旧页面报服务未响应，先重启 `python paper_audit.py --serve-report-actions`，再刷新页面。
+3. 在草稿区确认文章身份，选择 `中文` 或 `English`、语气和证据项。
+4. 勾选人工复核确认后，点击 `生成 PubPeer Comment` 或 `生成期刊 Letter`。
+5. 检查 `Test_paper/followups/` 中自动保存的 Markdown 和 JSON 产物。
+6. 如果旧页面报服务未响应，按页面提示运行 `python paper_audit.py --serve-report-actions --report-actions-port 8765`，再刷新页面。
 
 ---
 

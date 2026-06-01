@@ -2603,6 +2603,15 @@ def normalize_followup_language(language):
     return "zh"
 
 
+def normalize_followup_tone(tone):
+    value = str(tone or "conservative").strip().lower()
+    if value in {"standard", "标准"}:
+        return "standard"
+    if value in {"firm", "strong", "强硬"}:
+        return "firm"
+    return "conservative"
+
+
 def _followup_language_instruction(language):
     language = normalize_followup_language(language)
     if language == "en":
@@ -2616,9 +2625,235 @@ def _followup_language_instruction(language):
     )
 
 
-def build_followup_prompt(kind, context, language="zh"):
+def _followup_tone_instruction(tone):
+    tone = normalize_followup_tone(tone)
+    if tone == "firm":
+        return (
+            "Use a firm but still evidence-limited tone. Be direct about concerns, "
+            "but do not state fraud, misconduct, or intent as fact."
+        )
+    if tone == "standard":
+        return (
+            "Use a clear standard academic tone. List concerns and requested clarifications, "
+            "while avoiding conclusions beyond the evidence."
+        )
+    return (
+        "Use a conservative tone. Phrase concerns as questions or requests for clarification "
+        "and avoid accusatory wording."
+    )
+
+
+def _split_author_text(value):
+    if isinstance(value, list):
+        return [str(author).strip() for author in value if str(author or "").strip()]
+    text = str(value or "")
+    return [part.strip() for part in re.split(r";|,|\band\b|，|；", text) if part.strip()]
+
+
+def normalize_article_identity(identity=None, fallback=None):
+    identity = identity if isinstance(identity, dict) else {}
+    fallback = fallback if isinstance(fallback, dict) else {}
+
+    def value(key, limit):
+        raw = identity.get(key)
+        if raw is None or str(raw).strip() == "":
+            raw = fallback.get(key, "")
+        return _brief_text(str(raw or "").strip(), limit)
+
+    authors = identity.get("authors")
+    if authors is None or authors == "":
+        authors = fallback.get("authors", [])
+    return {
+        "title": value("title", 300),
+        "journal": value("journal", 220),
+        "authors": [_brief_text(author, 120) for author in _split_author_text(authors)][:12],
+        "doi": value("doi", 120),
+        "year": value("year", 20),
+    }
+
+
+def _normalize_followup_issues(issues):
+    normalized = []
+    source_items = issues if isinstance(issues, list) else []
+    for idx, issue in enumerate(source_items[:20], 1):
+        if not isinstance(issue, dict):
+            continue
+        normalized.append({
+            "id": str(issue.get("id") or f"issue-{idx}"),
+            "source": str(issue.get("source") or "audit"),
+            "category": _brief_text(issue.get("category", ""), 120),
+            "item": _brief_text(issue.get("item", ""), 180),
+            "verdict": _brief_text(issue.get("verdict", ""), 80),
+            "evidence": _brief_text(issue.get("evidence", ""), 900),
+            "reason": _brief_text(issue.get("reason", ""), 900),
+        })
+    return normalized
+
+
+def _normalize_custom_concerns(concerns):
+    if isinstance(concerns, str):
+        concerns = [line.strip() for line in concerns.splitlines() if line.strip()]
+    normalized = []
+    for idx, concern in enumerate((concerns or [])[:10], 1):
+        if isinstance(concern, dict):
+            text = str(concern.get("text") or concern.get("reason") or "").strip()
+        else:
+            text = str(concern or "").strip()
+        if not text:
+            continue
+        normalized.append({
+            "id": f"user-{idx}",
+            "source": "user_added",
+            "category": "自定义关注点",
+            "severity": "manual",
+            "text": _brief_text(text, 900),
+        })
+    return normalized
+
+
+def build_followup_generation_context(
+    context,
+    identity=None,
+    selected_issues=None,
+    custom_concerns=None,
+    tone="conservative",
+):
+    context = context if isinstance(context, dict) else {}
+    artifact_type = context.get("artifact_type") or context.get("report_type") or "complete"
+    if artifact_type == "failed":
+        raise ValueError("failed_report_followup_blocked")
+    fallback_identity = context.get("paper_identity") or {}
+    issues = selected_issues if selected_issues is not None else context.get("top_issues")
+    prepared = dict(context)
+    prepared["artifact_type"] = artifact_type
+    prepared["limited_reasons"] = context.get("limited_reasons") or []
+    prepared["paper_identity"] = normalize_article_identity(identity, fallback=fallback_identity)
+    prepared["selected_issues"] = _normalize_followup_issues(issues)
+    prepared["custom_concerns"] = _normalize_custom_concerns(custom_concerns)
+    prepared["tone"] = normalize_followup_tone(tone)
+    prepared["confirmed_at"] = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    return prepared
+
+
+def _followup_output_dir(context):
+    context = context if isinstance(context, dict) else {}
+    raw = context.get("followups_dir")
+    if not raw:
+        artifact_paths = context.get("artifact_paths") if isinstance(context.get("artifact_paths"), dict) else {}
+        raw = artifact_paths.get("html") or artifact_paths.get("markdown") or context.get("paper") or "."
+        raw = str(Path(raw).parent / "followups")
+    path = Path(str(raw)).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _followup_draft_filename(kind, language):
+    language = normalize_followup_language(language)
+    if kind == "pubpeer_comment":
+        return f"pubpeer_comment.{language}.md"
+    if kind == "journal_letter":
+        return f"journal_letter.{language}.md"
+    raise ValueError(f"unsupported action kind: {kind}")
+
+
+def load_existing_followups(context, language="zh"):
+    language = normalize_followup_language(language)
+    output_dir = _followup_output_dir(context)
+    drafts = {}
+    for kind in ("pubpeer_comment", "journal_letter"):
+        path = output_dir / _followup_draft_filename(kind, language)
+        if path.exists():
+            drafts[kind] = {"path": str(path), "text": path.read_text(encoding="utf-8")}
+    identity_path = output_dir / "article_identity.json"
+    identity = _json_load(identity_path, {}) if identity_path.exists() else {}
+    return {
+        "ok": True,
+        "language": language,
+        "followups_dir": str(output_dir),
+        "identity": identity if isinstance(identity, dict) else {},
+        "drafts": drafts,
+    }
+
+
+def save_followup_artifacts(kind, context, language, text):
+    language = normalize_followup_language(language)
+    output_dir = _followup_output_dir(context)
+    identity_path = output_dir / "article_identity.json"
+    draft_path = output_dir / _followup_draft_filename(kind, language)
+    log_path = output_dir / "followup_generation_log.json"
+    identity_payload = {
+        **(context.get("paper_identity") if isinstance(context.get("paper_identity"), dict) else {}),
+        "source": "html_confirmed",
+        "confirmed_at": context.get("confirmed_at") or datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "language": language,
+    }
+    _json_save(identity_path, identity_payload)
+    draft_path.write_text(str(text or ""), encoding="utf-8")
+    existing_log = _json_load(log_path, [])
+    if not isinstance(existing_log, list):
+        existing_log = []
+    existing_log.append({
+        "created_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "kind": kind,
+        "language": language,
+        "tone": context.get("tone"),
+        "model": LLM_MODEL,
+        "draft_path": str(draft_path),
+        "identity_path": str(identity_path),
+        "selected_issue_count": len(context.get("selected_issues") or []),
+        "custom_concern_count": len(context.get("custom_concerns") or []),
+        "artifact_type": context.get("artifact_type"),
+    })
+    _json_save(log_path, existing_log)
+    return {
+        "followups_dir": str(output_dir),
+        "identity_path": str(identity_path),
+        "draft_path": str(draft_path),
+        "log_path": str(log_path),
+    }
+
+
+def generate_and_save_followup_draft(
+    kind,
+    context,
+    language="zh",
+    identity=None,
+    selected_issues=None,
+    custom_concerns=None,
+    tone="conservative",
+    disclaimer_confirmed=False,
+    timeout=None,
+):
+    if not disclaimer_confirmed:
+        raise ValueError("manual_review_confirmation_required")
+    language = normalize_followup_language(language)
+    prepared_context = build_followup_generation_context(
+        context,
+        identity=identity,
+        selected_issues=selected_issues,
+        custom_concerns=custom_concerns,
+        tone=tone,
+    )
+    text = generate_followup_draft(kind, prepared_context, language=language, tone=prepared_context.get("tone"), timeout=timeout)
+    paths = save_followup_artifacts(kind, prepared_context, language, text)
+    return {
+        "ok": True,
+        "kind": kind,
+        "language": language,
+        "tone": prepared_context.get("tone"),
+        "model": LLM_MODEL,
+        "text": text,
+        "paths": paths,
+        "context": prepared_context,
+    }
+
+
+def build_followup_prompt(kind, context, language="zh", tone=None):
     context = context if isinstance(context, dict) else {}
     language = normalize_followup_language(language)
+    tone = normalize_followup_tone(tone or context.get("tone"))
     kind_labels = {
         "pubpeer_comment": "PubPeer comment",
         "journal_letter": "letter to the journal editor",
@@ -2633,10 +2868,19 @@ def build_followup_prompt(kind, context, language="zh"):
         "If an identity field is missing, say it is not available in the audit context instead of guessing. "
         + _followup_language_instruction(language)
     )
+    scope_instruction = ""
+    if context.get("artifact_type") == "limited":
+        scope_instruction = (
+            "The audit context is marked limited. Include a brief scope limitation statement and avoid implying a complete review. "
+        )
+    evidence_instruction = (
+        "Use selected_issues as the primary evidence list. Treat custom_concerns entries with source=user_added as user-added concerns, "
+        "not automated findings. "
+    )
     if kind == "pubpeer_comment":
         task = (
             "Draft a concise PubPeer comment based strictly on the audit context. "
-            f"{identity_instruction} "
+            f"{identity_instruction} {_followup_tone_instruction(tone)} {scope_instruction}{evidence_instruction}"
             "Be neutral, evidence-based, and non-defamatory. "
             "Do not claim fraud or misconduct as fact. Ask clear questions and cite only the evidence in context. "
             "Include a short title, an article identification sentence, and 3-6 numbered concerns if warranted."
@@ -2644,7 +2888,7 @@ def build_followup_prompt(kind, context, language="zh"):
     else:
         task = (
             "Draft a formal letter to the journal editor based strictly on the audit context. "
-            f"{identity_instruction} "
+            f"{identity_instruction} {_followup_tone_instruction(tone)} {scope_instruction}{evidence_instruction}"
             "Keep a professional, cautious tone. "
             "Do not assert fraud or misconduct as fact. Request editorial assessment and list reproducible concerns. "
             "Include subject, salutation, concise background, article identification, bullet concerns, requested actions, and closing."
@@ -2664,8 +2908,8 @@ def build_followup_prompt(kind, context, language="zh"):
     ]
 
 
-def generate_followup_draft(kind, context, language="zh", timeout=None):
-    messages = build_followup_prompt(kind, context, language=language)
+def generate_followup_draft(kind, context, language="zh", tone=None, timeout=None):
+    messages = build_followup_prompt(kind, context, language=language, tone=tone)
     return call_llm_messages(messages, temperature=0.15, timeout=timeout, max_tokens=2200)
 
 
@@ -2758,7 +3002,7 @@ def serve_report_actions(host="127.0.0.1", port=8765):
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
@@ -2774,7 +3018,8 @@ def serve_report_actions(host="127.0.0.1", port=8765):
                 self._send_json({"ok": False, "error": "not_found"}, 404)
 
         def do_POST(self):
-            if self.path.rstrip("/") != "/generate":
+            route = self.path.rstrip("/")
+            if route not in {"/generate", "/followups"}:
                 self._send_json({"ok": False, "error": "not_found"}, 404)
                 return
             try:
@@ -2784,11 +3029,32 @@ def serve_report_actions(host="127.0.0.1", port=8765):
                     return
                 body = self.rfile.read(length).decode("utf-8", errors="replace")
                 payload = json.loads(body or "{}")
-                kind = payload.get("kind")
                 context = payload.get("context") or {}
                 language = normalize_followup_language(payload.get("language"))
-                text = generate_followup_draft(kind, context, language=language, timeout=LLM_TIMEOUT)
-                self._send_json({"ok": True, "kind": kind, "language": language, "model": LLM_MODEL, "text": text})
+                if route == "/followups":
+                    self._send_json(load_existing_followups(context, language=language))
+                    return
+                kind = payload.get("kind")
+                result = generate_and_save_followup_draft(
+                    kind,
+                    context,
+                    language=language,
+                    identity=payload.get("identity"),
+                    selected_issues=payload.get("selected_issues"),
+                    custom_concerns=payload.get("custom_concerns"),
+                    tone=payload.get("tone"),
+                    disclaimer_confirmed=bool(payload.get("disclaimer_confirmed")),
+                    timeout=LLM_TIMEOUT,
+                )
+                self._send_json({
+                    "ok": True,
+                    "kind": result.get("kind"),
+                    "language": result.get("language"),
+                    "tone": result.get("tone"),
+                    "model": result.get("model"),
+                    "text": result.get("text"),
+                    "paths": result.get("paths"),
+                })
             except Exception as e:
                 self._send_json({"ok": False, "error": f"{type(e).__name__}: {_brief_text(str(e), 300)}"}, 500)
 
@@ -5238,8 +5504,10 @@ def _report_action_context(report, pdf_path, meta, stat_result):
     suspicious = [c for c in checks if _is_suspicious_check(c)]
     selected = suspicious[:10] if suspicious else checks[:8]
     issues = []
-    for c in selected:
+    for idx, c in enumerate(selected, 1):
         issues.append({
+            "id": f"issue-{idx}",
+            "source": "audit",
             "category": c.get("category", ""),
             "item": c.get("item", ""),
             "verdict": c.get("verdict", ""),
@@ -5278,6 +5546,10 @@ def _report_action_context(report, pdf_path, meta, stat_result):
         })
     return {
         "paper": str(pdf_path),
+        "artifact_type": meta.get("artifact_type") or meta.get("report_type") or "complete",
+        "limited_reasons": meta.get("limited_reasons") or [],
+        "artifact_paths": meta.get("artifact_paths") or {},
+        "followups_dir": meta.get("followups_dir") or str((Path((meta.get("artifact_paths") or {}).get("html") or pdf_path).parent / "followups")),
         "paper_identity": {
             "title": _brief_text(paper_identity.get("title", ""), 300),
             "journal": _brief_text(paper_identity.get("journal", ""), 220),
@@ -5286,6 +5558,8 @@ def _report_action_context(report, pdf_path, meta, stat_result):
                 for author in (paper_identity.get("authors") or [])
                 if str(author or "").strip()
             ][:8],
+            "doi": _brief_text(paper_identity.get("doi", ""), 120),
+            "year": _brief_text(paper_identity.get("year", ""), 20),
         },
         "summary": _brief_text(report.get("summary", ""), 1200) if isinstance(report, dict) else "",
         "risk_level": report.get("risk_level", "") if isinstance(report, dict) else "",
@@ -5320,22 +5594,54 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
     port = int(service.get("port") or 8765)
     service_url = report_action_service_url(host, port)
     generate_url = f"{service_url}/generate"
+    followups_url = f"{service_url}/followups"
     context = _report_action_context(report, pdf_path, meta, stat_result or {})
     context_json = _json_for_script_tag(context)
     generate_url_json = _json_for_script_tag(generate_url)
+    followups_url_json = _json_for_script_tag(followups_url)
+    service_url_json = _json_for_script_tag(service_url)
+    startup_command_json = _json_for_script_tag(f"python paper_audit.py --serve-report-actions --report-actions-port {port}")
     return f"""
   <div class="section web-action-section">
     <h2>一键生成后续沟通草稿</h2>
-    <p class="section-hint">草稿由本地配置的LLM生成，生成后仍需人工核对证据和措辞。</p>
+    <p class="section-hint">草稿由本地配置的LLM生成。生成前请确认文章身份、证据范围和语气；生成后仍需人工核对。</p>
+    <div class="identity-grid" aria-label="文章身份确认">
+      <label>标题<input id="followup-title" type="text" placeholder="文章标题"></label>
+      <label>期刊<input id="followup-journal" type="text" placeholder="期刊"></label>
+      <label>作者<input id="followup-authors" type="text" placeholder="作者，逗号分隔"></label>
+      <label>DOI<input id="followup-doi" type="text" placeholder="DOI"></label>
+      <label>年份<input id="followup-year" type="text" placeholder="年份"></label>
+    </div>
     <div class="web-action-toolbar">
-      <select id="draft-language" class="draft-language-select" aria-label="草稿语言">
-        <option value="zh">中文</option>
-        <option value="en">English</option>
-      </select>
+      <label class="inline-control">语言
+        <select id="draft-language" class="draft-language-select" aria-label="草稿语言">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <label class="inline-control">语气
+        <select id="draft-tone" class="draft-language-select" aria-label="草稿语气">
+          <option value="conservative">保守</option>
+          <option value="standard">标准</option>
+          <option value="firm">强硬</option>
+        </select>
+      </label>
       <button type="button" class="action-button" data-action-kind="pubpeer_comment">生成 PubPeer Comment</button>
       <button type="button" class="action-button" data-action-kind="journal_letter">生成期刊 Letter</button>
       <button type="button" class="secondary-button" id="copy-generated-draft">复制草稿</button>
     </div>
+    <div class="evidence-picker">
+      <strong>写入草稿的证据</strong>
+      <div id="followup-evidence-list" class="evidence-choice-list"></div>
+    </div>
+    <label class="custom-concern-label">自定义关注点
+      <textarea id="custom-followup-concerns" class="custom-concern-input" placeholder="每行一个人工补充关注点，会标记为 user_added。"></textarea>
+    </label>
+    <label class="manual-confirmation">
+      <input id="manual-review-confirmation" type="checkbox">
+      我已确认文章身份、证据选择和语气设置；生成内容仅作为基于阅读和理解文章后的学术问题表达草稿，发送前仍需人工复核。
+    </label>
+    <div id="existing-followups" class="existing-followups"></div>
     <div id="web-action-status" class="web-action-status">动作服务: <code>{_html_escape(service_url)}</code></div>
     <textarea id="generated-draft" class="generated-draft" spellcheck="false" placeholder="生成的草稿会显示在这里，可直接编辑。"></textarea>
   </div>
@@ -5346,20 +5652,141 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
     const outputEl = document.getElementById('generated-draft');
     const contextEl = document.getElementById('paper-audit-action-context');
     const languageEl = document.getElementById('draft-language');
+    const toneEl = document.getElementById('draft-tone');
+    const evidenceEl = document.getElementById('followup-evidence-list');
+    const existingEl = document.getElementById('existing-followups');
+    const confirmationEl = document.getElementById('manual-review-confirmation');
     const actionLabels = {{
       pubpeer_comment: 'PubPeer comment',
       journal_letter: 'journal letter'
     }};
     const languageLabels = {{ zh: '中文', en: 'English' }};
     const generateUrl = {generate_url_json};
+    const followupsUrl = {followups_url_json};
+    const serviceUrl = {service_url_json};
+    const startupCommand = {startup_command_json};
+    let reportContext = {{}};
+    function esc(value) {{
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {{
+        return {{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }}[ch];
+      }});
+    }}
     function setStatus(text, isError) {{
       statusEl.textContent = text;
       statusEl.className = 'web-action-status' + (isError ? ' error' : '');
     }}
+    function setStatusHtml(html, isError) {{
+      statusEl.innerHTML = html;
+      statusEl.className = 'web-action-status' + (isError ? ' error' : '');
+    }}
+    function serviceFailure(prefix, err) {{
+      setStatusHtml(
+        esc(prefix) + '：本机动作服务未响应。服务地址: <code>' + esc(serviceUrl) + '</code>。请运行: <code>' +
+        esc(startupCommand) + '</code>，然后刷新本页面或重新点击生成。详情: ' + esc(err && err.message ? err.message : err),
+        true
+      );
+    }}
+    function readContext() {{
+      try {{
+        reportContext = JSON.parse(contextEl.textContent || '{{}}');
+        return reportContext;
+      }} catch (err) {{
+        setStatus('无法读取报告上下文: ' + err.message, true);
+        return {{}};
+      }}
+    }}
+    function populateIdentity(identity) {{
+      identity = identity || {{}};
+      document.getElementById('followup-title').value = identity.title || '';
+      document.getElementById('followup-journal').value = identity.journal || '';
+      document.getElementById('followup-authors').value = Array.isArray(identity.authors) ? identity.authors.join(', ') : (identity.authors || '');
+      document.getElementById('followup-doi').value = identity.doi || '';
+      document.getElementById('followup-year').value = identity.year || '';
+    }}
+    function identityFromForm() {{
+      return {{
+        title: document.getElementById('followup-title').value.trim(),
+        journal: document.getElementById('followup-journal').value.trim(),
+        authors: document.getElementById('followup-authors').value.split(/[,;，；]/).map(function(x) {{ return x.trim(); }}).filter(Boolean),
+        doi: document.getElementById('followup-doi').value.trim(),
+        year: document.getElementById('followup-year').value.trim()
+      }};
+    }}
+    function renderEvidence(context) {{
+      const issues = Array.isArray(context.top_issues) ? context.top_issues : [];
+      if (!issues.length) {{
+        evidenceEl.innerHTML = '<p class="section-hint">没有可自动勾选的高优先级证据；可在自定义关注点中补充。</p>';
+        return;
+      }}
+      evidenceEl.innerHTML = issues.map(function(issue, idx) {{
+        const verdict = String(issue.verdict || '');
+        const checked = (verdict.indexOf('红旗') >= 0 || verdict.indexOf('高') >= 0 || idx < 3) ? ' checked' : '';
+        const label = [issue.category, issue.item, issue.verdict].filter(Boolean).join(' · ');
+        const detail = issue.reason || issue.evidence || '';
+        return '<label class="evidence-choice"><input type="checkbox" data-issue-index="' + idx + '"' + checked + '> <span><strong>' +
+          esc(label || ('证据 ' + (idx + 1))) + '</strong><small>' + esc(detail).slice(0, 220) + '</small></span></label>';
+      }}).join('');
+    }}
+    function selectedIssues() {{
+      const issues = Array.isArray(reportContext.top_issues) ? reportContext.top_issues : [];
+      return Array.from(evidenceEl.querySelectorAll('input[type="checkbox"]:checked')).map(function(input) {{
+        return issues[Number(input.getAttribute('data-issue-index'))];
+      }}).filter(Boolean);
+    }}
+    function customConcerns() {{
+      return document.getElementById('custom-followup-concerns').value.split(/\\n+/).map(function(x) {{ return x.trim(); }}).filter(Boolean);
+    }}
+    function renderExisting(data) {{
+      const drafts = (data && data.drafts) || {{}};
+      const kinds = Object.keys(drafts);
+      if (!kinds.length) {{
+        existingEl.textContent = '当前语言暂无已生成草稿。';
+        return;
+      }}
+      existingEl.innerHTML = '已生成: ' + kinds.map(function(kind) {{
+        return '<button type="button" class="secondary-button existing-draft-button" data-existing-kind="' + esc(kind) + '">' + esc(actionLabels[kind] || kind) + '</button>';
+      }}).join(' ');
+      existingEl.querySelectorAll('[data-existing-kind]').forEach(function(btn) {{
+        btn.addEventListener('click', function() {{
+          const kind = btn.getAttribute('data-existing-kind');
+          outputEl.value = drafts[kind] && drafts[kind].text ? drafts[kind].text : '';
+          setStatus('已载入已生成的 ' + (actionLabels[kind] || kind) + '。', false);
+        }});
+      }});
+    }}
+    async function loadExisting() {{
+      const context = readContext();
+      if (context.artifact_type === 'failed') {{
+        setStatus('失败诊断报告不允许生成 PubPeer Comment 或期刊 Letter；请先修复关键服务后重新生成审查报告。', true);
+        document.querySelectorAll('[data-action-kind]').forEach(function(btn) {{ btn.disabled = true; }});
+        return;
+      }}
+      try {{
+        const resp = await fetch(followupsUrl, {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ context: context, language: (languageEl && languageEl.value) || 'zh' }})
+        }});
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {{ throw new Error(data.error || ('HTTP ' + resp.status)); }}
+        if (data.identity && (data.identity.title || data.identity.journal || data.identity.authors)) {{
+          populateIdentity(data.identity);
+        }}
+        renderExisting(data);
+      }} catch (err) {{
+        serviceFailure('读取已生成草稿失败', err);
+      }}
+    }}
     async function generate(kind) {{
-      let context = {{}};
-      try {{ context = JSON.parse(contextEl.textContent || '{{}}'); }}
-      catch (err) {{ setStatus('无法读取报告上下文: ' + err.message, true); return; }}
+      const context = readContext();
+      if (context.artifact_type === 'failed') {{
+        setStatus('失败诊断报告不允许生成 PubPeer Comment 或期刊 Letter。', true);
+        return;
+      }}
+      if (!confirmationEl.checked) {{
+        setStatus('请先勾选人工复核确认，再生成外部沟通草稿。', true);
+        return;
+      }}
       const language = (languageEl && languageEl.value) || 'zh';
       setStatus('正在生成 ' + languageLabels[language] + ' ' + actionLabels[kind] + ' ...', false);
       outputEl.value = '';
@@ -5367,16 +5794,27 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
         const resp = await fetch(generateUrl, {{
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{ kind, context, language }})
+          body: JSON.stringify({{
+            kind,
+            context,
+            language,
+            tone: (toneEl && toneEl.value) || 'conservative',
+            identity: identityFromForm(),
+            selected_issues: selectedIssues(),
+            custom_concerns: customConcerns(),
+            disclaimer_confirmed: true
+          }})
         }});
         const data = await resp.json();
         if (!resp.ok || !data.ok) {{
           throw new Error(data.error || ('HTTP ' + resp.status));
         }}
         outputEl.value = data.text || '';
-        setStatus('已生成 ' + actionLabels[kind] + '。请人工核对后再使用。', false);
+        const path = data.paths && data.paths.draft_path ? ' 已保存: ' + data.paths.draft_path : '';
+        setStatus('已生成 ' + actionLabels[kind] + '。请人工核对后再使用。' + path, false);
+        loadExisting();
       }} catch (err) {{
-        setStatus('生成失败：本机动作服务未响应，请重新生成报告或检查LLM配置/网络。详情: ' + err.message, true);
+        serviceFailure('生成失败', err);
       }}
     }}
     document.querySelectorAll('[data-action-kind]').forEach((btn) => {{
@@ -5391,6 +5829,11 @@ def format_web_action_panel_html(report, pdf_path, meta, stat_result):
         setStatus('浏览器未允许自动复制，请手动复制文本框内容。', true);
       }}
     }});
+    const initialContext = readContext();
+    populateIdentity(initialContext.paper_identity || {{}});
+    renderEvidence(initialContext);
+    if (languageEl) {{ languageEl.addEventListener('change', loadExisting); }}
+    loadExisting();
   }})();
   </script>"""
 
@@ -6166,6 +6609,71 @@ def format_html_report(report, pdf_path, meta, stat_result):
     border-radius: 8px;
     padding: 9px 12px;
     font-weight: 800;
+  }}
+  .identity-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+    margin: 12px 0;
+  }}
+  .identity-grid label, .custom-concern-label, .inline-control {{
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }}
+  .identity-grid input, .custom-concern-input {{
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 9px 10px;
+    color: var(--text-main);
+    background: #ffffff;
+    font: inherit;
+  }}
+  .evidence-picker {{
+    margin: 12px 0;
+  }}
+  .evidence-choice-list {{
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+  }}
+  .evidence-choice {{
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 8px;
+    align-items: start;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px;
+    background: #ffffff;
+  }}
+  .evidence-choice small {{
+    display: block;
+    color: var(--text-muted);
+    line-height: 1.45;
+    margin-top: 3px;
+  }}
+  .custom-concern-input {{
+    width: 100%;
+    min-height: 70px;
+    resize: vertical;
+  }}
+  .manual-confirmation {{
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 8px;
+    align-items: start;
+    margin: 10px 0;
+    color: var(--text-main);
+    font-size: 13px;
+  }}
+  .existing-followups {{
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 8px 0;
   }}
   .action-button:hover, .secondary-button:hover {{
     filter: brightness(0.96);
@@ -8554,12 +9062,6 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
         "url": report_action_service_url("127.0.0.1", report_actions_port),
         "auto_start": not bool(getattr(args, "no_open", False)),
     }
-    report_input = str(input_path)
-    md_report = format_report(report, report_input, meta, stat_result)
-
-    # 生成HTML报告
-    html_report = format_html_report(report, report_input, meta, stat_result)
-
     # 确定输出路径（优先HTML）
     output_override = None
     if args.output:
@@ -8571,6 +9073,17 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
         artifact_type=meta.get("artifact_type", "complete"),
         output_path=output_override,
     )
+    meta["artifact_paths"] = {
+        "markdown": str(output_path),
+        "html": str(html_output_path),
+        "json": str(json_path),
+    }
+    meta["followups_dir"] = str(html_output_path.parent / "followups")
+    report_input = str(input_path)
+    md_report = format_report(report, report_input, meta, stat_result)
+
+    # 生成HTML报告
+    html_report = format_html_report(report, report_input, meta, stat_result)
 
     # 写入Markdown报告
     output_path.write_text(md_report, encoding="utf-8")

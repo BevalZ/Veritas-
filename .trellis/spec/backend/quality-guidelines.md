@@ -119,3 +119,96 @@ semantic_result = semantic_cache.get(cache_key)
 cache_key = _image_semantic_cache_key(image_path)
 semantic_result = semantic_cache.get(cache_key)
 ```
+
+## Scenario: HTML Follow-up Draft Workflow
+
+### 1. Scope / Trigger
+
+- Trigger: HTML reports generate PubPeer comments or journal letters through
+  the local report action service.
+- This applies to article identity confirmation, selected evidence, custom
+  user concerns, prompt construction, and persisted `followups/` artifacts.
+
+### 2. Signatures
+
+- `build_followup_generation_context(context, identity=None, selected_issues=None, custom_concerns=None, tone="conservative") -> dict`
+- `build_followup_prompt(kind, context, language="zh", tone=None) -> list[dict]`
+- `generate_and_save_followup_draft(kind, context, language="zh", identity=None, selected_issues=None, custom_concerns=None, tone="conservative", disclaimer_confirmed=False, timeout=None) -> dict`
+- `load_existing_followups(context, language="zh") -> dict`
+- Report action service routes:
+  - `POST /generate`
+  - `POST /followups`
+
+### 3. Contracts
+
+- HTML must require confirmation of title, journal, authors, DOI, year,
+  selected evidence, tone, language, and manual-review disclaimer before
+  generation.
+- Follow-up generation must persist:
+  - `followups/article_identity.json`
+  - `followups/pubpeer_comment.<zh|en>.md`
+  - `followups/journal_letter.<zh|en>.md`
+  - `followups/followup_generation_log.json`
+- `article_identity.json` must record `source: "html_confirmed"` and must not
+  contain LLM API keys.
+- Custom concerns must use `source: "user_added"` so they are not confused with
+  automated findings.
+- Prompt context must include article identity, selected evidence, custom
+  concerns, language, tone, artifact type, and limited reasons when present.
+- Existing drafts must be loadable through `POST /followups` when reopening an
+  old HTML report while the local service is running.
+
+### 4. Validation & Error Matrix
+
+- Missing manual-review confirmation -> `manual_review_confirmation_required`.
+- `artifact_type == "failed"` -> `failed_report_followup_blocked`.
+- Unsupported kind -> `unsupported action kind`.
+- Local action service unavailable from HTML -> show service URL and
+  `python paper_audit.py --serve-report-actions --report-actions-port <port>`.
+- Limited report -> generation allowed, but prompt must request a scope
+  limitation statement.
+
+### 5. Good/Base/Bad Cases
+
+- Good: User confirms identity, selects red-flag evidence, generates a Chinese
+  PubPeer draft, and `followups/pubpeer_comment.zh.md` plus log metadata are
+  written.
+- Base: User reopens an old HTML report, starts the action service, and the page
+  loads existing drafts from `followups/`.
+- Bad: A failed diagnostic report generates a journal letter or a draft is shown
+  only in browser state without a Markdown artifact.
+
+### 6. Tests Required
+
+- HTML renderer test asserts identity fields, tone selector, evidence picker,
+  manual confirmation, follow-up load URL, and startup command are present.
+- Unit test blocks failed reports.
+- Unit test requires manual-review confirmation.
+- Unit test persists draft Markdown, article identity JSON, and generation log.
+- Unit test prompt payload includes confirmed identity, selected evidence,
+  `source=user_added` concerns, tone, and limited scope.
+- Unit test loads existing follow-up artifacts.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+text = generate_followup_draft(kind, context, language=language)
+return {"ok": True, "text": text}
+```
+
+#### Correct
+
+```python
+result = generate_and_save_followup_draft(
+    kind,
+    context,
+    language=language,
+    identity=payload.get("identity"),
+    selected_issues=payload.get("selected_issues"),
+    custom_concerns=payload.get("custom_concerns"),
+    tone=payload.get("tone"),
+    disclaimer_confirmed=bool(payload.get("disclaimer_confirmed")),
+)
+```
