@@ -119,7 +119,8 @@ python paper_audit.py --update-patterns pubpeer_comments.txt
 图像语义分析断点续跑：
 - 默认启用断点续跑；不要加 `--no-resume`。
 - 每完成一张图片的图像语义分析，都会立即写入断点缓存，避免中断后重跑已完成图片。
-- 可见缓存文件会写到输出目录：`image_semantic_cache.json`；隐藏断点缓存仍保留在 `.输入名.paper_audit_resume/image_semantic_cache.json`。
+- 可见缓存文件会写到输出目录：`image_semantic_cache.json`；隐藏断点缓存仍保留在 `.<输出stem>.paper_audit_resume/image_semantic_cache.json`。
+- 续跑时会合并可见缓存和隐藏断点缓存；切换图像语义分析的 API endpoint、模型或缓存版本后，不会复用旧服务的语义结果。
 - 如果要强制重跑全部图片语义分析，使用 `--fresh` 清空断点缓存。
 
 ### 4. HTML报告与后续草稿生成

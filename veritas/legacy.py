@@ -102,6 +102,15 @@ def _json_save(path: Path, data):
         print(f"⚠️ 写入缓存失败 {path}: {e}")
 
 
+def _load_merged_json_dicts(*paths: Path):
+    merged = {}
+    for path in paths:
+        data = _json_load(path, {})
+        if isinstance(data, dict):
+            merged.update(data)
+    return merged
+
+
 def create_run_workspace(input_path: Path, output_dir: Path, output_stem: str) -> Dict[str, Any]:
     """Create a unique per-run workspace while root-level reports remain latest shortcuts."""
     output_dir = Path(output_dir)
@@ -6947,6 +6956,14 @@ def _image_file_fingerprint(image_path: str):
         return _text_fingerprint(str(image_path), f"semantic_v{IMAGE_SEMANTIC_CACHE_VERSION}")
 
 
+def _image_semantic_cache_key(image_path: str, api_url=None, model=None, cache_version=None):
+    version = IMAGE_SEMANTIC_CACHE_VERSION if cache_version is None else cache_version
+    endpoint = _chat_completions_endpoint(api_url or GLM_API_URL)
+    selected_model = model or GLM_VISION_MODEL
+    service_fingerprint = _text_fingerprint(endpoint, f"{selected_model}|image_semantic_v{version}")
+    return f"{_image_file_fingerprint(image_path)}:image_semantic:{service_fingerprint}"
+
+
 def _image_to_data_url(image_path: str):
     path = Path(image_path)
     try:
@@ -7443,7 +7460,7 @@ def build_image_audit(
         semantic_candidates = sorted(analyses, key=_image_semantic_priority_key)
         semantic_queue = semantic_candidates[:_effective_limit(semantic_limit, len(semantic_candidates))]
         for idx, item in enumerate(semantic_queue, 1):
-            cache_key = _image_file_fingerprint(item.get("path", ""))
+            cache_key = _image_semantic_cache_key(item.get("path", ""))
             semantic_result = semantic_cache.get(cache_key)
             if isinstance(semantic_result, dict) and semantic_result.get("status") == "error":
                 semantic_cache.pop(cache_key, None)
@@ -8445,8 +8462,9 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
     # ─── 图像合理性检测：使用MinerU已保存zip中的图片/目录图片生成报告清单 ───
     image_semantic_cache_path = resume_dir / "image_semantic_cache.json"
     image_semantic_local_cache_path = output_dir / "image_semantic_cache.json"
-    image_semantic_cache = {} if args.no_resume else (
-        _json_load(image_semantic_cache_path, {}) or _json_load(image_semantic_local_cache_path, {}) or {}
+    image_semantic_cache = {} if args.no_resume else _load_merged_json_dicts(
+        image_semantic_local_cache_path,
+        image_semantic_cache_path,
     )
     image_detector_cache_path = resume_dir / "image_detector_cache.json"
     image_detector_cache = {} if args.no_resume else (_json_load(image_detector_cache_path, {}) or {})

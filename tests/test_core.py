@@ -1449,6 +1449,56 @@ def test_build_image_audit_uses_semantic_cache(monkeypatch, tmp_path):
     assert calls["count"] == 1
 
 
+def test_build_image_audit_semantic_cache_key_includes_service_context(monkeypatch, tmp_path):
+    image_path = tmp_path / "figure.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * (paper_audit.MIN_IMAGE_BYTES + 10))
+
+    monkeypatch.setattr(paper_audit, "collect_image_files", lambda *args, **kwargs: [str(image_path)])
+    monkeypatch.setattr(paper_audit, "analyze_image_reasonability", lambda path: {
+        "path": path,
+        "file": Path(path).name,
+        "risk": "local_ok",
+        "issues": [],
+        "width": 200,
+        "height": 100,
+    })
+    monkeypatch.setattr(paper_audit, "GLM_API_URL", "https://vision-a.example.test/v1")
+    monkeypatch.setattr(paper_audit, "GLM_VISION_MODEL", "model-a")
+    original_cache_version = paper_audit.IMAGE_SEMANTIC_CACHE_VERSION
+    calls = []
+
+    def fake_semantic(path, timeout=45):
+        calls.append((paper_audit.GLM_API_URL, paper_audit.GLM_VISION_MODEL, paper_audit.IMAGE_SEMANTIC_CACHE_VERSION))
+        return {
+            "status": "ok",
+            "summary": paper_audit.GLM_VISION_MODEL,
+            "reasonability": "合理",
+            "risks": [],
+            "confidence": 0.8,
+        }
+
+    monkeypatch.setattr(paper_audit, "call_glm_image_semantics", fake_semantic)
+    cache = {}
+
+    paper_audit.build_image_audit(str(tmp_path), limit=1, semantic=True, semantic_cache=cache)
+    paper_audit.build_image_audit(str(tmp_path), limit=1, semantic=True, semantic_cache=cache)
+    monkeypatch.setattr(paper_audit, "GLM_VISION_MODEL", "model-b")
+    paper_audit.build_image_audit(str(tmp_path), limit=1, semantic=True, semantic_cache=cache)
+    monkeypatch.setattr(paper_audit, "GLM_API_URL", "https://vision-b.example.test/v1")
+    paper_audit.build_image_audit(str(tmp_path), limit=1, semantic=True, semantic_cache=cache)
+    monkeypatch.setattr(paper_audit, "IMAGE_SEMANTIC_CACHE_VERSION", original_cache_version + 1)
+    paper_audit.build_image_audit(str(tmp_path), limit=1, semantic=True, semantic_cache=cache)
+
+    assert calls == [
+        ("https://vision-a.example.test/v1", "model-a", original_cache_version),
+        ("https://vision-a.example.test/v1", "model-b", original_cache_version),
+        ("https://vision-b.example.test/v1", "model-b", original_cache_version),
+        ("https://vision-b.example.test/v1", "model-b", original_cache_version + 1),
+    ]
+    assert len(cache) == 4
+    assert all(":image_semantic:" in key for key in cache)
+
+
 def test_build_image_audit_flushes_semantic_cache_after_each_success(monkeypatch, tmp_path):
     first_image = tmp_path / "a.png"
     second_image = tmp_path / "b.png"
@@ -1493,6 +1543,25 @@ def test_build_image_audit_flushes_semantic_cache_after_each_success(monkeypatch
     assert any(value.get("summary") == "first image" for value in flushed[0].values())
     saved_cache = json.loads(cache_path.read_text(encoding="utf-8"))
     assert any(value.get("summary") == "first image" for value in saved_cache.values())
+
+
+def test_load_merged_json_dicts_combines_visible_and_resume_cache(tmp_path):
+    visible_cache = tmp_path / "image_semantic_cache.json"
+    resume_cache = tmp_path / ".paper.paper_audit_resume" / "image_semantic_cache.json"
+    paper_audit._json_save(visible_cache, {
+        "visible-only": {"summary": "visible"},
+        "conflict": {"summary": "visible stale"},
+    })
+    paper_audit._json_save(resume_cache, {
+        "resume-only": {"summary": "resume"},
+        "conflict": {"summary": "resume fresh"},
+    })
+
+    merged = paper_audit._load_merged_json_dicts(visible_cache, resume_cache)
+
+    assert merged["visible-only"]["summary"] == "visible"
+    assert merged["resume-only"]["summary"] == "resume"
+    assert merged["conflict"]["summary"] == "resume fresh"
 
 
 def test_build_image_audit_uses_detector_cache(monkeypatch, tmp_path):
