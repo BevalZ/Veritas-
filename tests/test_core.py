@@ -383,6 +383,104 @@ def test_run_request_maps_argparse_values():
     assert request.strict_failed_chunks is True
 
 
+def _minimal_run_args(input_path, output_path):
+    return types.SimpleNamespace(
+        pdf_path=str(input_path),
+        output=str(output_path),
+        json=True,
+        no_open=True,
+        mineru=False,
+        no_mineru=False,
+        mineru_model="vlm",
+        mineru_lang="ch",
+        max_chars=4096,
+        no_reference_online=True,
+        reference_online_limit=None,
+        reference_timeout=1,
+        no_resource_online=True,
+        resource_timeout=1,
+        image_audit_limit=None,
+        no_image_semantic=True,
+        image_semantic_limit=None,
+        image_semantic_timeout=1,
+        no_image_detector=True,
+        image_detector_limit=None,
+        image_detector_timeout=1,
+        no_resume=True,
+        fresh=False,
+        llm_timeout=1,
+        llm_retries=0,
+        strict_failed_chunks=True,
+        llm_cache_only=False,
+        ai_detect=False,
+        image_detect=False,
+        report_actions_port=8765,
+    )
+
+
+def test_run_audit_accepts_direct_docx_file_input(monkeypatch, tmp_path):
+    docx_path = tmp_path / "paper.docx"
+    docx_path.write_bytes(b"fake-docx")
+    output_base = tmp_path / "word_report"
+    args = _minimal_run_args(docx_path, output_base)
+    calls = {}
+
+    def fake_extract_text_from_file(file_path, **kwargs):
+        calls["file_path"] = Path(file_path)
+        calls["kwargs"] = kwargs
+        return "\n\n=== 文件: paper.docx ===\nA Word manuscript with p = 0.04 and Methods section."
+
+    def fail_pdf_extract(*args, **kwargs):
+        raise AssertionError("direct .docx input must not use PDF extraction")
+
+    monkeypatch.setattr(paper_audit, "DOCX_SUPPORTED", True)
+    monkeypatch.setattr(paper_audit, "extract_text_from_file", fake_extract_text_from_file)
+    monkeypatch.setattr(paper_audit, "extract_pdf_text", fail_pdf_extract)
+    monkeypatch.setattr(paper_audit, "preflight_text_llm", lambda timeout=10: paper_audit.PreflightResult("text_llm", True, "", "ok"))
+    monkeypatch.setattr(paper_audit, "call_llm", lambda *a, **k: json.dumps({
+        "summary": "ok",
+        "risk_level": "低",
+        "detection_score": 3,
+        "checks": [],
+        "conclusion": "done",
+    }, ensure_ascii=False))
+    monkeypatch.setattr(paper_audit, "build_image_audit", lambda *a, **k: {
+        "image_count": 0,
+        "checked_count": 0,
+        "semantic_checked": 0,
+        "detector_checked": 0,
+        "images": [],
+    })
+
+    result = paper_audit.run_audit(paper_audit.RunRequest.from_args(args), args)
+
+    assert result.outcome == "complete"
+    assert calls["file_path"] == docx_path
+    assert calls["kwargs"]["use_mineru"] is False
+    payload = json.loads((tmp_path / "word_report.audit.json").read_text(encoding="utf-8"))
+    assert payload["meta"]["input_type"] == "file"
+    assert payload["meta"]["extractor"] == "single_file_multi_format"
+    assert payload["meta"]["extraction_method"] == "docx_text"
+
+
+def test_run_audit_rejects_direct_legacy_doc_file_input(monkeypatch, tmp_path):
+    doc_path = tmp_path / "paper.doc"
+    doc_path.write_bytes(b"legacy-doc")
+    args = _minimal_run_args(doc_path, tmp_path / "legacy_doc_report")
+
+    def fail_pdf_extract(*args, **kwargs):
+        raise AssertionError("legacy .doc input must fail before PDF extraction")
+
+    monkeypatch.setattr(paper_audit, "extract_pdf_text", fail_pdf_extract)
+
+    result = paper_audit.run_audit(paper_audit.RunRequest.from_args(args), args)
+
+    assert result.outcome == "failed"
+    assert result.failure["capability"] == "input_extraction"
+    assert result.failure["error_class"] == "unsupported_legacy_doc"
+    assert ".docx" in result.failure["message"]
+
+
 def test_run_result_represents_complete_limited_and_failed(tmp_path):
     failure = paper_audit.AuditFailure(
         capability="text_llm",

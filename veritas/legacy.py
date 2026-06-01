@@ -4,8 +4,8 @@
 - wooly99/geng-academic-fraud-detector 耿同学六式
 - NeoSpecies/AcademicIntegrityHunter 本地统计算法
 - jingshouyan/academic-integrity-geng 五维审查体系
-输入PDF路径 → MinerU转Markdown → 本地统计检测 + LLM语义分析 → 输出md格式报告
-用法: python paper_audit.py <pdf_path> [--mineru] [--max-chars 8000] [--output report.md]
+输入论文文件或目录 → 文本提取 → 本地统计检测 + LLM语义分析 → 输出md/html格式报告
+用法: python paper_audit.py <paper_path> [--mineru] [--max-chars 8000] [--output report.md]
 """
 import re, json, time, argparse, urllib.request, urllib.parse, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, builtins, hashlib, html, base64, io, concurrent.futures, signal, threading, shlex, datetime
 from dataclasses import dataclass, field
@@ -282,6 +282,8 @@ try:
     EXCEL_SUPPORTED = True
 except ImportError:
     EXCEL_SUPPORTED = False
+
+SUPPORTED_TEXT_FILE_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".xlsm", ".csv", ".txt", ".md"}
 
 # ══════════════════════════════════════════════════════════════
 # 配置区
@@ -2081,7 +2083,6 @@ def find_project_files(root_path: Path) -> Tuple[Dict, List[Path]]:
     """递归扫描目录，识别论文项目相关的所有文件
     返回：(文件分类字典, 所有有效文件列表)
     """
-    SUPPORTED_EXTS = {".pdf", ".docx", ".xlsx", ".xlsm", ".csv", ".txt", ".md"}
     SUPPLEMENT_KEYWORDS = {"supplement", "supp", "补充材料", "原始数据", "data", "source", "appendix"}
     REFERENCE_KEYWORDS = {"reference", "references", "bibliography", "参考文献", "参考资料"}
     GENERATED_MARKERS = (
@@ -2110,7 +2111,7 @@ def find_project_files(root_path: Path) -> Tuple[Dict, List[Path]]:
         for file in sorted(files):
             fpath = Path(root) / file
             ext = fpath.suffix.lower()
-            if ext not in SUPPORTED_EXTS:
+            if ext not in SUPPORTED_TEXT_FILE_EXTENSIONS:
                 continue
             lower_name = fpath.name.lower()
             if any(marker in lower_name for marker in GENERATED_MARKERS):
@@ -8589,8 +8590,98 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
         # 单个文件走原有流程
         pdf_path = input_path
         print(f"📄 检测到输入为单个文件: {pdf_path.name}")
+        single_suffix = pdf_path.suffix.lower()
 
-        if use_mineru:
+        if single_suffix not in SUPPORTED_TEXT_FILE_EXTENSIONS:
+            if single_suffix == ".doc":
+                message = "暂不支持旧版二进制Word .doc 文件直接输入；请转换为 .docx 或 PDF 后重试。"
+                hints = ["用 Word/WPS/LibreOffice 另存为 .docx。", "或导出为 PDF 后重新运行审查。"]
+                error_class = "unsupported_legacy_doc"
+            else:
+                message = f"不支持的单文件输入类型: {single_suffix or '(无扩展名)'}。"
+                hints = ["请使用 PDF、.docx、Excel、CSV、TXT 或 Markdown 文件。", "也可以把论文相关文件放入目录后进行目录审查。"]
+                error_class = "unsupported_file_type"
+            failure = AuditFailure(
+                capability="input_extraction",
+                error_class=error_class,
+                message=message,
+                fix_hints=hints,
+                completed_stages=completed_stages,
+                retry_command=retry_command,
+            )
+            md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs)
+            record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
+            return RunResult.failed(
+                failure,
+                {"markdown": str(md_path), "json": str(json_path)},
+                workspace=run_workspace,
+                meta={"input_path": str(input_path)},
+            )
+
+        if single_suffix != ".pdf":
+            missing_dependency = (
+                single_suffix == ".docx" and not DOCX_SUPPORTED
+            ) or (
+                single_suffix in {".xlsx", ".xlsm"} and not EXCEL_SUPPORTED
+            )
+            if missing_dependency:
+                dependency = "python-docx" if single_suffix == ".docx" else "openpyxl"
+                failure = AuditFailure(
+                    capability="input_extraction",
+                    error_class="missing_optional_dependency",
+                    message=f"读取 {single_suffix} 文件需要安装可选依赖 {dependency}。",
+                    fix_hints=[f"安装 {dependency} 后重试。", "或转换为 PDF 后重新运行审查。"],
+                    completed_stages=completed_stages,
+                    retry_command=retry_command,
+                )
+                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs)
+                record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
+                return RunResult.failed(
+                    failure,
+                    {"markdown": str(md_path), "json": str(json_path)},
+                    workspace=run_workspace,
+                    meta={"input_path": str(input_path)},
+                )
+            print(f"📖 正在提取{single_suffix}文件文本: {pdf_path}")
+            full_text = extract_text_from_file(
+                pdf_path,
+                max_chars_per_file=None,
+                use_mineru=False,
+                mineru_lang=args.mineru_lang,
+                output_dir=output_dir,
+            )
+            body_text = re.sub(rf"^=+\s*文件:\s*{re.escape(pdf_path.name)}\s*=+", "", full_text.strip()).strip()
+            if not body_text:
+                failure = AuditFailure(
+                    capability="input_extraction",
+                    error_class="no_extractable_text",
+                    message=f"未能从 {single_suffix} 文件中提取到可审查文本。",
+                    fix_hints=["检查文件是否为空、损坏或受保护。", "尝试另存为 .docx/PDF 后重试。"],
+                    completed_stages=completed_stages,
+                    retry_command=retry_command,
+                )
+                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs)
+                record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
+                return RunResult.failed(
+                    failure,
+                    {"markdown": str(md_path), "json": str(json_path)},
+                    workspace=run_workspace,
+                    meta={"input_path": str(input_path)},
+                )
+            meta = {
+                "input_type": "file",
+                "source_file": pdf_path.name,
+                "size_mb": round(pdf_path.stat().st_size / 1024 / 1024, 2),
+                "total_chars": len(full_text),
+                "chars_sent": len(full_text),
+                "extractor": "single_file_multi_format",
+                "extraction_method": f"{single_suffix.lstrip('.')}_text",
+            }
+            raw_pdf = None
+            print(f"✅ 提取完成: {meta['total_chars']} 字符（全文保留）")
+            progress_bar(1, 5, "阶段1/5 单文件文本提取完成")
+
+        if single_suffix == ".pdf" and use_mineru:
             print(f"📡 [MinerU] 正在将PDF转为Markdown: {pdf_path.name}")
             md_text, md_meta = mineru_extract(pdf_path, language=args.mineru_lang, output_dir=output_dir)
             if md_text:
@@ -8613,7 +8704,7 @@ def run_audit(run_request: RunRequest, args) -> RunResult:
                 print(f"⚠️ 降级使用原始PDF文本提取...")
                 use_mineru = False
 
-        if not use_mineru or full_text is None:
+        if single_suffix == ".pdf" and (not use_mineru or full_text is None):
             print(f"📖 正在提取PDF文本: {pdf_path}")
             # extract_pdf_text的max_chars参数传大值以获取全文
             full_text, meta, raw_pdf = extract_pdf_text(str(pdf_path), max_chars=999999)
@@ -9165,7 +9256,7 @@ def main():
   # 更新欺诈模式知识库（从PubPeer评论自动提取新pattern）
   python paper_audit.py --update-patterns pubpeer_comments.txt
 """)
-    parser.add_argument("pdf_path", nargs='?', help="待审查的文件路径或论文目录路径（支持PDF/Word/Excel/Supplement等，更新/服务模式下无需提供）")
+    parser.add_argument("pdf_path", nargs='?', help="待审查的文件路径或论文目录路径（支持PDF、Word .docx、Excel、Supplement等，更新/服务模式下无需提供）")
     parser.add_argument("--serve-report-actions", action="store_true",
                         help="启动本机HTML报告动作服务：一键生成PubPeer comment和期刊letter")
     parser.add_argument("--report-actions-port", type=int, default=8765,

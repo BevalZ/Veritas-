@@ -212,3 +212,70 @@ result = generate_and_save_followup_draft(
     disclaimer_confirmed=bool(payload.get("disclaimer_confirmed")),
 )
 ```
+
+## Scenario: Direct Single-File Text Extraction
+
+### 1. Scope / Trigger
+
+- Trigger: A user passes a single file path rather than a directory.
+- This applies to PDF, `.docx`, Excel, CSV, TXT, and Markdown direct inputs.
+
+### 2. Signatures
+
+- `SUPPORTED_TEXT_FILE_EXTENSIONS: set[str]`
+- `extract_text_from_file(file_path, max_chars_per_file=None, use_mineru=False, mineru_lang="ch", output_dir=None) -> str`
+- `run_audit(run_request, args) -> RunResult`
+
+### 3. Contracts
+
+- Direct `.pdf` input keeps the existing PDF/MinerU behavior.
+- Direct non-PDF supported text inputs must use `extract_text_from_file()`, not
+  `extract_pdf_text()`.
+- Direct `.docx` input requires `python-docx`; direct `.xlsx`/`.xlsm` input
+  requires `openpyxl`.
+- Direct legacy binary `.doc` input is unsupported unless a real extraction
+  dependency is added; it must fail clearly rather than being treated as PDF.
+- Successful direct non-PDF extraction metadata must include:
+  - `input_type: "file"`
+  - `extractor: "single_file_multi_format"`
+  - `extraction_method: "<suffix>_text"`
+  - `total_chars`
+  - `size_mb`
+
+### 4. Validation & Error Matrix
+
+- `.docx` with `python-docx` available -> complete extraction path.
+- `.docx` without `python-docx` -> `missing_optional_dependency`.
+- `.xlsx`/`.xlsm` without `openpyxl` -> `missing_optional_dependency`.
+- `.doc` -> `unsupported_legacy_doc`, with hints to convert to `.docx` or PDF.
+- Unsupported extension -> `unsupported_file_type`.
+- Empty extracted body -> `no_extractable_text`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `python paper_audit.py manuscript.docx --json` extracts Word text and
+  continues to the normal audit pipeline.
+- Base: `python paper_audit.py paper.pdf` still uses the PDF/MinerU path.
+- Bad: `manuscript.docx` reaches `extract_pdf_text()` or a `.doc` file produces
+  a misleading PDF extraction failure.
+
+### 6. Tests Required
+
+- Unit/integration test that direct `.docx` uses `extract_text_from_file()` and
+  does not call `extract_pdf_text()`.
+- Unit/integration test that direct `.doc` fails with `unsupported_legacy_doc`.
+- Full core test suite after changing input routing.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+full_text, meta, raw_pdf = extract_pdf_text(str(input_path), max_chars=999999)
+```
+
+#### Correct
+
+```python
+full_text = extract_text_from_file(input_path, max_chars_per_file=None, use_mineru=False)
+```

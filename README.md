@@ -42,7 +42,7 @@ pip install -r requirements.txt
 | 依赖 | 用途 | 必需 |
 |------|------|------|
 | Python ≥ 3.10 | 运行环境 | ✅ 必需 |
-| python-docx ≥ 0.8.11 | 读取Word文档(.docx) | 📁 目录审查时需要 |
+| python-docx ≥ 0.8.11 | 读取Word文档(.docx) | 📄 Word文件/目录审查需要 |
 | openpyxl ≥ 3.1.0 | 读取Excel表格(.xlsx/.xlsm) | 📁 目录审查时需要 |
 | lxml ≥ 4.9.0 | python-docx的XML解析依赖 | 📁 目录审查时需要 |
 | requests ≥ 2.28.0 | LLM/MinerU/文献数据库/图像语义分析请求 | ✅ 必需 |
@@ -165,6 +165,10 @@ python paper_audit.py ./my_paper_project/ --report-actions-port 8876
 ```
 - 使用 `--no-open` 时会跳过自动打开HTML，也不会自动启动HTML动作服务，适合CI、远程服务器和批处理。
 
+Word文件输入：
+- 可以直接传入 `.docx` 文件，例如 `python paper_audit.py manuscript.docx --json`。
+- 旧版二进制 `.doc` 暂不直接解析；请先用 Word/WPS/LibreOffice 另存为 `.docx`，或导出为 PDF 后再审查。
+
 ### 5. Test_paper HTML 演示
 如果你把 `Test_paper/` 当作样例目录，推荐按下面流程验证 HTML 联动：
 1. 重新生成报告：
@@ -198,7 +202,7 @@ usage: paper_audit.py [-h] [--mineru]
                       pdf_path
 
 positional arguments:
-  pdf_path              待审查的文件路径或论文目录路径（支持PDF/Word/Excel/Supplement等）
+  pdf_path              待审查的文件路径或论文目录路径（支持PDF、Word .docx、Excel、Supplement等）
 
 options:
   -h, --help            show this help message and exit
@@ -283,7 +287,7 @@ graph TD
     F -->|PDF| G{"MinerU解析?"}
     G -->|是| H["MinerU API转Markdown"]
     G -->|否| I["范围受限/诊断提取"]
-    F -->|Word/Excel/CSV| J["对应格式文本提取"]
+    F -->|Word .docx/Excel/CSV| J["对应格式文本提取"]
     H --> K["全文文本"]
     I --> K
     J --> K
