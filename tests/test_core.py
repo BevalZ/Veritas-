@@ -760,6 +760,169 @@ def test_cross_file_consistency_renders_reports_and_followup_context():
     assert context["top_issues"][0]["source"] == "cross_file_consistency"
 
 
+def test_evidence_chain_audit_detects_methods_results_sample_mismatch():
+    text = """
+Abstract
+The alpha treatment improves tumor volume.
+
+Methods
+Experiment alpha measured tumor volume in the treatment cohort with n=42 mice.
+
+Results
+Experiment alpha treatment cohort tumor volume was plotted in Figure 2 with n=24 mice after exclusions.
+
+Conclusion
+Results require review.
+"""
+
+    audit = paper_audit.build_evidence_chain_audit(
+        text,
+        [{"file": "paper.pdf", "category": "main_text", "text": text}],
+        {"checks": []},
+        {},
+        {},
+    )
+
+    assert audit["status"] == "ok"
+    assert audit["finding_count"] == 1
+    assert audit["claim_chain_findings"][0]["type"] == "methods_results_sample_size_mismatch"
+    assert audit["claim_chain_findings"][0]["severity"] == "strong"
+    assert audit["strong_count"] == 1
+
+
+def test_evidence_chain_audit_flags_strong_abstract_claim_without_results_support():
+    text = """
+Abstract
+This study demonstrates that biomarker omega significantly improves survival.
+
+Methods
+We enrolled patients for biomarker testing.
+
+Results
+The baseline demographic table lists age and sex only.
+
+Conclusion
+Further work is needed.
+"""
+
+    audit = paper_audit.build_evidence_chain_audit(
+        text,
+        [{"file": "paper.pdf", "category": "main_text", "text": text}],
+        {"checks": []},
+        {},
+        {},
+    )
+
+    assert audit["finding_count"] == 1
+    finding = audit["claim_chain_findings"][0]
+    assert finding["type"] == "strong_claim_without_result_support"
+    assert finding["severity"] == "medium"
+    assert "Results" in finding["chain"]
+
+
+def test_evidence_chain_clusters_cross_file_and_llm_same_figure():
+    text = """
+Methods
+Experiment alpha treatment cohort n=42 mice.
+Results
+Figure 2 reports experiment alpha treatment cohort n=24 mice.
+"""
+    cross_file = paper_audit.build_cross_file_consistency_audit([
+        {"file": "main.pdf", "path": "main.pdf", "category": "main_text", "text": "Figure 2 shows experiment alpha treatment cohort n=42 mice."},
+        {"file": "supp.docx", "path": "supp.docx", "category": "supplement", "text": "Figure 2 supplement lists experiment alpha treatment cohort n=24 mice."},
+    ])
+    report = {
+        "checks": [{
+            "category": "图表",
+            "item": "Figure 2",
+            "verdict": "⚠️疑点",
+            "source_text": "Figure 2 reports experiment alpha treatment cohort with conflicting sample sizes.",
+            "detail": "Figure 2 样本量需人工核对。",
+            "confidence": 0.8,
+        }]
+    }
+
+    audit = paper_audit.build_evidence_chain_audit(
+        text,
+        [{"file": "main.pdf", "category": "main_text", "text": text}, {"file": "supp.docx", "category": "supplement", "text": "Figure 2 supplement n=24"}],
+        report,
+        {"cross_file_consistency_audit": cross_file},
+        {},
+    )
+
+    cluster = next(item for item in audit["clusters"] if "figure:2" in item["keys"])
+    assert cluster["severity"] == "strong"
+    assert "cross_file_consistency" in cluster["source_types"]
+    assert "llm_check" in cluster["source_types"]
+
+
+def test_evidence_chain_audit_consistent_chain_has_no_finding():
+    text = """
+Abstract
+This study reports tumor volume results.
+
+Methods
+Experiment alpha measured tumor volume in the treatment cohort with n=42 mice.
+
+Results
+Experiment alpha treatment cohort tumor volume was plotted in Figure 2 with n=42 mice.
+
+Conclusion
+The findings should be independently validated.
+"""
+
+    audit = paper_audit.build_evidence_chain_audit(
+        text,
+        [{"file": "paper.pdf", "category": "main_text", "text": text}],
+        {"checks": []},
+        {},
+        {},
+    )
+
+    assert audit["finding_count"] == 0
+    assert audit["strong_count"] == 0
+
+
+def test_evidence_chain_audit_renders_reports_and_followup_context():
+    text = """
+Methods
+Experiment alpha measured tumor volume in the treatment cohort with n=42 mice.
+
+Results
+Figure 2 reports experiment alpha treatment cohort tumor volume with n=24 mice.
+"""
+    audit = paper_audit.build_evidence_chain_audit(
+        text,
+        [{"file": "paper.pdf", "category": "main_text", "text": text}],
+        {"checks": []},
+        {},
+        {},
+    )
+    report = {"summary": "ok", "risk_level": "中", "detection_score": 50, "checks": [], "conclusion": "done"}
+    stat = {
+        "benford_deviation": 0,
+        "benford_status": None,
+        "p_value_count": 0,
+        "p_value_abnormal": 0,
+        "sd_count": 0,
+        "number_count": 0,
+    }
+    meta = {"evidence_chain_audit": audit}
+
+    markdown = paper_audit.format_report(report, "paper.pdf", meta, stat)
+    html = paper_audit.format_html_report(report, "paper.pdf", meta, stat)
+    context = paper_audit._report_action_context(report, "paper.pdf", meta, stat)
+    payload = {"meta": meta}
+
+    assert "证据链与证据簇审查" in markdown
+    assert "methods_results_sample_size_mismatch" in markdown
+    assert "evidence-chain-section" in html
+    assert payload["meta"]["evidence_chain_audit"]["cluster_count"] == 1
+    assert context["evidence_chain_audit"]["cluster_count"] == 1
+    assert context["top_issues"][0]["source"] == "evidence_chain_audit"
+    assert context["top_issues"][0]["default_selected"] is True
+
+
 def test_smart_chunk_text_never_exceeds_limit_for_long_paragraph():
     text = "A" * 350 + "\n\n" + "B" * 350 + "\n\n" + "C" * 350
 
