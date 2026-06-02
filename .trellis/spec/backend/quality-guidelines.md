@@ -314,3 +314,91 @@ full_text = extract_text_from_file(input_path, max_chars_per_file=None, use_mine
 - Noisy table/OCR mismatch -> weak finding, not strong.
 - Control-group vs vehicle-group label inconsistency -> medium finding.
 - Markdown, HTML, JSON/action context expose the audit.
+
+## Scenario: Evidence Chain Audit
+
+### 1. Scope / Trigger
+
+- Trigger: A successful audit has extracted text plus any combination of LLM
+  checks, local statistic results, reference/resource/image audits, or
+  cross-file consistency findings.
+- The deterministic evidence-chain audit must aggregate these signals into
+  reviewable evidence clusters and check Methods -> Results ->
+  Abstract/Conclusion support.
+
+### 2. Signatures
+
+- `build_evidence_chain_audit(full_text, file_entries, report, meta, stat_result) -> dict`
+- `format_evidence_chain_audit_markdown(audit) -> list[str]`
+- `format_evidence_chain_audit_html(audit) -> str`
+
+### 3. Contracts
+
+- Store the result in `meta["evidence_chain_audit"]`.
+- Result fields:
+  - `status`
+  - `checked_files`
+  - `cluster_count`
+  - `finding_count`
+  - `strong_count`
+  - `medium_count`
+  - `weak_count`
+  - `clusters`
+  - `claim_chain_findings`
+  - `note`
+- Do not call third-party services, text/image LLMs, OCR services, or
+  imagedetector from this audit.
+- Do not change LLM prompt/schema or risk-rule scoring for this audit; it is an
+  ordering and evidence-selection layer.
+- Wording must describe support gaps, review needs, or cross-paragraph
+  inconsistencies, not misconduct conclusions.
+- Markdown, HTML, JSON, action summary, and follow-up context must expose the
+  audit. Strong evidence clusters should be selected by default in the HTML
+  follow-up evidence picker.
+
+### 4. Validation & Error Matrix
+
+- Methods and Results sample sizes conflict in a shared experimental context ->
+  strong finding.
+- Methods and Results group labels conflict -> medium finding.
+- Abstract/Conclusion strong wording lacks nearby Results support -> medium
+  finding.
+- Directory input with cross-file/LLM/image signals mentioning the same
+  figure/table/sample context -> one evidence cluster.
+- Single-file input -> run the narrower chain audit and explain the limited
+  scope in `note`.
+- No text and no aggregate signals -> `status: "skipped"`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Methods says `n=42`, Results says the same experiment has `n=24`, and
+  the report lists a strong Methods -> Results chain finding.
+- Base: Matching Methods and Results sample sizes produce no finding.
+- Bad: A weak isolated signal is upgraded to a misconduct conclusion or changes
+  the final risk score.
+
+### 6. Tests Required
+
+- Unit test Methods/Results sample-size mismatch.
+- Unit test strong Abstract/Conclusion claim without Results support.
+- Unit test same figure/table evidence from cross-file audit and LLM checks
+  clusters together.
+- Unit test consistent Methods/Results/Conclusion produces no finding.
+- Renderer/action-context tests for Markdown, HTML, JSON-equivalent metadata,
+  follow-up context, and default evidence selection.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+report = apply_risk_rules(report, stat_result=stat_result, image_audit=meta.get("image_audit"))
+report["risk_level"] = "严重证据冲突" if evidence_chain_audit["strong_count"] else report["risk_level"]
+```
+
+#### Correct
+
+```python
+report = apply_risk_rules(report, stat_result=stat_result, image_audit=meta.get("image_audit"))
+meta["evidence_chain_audit"] = build_evidence_chain_audit(full_text, file_entries, report, meta, stat_result)
+```
