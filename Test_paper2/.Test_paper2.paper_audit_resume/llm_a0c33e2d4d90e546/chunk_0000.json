@@ -1,0 +1,25 @@
+{
+  "report": {
+    "summary": "论文文本未提供，无法进行实质性审查。",
+    "risk_level": "低",
+    "detection_score": 0,
+    "checks": [
+      {
+        "category": "结构与引用规范性",
+        "item": "文本内容完整性",
+        "verdict": "⚠️疑点",
+        "source": "未定位",
+        "source_text": "未找到直接原文证据",
+        "evidence": "输入仅包含文件路径，无论文正文内容。",
+        "reason": "论文文本缺失导致无法应用任何审查维度，所有检查项均无法验证。",
+        "recommendation": "请提供完整的论文文本，包括正文、图表、表格和参考文献。",
+        "confidence": 0.5,
+        "detail": "输入中没有论文内容，审查维度（如数据自洽性、图片异常等）无法评估。需人工核对原PDF或文档以获取全文。"
+      }
+    ],
+    "conclusion": "论文文本未提供，审查无法进行。建议提供完整文档后重新审查。",
+    "_raw_response_preserved": true
+  },
+  "raw_content": "{\n  \"summary\": \"论文文本未提供，无法进行实质性审查。\",\n  \"risk_level\": \"低\",\n  \"detection_score\": 0,\n  \"checks\": [\n    {\n      \"category\": \"结构与引用规范性\",\n      \"item\": \"文本内容完整性\",\n      \"verdict\": \"⚠️疑点\",\n      \"source\": \"未定位\",\n      \"source_text\": \"未找到直接原文证据\",\n      \"evidence\": \"输入仅包含文件路径，无论文正文内容。\",\n      \"reason\": \"论文文本缺失导致无法应用任何审查维度，所有检查项均无法验证。\",\n      \"recommendation\": \"请提供完整的论文文本，包括正文、图表、表格和参考文献。\",\n      \"confidence\": 0.5,\n      \"detail\": \"输入中没有论文内容，审查维度（如数据自洽性、图片异常等）无法评估。需人工核对原PDF或文档以获取全文。\"\n    }\n  ],\n  \"conclusion\": \"论文文本未提供，审查无法进行。建议提供完整文档后重新审查。\"\n}",
+  "saved_at": "2026-06-02 16:42:28"
+}

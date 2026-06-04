@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审查失败诊断</title>
+<style>
+body { margin:0; padding:24px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif; background:#f6f6f6; color:#171717; line-height:1.6; }
+main { max-width:1080px; margin:0 auto; }
+.hero, section { background:#fff; border:1px solid #d4d4d4; border-radius:8px; padding:18px; margin-bottom:14px; }
+.status { display:inline-block; border-radius:6px; background:#b42318; color:#fff; padding:6px 10px; font-weight:800; margin-bottom:10px; }
+h1 { font-size:24px; margin:0 0 8px; }
+h2 { font-size:17px; margin:0 0 10px; border-bottom:1px solid #d4d4d4; padding-bottom:6px; }
+.grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px; margin-top:12px; }
+.cell { border:1px solid #d4d4d4; border-radius:6px; background:#fafafa; padding:9px; font-size:13px; color:#666; }
+.cell strong { display:block; color:#171717; overflow-wrap:anywhere; }
+pre, code { white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; background:#f1f1f1; border:1px solid #d4d4d4; border-radius:6px; padding:10px; display:block; }
+ul { padding-left:22px; }
+@media (max-width:760px) { body { padding:12px; } .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <div class="status">失败诊断 failed</div>
+    <h1>未生成完整审查报告</h1>
+    <p>关键审查能力失败，本次运行只生成失败诊断产物；修复后可使用下方命令断点续跑。</p>
+    <div class="grid">
+      <div class="cell"><span>文件</span><strong>Test_paper2</strong></div>
+      <div class="cell"><span>失败能力</span><strong>text_llm</strong></div>
+      <div class="cell"><span>错误类别</span><strong>provider_unavailable</strong></div>
+      <div class="cell"><span>运行时间</span><strong>2026-06-02T16:27:43+08:00</strong></div>
+      <div class="cell"><span>运行时 UTC 年份</span><strong>2026</strong></div>
+      <div class="cell"><span>产物类型</span><strong>failed</strong></div>
+    </div>
+  </div>
+  <section>
+    <h2>失败原因</h2>
+    <p>文本LLM预检请求失败: HTTPSConnectionPool(host='hub.oaifree.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NameResolutionError(&quot;HTTPSConnection(host='hub.oaifree.com', port=443): Failed to resolve 'hub.oaifree.com' ([Errno -2] Name or service not known)&quot;))</p>
+  </section>
+  <section>
+    <h2>断点续跑命令</h2>
+    <code>python paper_audit.py Test_paper2 --output Test_paper2/test_paper2_audit --mineru-model vlm --mineru-lang ch --max-chars 4096 --reference-timeout 10 --resource-timeout 10 --image-semantic-timeout 45 --image-detector-timeout 60 --llm-timeout 45 --llm-retries 1 --json --no-open</code>
+  </section>
+  <section>
+    <h2>已完成阶段</h2>
+    <ul><li>init</li><li>runtime_config_loaded</li><li>stage1_text_extraction</li><li>stage1_reference_audit</li><li>stage1_resource_audit</li><li>stage2_stat_check</li></ul>
+  </section>
+  <section>
+    <h2>修复建议</h2>
+    <ul><li>检查config.py或环境变量中的LLM_API_KEY、LLM_API_URL和LLM_MODEL。</li><li>确认文本语义审查LLM服务可访问，账号额度、模型名和网关状态正常。</li><li>修复配置或网络后使用下方命令重试。</li></ul>
+  </section>
+  
+    <section>
+      <h2>技术细节</h2>
+      <pre>{<br>  &quot;capability&quot;: &quot;text_llm&quot;,<br>  &quot;ok&quot;: false,<br>  &quot;error_class&quot;: &quot;provider_unavailable&quot;,<br>  &quot;message&quot;: &quot;文本LLM预检请求失败: HTTPSConnectionPool(host='hub.oaifree.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NameResolutionError(\&quot;HTTPSConnection(host='hub.oaifree.com', port=443): Failed to resolve 'hub.oaifree.com' ([Errno -2] Name or service not known)\&quot;))&quot;,<br>  &quot;details&quot;: {<br>    &quot;endpoint&quot;: &quot;https://hub.oaifree.com/v1/chat/completions&quot;,<br>    &quot;model&quot;: &quot;mimo-v2.5-free&quot;<br>  },<br>  &quot;created_at&quot;: &quot;2026-06-02 16:27:43&quot;<br>}</pre>
+    </section>
+</main>
+</body>
+</html>

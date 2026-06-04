@@ -1,0 +1,61 @@
+{
+  "input": "/opt/Github_repo/Veritas-/Test_paper2",
+  "cache_version": 7,
+  "use_mineru": false,
+  "mineru_lang": "ch",
+  "full_text": "\n\n=== 文件: 2026-040896_稿件全文C.docx 路径: 2026-040896_稿件全文C.docx ===\n\n\n=== 文件: 2026-040896_稿件全文C.docx ===",
+  "meta": {
+    "input_type": "directory",
+    "total_files": 1,
+    "audit_files": 1,
+    "reference_files": 0,
+    "file_classes": {
+      "main_paper": 0,
+      "supplements": 0,
+      "data_files": 0,
+      "references": 0,
+      "other": 1
+    },
+    "total_chars": 100,
+    "extractor": "directory_multi_format",
+    "extraction_method": "directory_multi_format",
+    "size_mb": 4.31,
+    "reference_file_text": "",
+    "runtime": {
+      "local_time": "2026-06-02T16:41:47+08:00",
+      "timezone": "CST",
+      "utc_time": "2026-06-02T08:41:47+00:00",
+      "utc_year": 2026,
+      "future_year_basis": "utc_year"
+    },
+    "prompt_version": "text_audit_prompt_v1",
+    "schema_version": "strict_evidence_schema_v1",
+    "adapter_version": "audit_adapters_v1",
+    "risk_rule_version": "risk_rules_v1",
+    "paper_identity": {
+      "title": "=== 文件: 2026-040896_稿件全文C.docx 路径: 2026-040896_稿件全文C.docx ===",
+      "journal": "",
+      "authors": []
+    },
+    "preflight_results": [],
+    "cross_file_consistency_audit": {
+      "status": "skipped",
+      "checked_files": 1,
+      "finding_count": 0,
+      "strong_count": 0,
+      "medium_count": 0,
+      "weak_count": 0,
+      "findings": [],
+      "note": "缺少可比较的跨文件材料；跨文件一致性审查已跳过。"
+    }
+  },
+  "file_texts": [
+    {
+      "file": "2026-040896_稿件全文C.docx",
+      "path": "2026-040896_稿件全文C.docx",
+      "category": "other",
+      "text": "\n\n=== 文件: 2026-040896_稿件全文C.docx ==="
+    }
+  ],
+  "saved_at": "2026-06-02 16:41:47"
+}

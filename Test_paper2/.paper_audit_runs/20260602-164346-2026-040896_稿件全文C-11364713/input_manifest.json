@@ -1,0 +1,15 @@
+{
+  "input": "Test_paper2/2026-040896_稿件全文C.docx",
+  "resolved_input": "/opt/Github_repo/Veritas-/Test_paper2/2026-040896_稿件全文C.docx",
+  "input_type": "file",
+  "exists": true,
+  "size_bytes": 4520412,
+  "created_at": "2026-06-02T16:43:46+08:00",
+  "runtime": {
+    "local_time": "2026-06-02T16:43:46+08:00",
+    "timezone": "CST",
+    "utc_time": "2026-06-02T08:43:46+00:00",
+    "utc_year": 2026,
+    "future_year_basis": "utc_year"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "run_id": "20260602-164346-2026-040896_稿件全文C-11364713",
+  "outcome": "failed",
+  "root_shortcuts": [
+    "Test_paper2/Test_paper2/test_paper2_docx_direct.failed.md",
+    "Test_paper2/Test_paper2/test_paper2_docx_direct.failed.json"
+  ],
+  "workspace_artifacts": [
+    "Test_paper2/.paper_audit_runs/20260602-164346-2026-040896_稿件全文C-11364713/artifacts/test_paper2_docx_direct.failed.md",
+    "Test_paper2/.paper_audit_runs/20260602-164346-2026-040896_稿件全文C-11364713/artifacts/test_paper2_docx_direct.failed.json"
+  ],
+  "meta": {
+    "completed_stages": [
+      "init",
+      "runtime_config_loaded"
+    ]
+  },
+  "recorded_at": "2026-06-02 16:43:46"
+}

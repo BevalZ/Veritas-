@@ -1,0 +1,17 @@
+{"time": "2026-06-02 17:01:14", "step": "init", "status": "done", "detail": "input=Test_paper2/2026-040896_稿件全文C.docx; llm=mimo-v2.5-free; url=https://hub.oaifree.com/v1; max_chars=4096; use_mineru=False"}
+{"time": "2026-06-02 17:01:15", "step": "stage1_extract", "status": "saved", "detail": "chars=21718; use_mineru=False", "cache": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/stage1_extract.json"}
+{"time": "2026-06-02 17:05:55", "step": "stage1_reference_online", "status": "saved", "detail": "checked=34; cache_entries=34", "cache": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/reference_online_cache.json"}
+{"time": "2026-06-02 17:05:55", "step": "stage1_references", "status": "done", "detail": "refs=34; chars=11257"}
+{"time": "2026-06-02 17:05:55", "step": "stage1_resource_online", "status": "saved", "detail": "checked=0; cache_entries=0", "cache": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/resource_online_cache.json"}
+{"time": "2026-06-02 17:05:55", "step": "stage2_stat", "status": "done", "detail": "numbers=100; benford=0.456"}
+{"time": "2026-06-02 17:05:58", "step": "preflight_text_llm", "status": "ok", "detail": "ok", "error_class": ""}
+{"time": "2026-06-02 17:05:58", "step": "stage3_llm", "status": "start", "detail": "chunks=3; chunk_size=4096; overlap=512", "cache_dir": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/llm_90fd82e867e8614c"}
+{"time": "2026-06-02 17:06:34", "step": "stage3_llm_chunk", "status": "saved", "detail": "chunk=1/3; chars=4086", "cache": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/llm_90fd82e867e8614c/chunk_0000.json"}
+{"time": "2026-06-02 17:07:16", "step": "stage3_llm_chunk", "status": "saved", "detail": "chunk=2/3; chars=4005", "cache": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/llm_90fd82e867e8614c/chunk_0001.json"}
+{"time": "2026-06-02 17:07:59", "step": "stage3_llm_chunk", "status": "saved", "detail": "chunk=3/3; chars=2364", "cache": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/llm_90fd82e867e8614c/chunk_0002.json"}
+{"time": "2026-06-02 17:07:59", "step": "stage4_merge", "status": "done", "detail": "checks=6; coverage=3/3"}
+{"time": "2026-06-02 17:07:59", "step": "stage4_image_semantic", "status": "saved", "detail": "semantic_checked=0; cache_entries=0; local_cache=Test_paper2/image_semantic_cache.json", "cache": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/image_semantic_cache.json"}
+{"time": "2026-06-02 17:07:59", "step": "stage4_image_detector", "status": "saved", "detail": "detector_checked=0; cache_entries=0", "cache": "Test_paper2/.2026-040896_稿件全文C.paper_audit_resume/image_detector_cache.json"}
+{"time": "2026-06-02 17:07:59", "step": "stage5_report", "status": "markdown_saved", "detail": "Test_paper2/Test_paper2/test_paper2_docx_direct.audit.md"}
+{"time": "2026-06-02 17:07:59", "step": "stage5_report", "status": "html_saved", "detail": "Test_paper2/Test_paper2/test_paper2_docx_direct.audit.html"}
+{"time": "2026-06-02 17:07:59", "step": "all", "status": "done", "detail": "audit completed"}

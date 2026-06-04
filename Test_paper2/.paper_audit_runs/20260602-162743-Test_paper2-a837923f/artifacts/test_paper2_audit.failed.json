@@ -1,0 +1,134 @@
+{
+  "report_type": "failed",
+  "complete_report_generated": false,
+  "input_path": "Test_paper2",
+  "created_at": "2026-06-02 16:27:43",
+  "failure": {
+    "capability": "text_llm",
+    "error_class": "provider_unavailable",
+    "message": "文本LLM预检请求失败: HTTPSConnectionPool(host='hub.oaifree.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NameResolutionError(\"HTTPSConnection(host='hub.oaifree.com', port=443): Failed to resolve 'hub.oaifree.com' ([Errno -2] Name or service not known)\"))",
+    "fix_hints": [
+      "检查config.py或环境变量中的LLM_API_KEY、LLM_API_URL和LLM_MODEL。",
+      "确认文本语义审查LLM服务可访问，账号额度、模型名和网关状态正常。",
+      "修复配置或网络后使用下方命令重试。"
+    ],
+    "completed_stages": [
+      "init",
+      "runtime_config_loaded",
+      "stage1_text_extraction",
+      "stage1_reference_audit",
+      "stage1_resource_audit",
+      "stage2_stat_check"
+    ],
+    "retry_command": "python paper_audit.py Test_paper2 --output Test_paper2/test_paper2_audit --mineru-model vlm --mineru-lang ch --max-chars 4096 --reference-timeout 10 --resource-timeout 10 --image-semantic-timeout 45 --image-detector-timeout 60 --llm-timeout 45 --llm-retries 1 --json --no-open",
+    "details": {
+      "capability": "text_llm",
+      "ok": false,
+      "error_class": "provider_unavailable",
+      "message": "文本LLM预检请求失败: HTTPSConnectionPool(host='hub.oaifree.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NameResolutionError(\"HTTPSConnection(host='hub.oaifree.com', port=443): Failed to resolve 'hub.oaifree.com' ([Errno -2] Name or service not known)\"))",
+      "details": {
+        "endpoint": "https://hub.oaifree.com/v1/chat/completions",
+        "model": "mimo-v2.5-free"
+      },
+      "created_at": "2026-06-02 16:27:43"
+    }
+  },
+  "meta": {
+    "input_type": "directory",
+    "total_files": 1,
+    "audit_files": 1,
+    "reference_files": 0,
+    "file_classes": {
+      "main_paper": 0,
+      "supplements": 0,
+      "data_files": 0,
+      "references": 0,
+      "other": 1
+    },
+    "total_chars": 100,
+    "extractor": "directory_multi_format",
+    "extraction_method": "directory_multi_format",
+    "size_mb": 4.31,
+    "runtime": {
+      "local_time": "2026-06-02T16:27:43+08:00",
+      "timezone": "CST",
+      "utc_time": "2026-06-02T08:27:43+00:00",
+      "utc_year": 2026,
+      "future_year_basis": "utc_year"
+    },
+    "prompt_version": "text_audit_prompt_v1",
+    "schema_version": "strict_evidence_schema_v1",
+    "adapter_version": "audit_adapters_v1",
+    "risk_rule_version": "risk_rules_v1",
+    "paper_identity": {
+      "title": "=== 文件: 2026-040896_稿件全文C.docx 路径: 2026-040896_稿件全文C.docx ===",
+      "journal": "",
+      "authors": []
+    },
+    "preflight_results": [
+      {
+        "capability": "text_llm",
+        "ok": false,
+        "error_class": "provider_unavailable",
+        "message": "文本LLM预检请求失败: HTTPSConnectionPool(host='hub.oaifree.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NameResolutionError(\"HTTPSConnection(host='hub.oaifree.com', port=443): Failed to resolve 'hub.oaifree.com' ([Errno -2] Name or service not known)\"))",
+        "details": {
+          "endpoint": "https://hub.oaifree.com/v1/chat/completions",
+          "model": "mimo-v2.5-free"
+        },
+        "created_at": "2026-06-02 16:27:43"
+      }
+    ],
+    "cross_file_consistency_audit": {
+      "status": "skipped",
+      "checked_files": 1,
+      "finding_count": 0,
+      "strong_count": 0,
+      "medium_count": 0,
+      "weak_count": 0,
+      "findings": [],
+      "note": "缺少可比较的跨文件材料；跨文件一致性审查已跳过。"
+    },
+    "references_excluded_from_main_audit": false,
+    "reference_audit": {
+      "status": "ok",
+      "reference_count": 0,
+      "doi_count": 0,
+      "year_count": 0,
+      "online_enabled": false,
+      "online_checked": 0,
+      "issues": [],
+      "references": [],
+      "note": "离线格式/可核验性校检：检查DOI、年份、来源字段等基本信息；不代表已联网验证引用真实存在。"
+    },
+    "resource_count": 0,
+    "resource_audit": {
+      "status": "ok",
+      "resource_count": 0,
+      "online_enabled": true,
+      "online_checked": 0,
+      "issues": [],
+      "resources": [],
+      "note": "校检论文声明的代码仓库、在线计算器、部署平台等资源是否可访问；URL格式错误会单独标记。"
+    }
+  },
+  "reference_audit": {
+    "status": "ok",
+    "reference_count": 0,
+    "doi_count": 0,
+    "year_count": 0,
+    "online_enabled": false,
+    "online_checked": 0,
+    "issues": [],
+    "references": [],
+    "note": "离线格式/可核验性校检：检查DOI、年份、来源字段等基本信息；不代表已联网验证引用真实存在。"
+  },
+  "resource_audit": {
+    "status": "ok",
+    "resource_count": 0,
+    "online_enabled": true,
+    "online_checked": 0,
+    "issues": [],
+    "resources": [],
+    "note": "校检论文声明的代码仓库、在线计算器、部署平台等资源是否可访问；URL格式错误会单独标记。"
+  }
+}

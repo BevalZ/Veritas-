@@ -1,0 +1,8 @@
+{
+  "shared_resume_dir": "Test_paper2/.Test_paper2.paper_audit_resume",
+  "no_resume": false,
+  "allow_llm_cache_read": true,
+  "allow_llm_cache_write": true,
+  "extract_cache_version": 7,
+  "image_semantic_cache_version": 3
+}

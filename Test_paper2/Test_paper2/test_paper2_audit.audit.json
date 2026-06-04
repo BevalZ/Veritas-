@@ -1,0 +1,259 @@
+{
+  "report_type": "complete",
+  "llm_report": {
+    "summary": "论文文本未提供，无法进行实质性审查。",
+    "risk_level": "中",
+    "detection_score": 5,
+    "checks": [
+      {
+        "category": "结构与引用规范性",
+        "item": "文本内容完整性",
+        "verdict": "⚠️疑点",
+        "source": "未定位",
+        "source_text": "未找到直接原文证据",
+        "evidence": "输入仅包含文件路径，无论文正文内容。",
+        "reason": "论文文本缺失导致无法应用任何审查维度，所有检查项均无法验证。",
+        "recommendation": "请提供完整的论文文本，包括正文、图表、表格和参考文献。",
+        "confidence": 0.5,
+        "detail": "输入中没有论文内容，审查维度（如数据自洽性、图片异常等）无法评估。需人工核对原PDF或文档以获取全文。"
+      }
+    ],
+    "conclusion": "论文文本未提供，审查无法进行。建议提供完整文档后重新审查。",
+    "_raw_response_preserved": true,
+    "rule_version": "risk_rules_v1",
+    "score_breakdown": {
+      "rule_version": "risk_rules_v1",
+      "red_flags": 0,
+      "evidence_warnings": 1,
+      "extraction_warnings": 0,
+      "image_detector_high": 0,
+      "stat_adjustments": [],
+      "raw_score": 5
+    }
+  },
+  "stat_result": {
+    "benford_deviation": null,
+    "benford_status": null,
+    "p_value_count": 0,
+    "p_value_abnormal": 0,
+    "p_value_details": [],
+    "sd_count": 0,
+    "sd_abnormal": 0,
+    "number_count": 0,
+    "number_consistency": null
+  },
+  "meta": {
+    "input_type": "directory",
+    "total_files": 1,
+    "audit_files": 1,
+    "reference_files": 0,
+    "file_classes": {
+      "main_paper": 0,
+      "supplements": 0,
+      "data_files": 0,
+      "references": 0,
+      "other": 1
+    },
+    "total_chars": 100,
+    "extractor": "directory_multi_format",
+    "extraction_method": "directory_multi_format",
+    "size_mb": 4.31,
+    "runtime": {
+      "local_time": "2026-06-02T16:41:47+08:00",
+      "timezone": "CST",
+      "utc_time": "2026-06-02T08:41:47+00:00",
+      "utc_year": 2026,
+      "future_year_basis": "utc_year"
+    },
+    "prompt_version": "text_audit_prompt_v1",
+    "schema_version": "strict_evidence_schema_v1",
+    "adapter_version": "audit_adapters_v1",
+    "risk_rule_version": "risk_rules_v1",
+    "paper_identity": {
+      "title": "=== 文件: 2026-040896_稿件全文C.docx 路径: 2026-040896_稿件全文C.docx ===",
+      "journal": "",
+      "authors": []
+    },
+    "preflight_results": [
+      {
+        "capability": "text_llm",
+        "ok": true,
+        "error_class": "",
+        "message": "",
+        "details": {
+          "http_status": 200,
+          "endpoint": "https://hub.oaifree.com/v1/chat/completions",
+          "model": "mimo-v2.5-free"
+        },
+        "created_at": "2026-06-02 16:42:03"
+      }
+    ],
+    "cross_file_consistency_audit": {
+      "status": "skipped",
+      "checked_files": 1,
+      "finding_count": 0,
+      "strong_count": 0,
+      "medium_count": 0,
+      "weak_count": 0,
+      "findings": [],
+      "note": "缺少可比较的跨文件材料；跨文件一致性审查已跳过。"
+    },
+    "references_excluded_from_main_audit": false,
+    "reference_audit": {
+      "status": "ok",
+      "reference_count": 0,
+      "doi_count": 0,
+      "year_count": 0,
+      "online_enabled": false,
+      "online_checked": 0,
+      "issues": [],
+      "references": [],
+      "note": "离线格式/可核验性校检：检查DOI、年份、来源字段等基本信息；不代表已联网验证引用真实存在。"
+    },
+    "resource_count": 0,
+    "resource_audit": {
+      "status": "ok",
+      "resource_count": 0,
+      "online_enabled": true,
+      "online_checked": 0,
+      "issues": [],
+      "resources": [],
+      "note": "校检论文声明的代码仓库、在线计算器、部署平台等资源是否可访问；URL格式错误会单独标记。"
+    },
+    "image_audit": {
+      "enabled": false,
+      "site": "https://imagedetector.com/",
+      "semantic_enabled": true,
+      "semantic_model": "mimo-v2.5-free",
+      "semantic_checked": 0,
+      "detector_enabled": true,
+      "detector_checked": 0,
+      "image_count": 0,
+      "checked_count": 0,
+      "images": [],
+      "note": "本地做尺寸、空白、噪声/对比度筛查；图像语义分析模型做图片语义理解；imagedetector.com子工具自动上传并记录AI概率。"
+    },
+    "evidence_chain_audit": {
+      "status": "ok",
+      "checked_files": 1,
+      "cluster_count": 1,
+      "finding_count": 0,
+      "strong_count": 0,
+      "medium_count": 1,
+      "weak_count": 0,
+      "clusters": [
+        {
+          "id": "cluster-1",
+          "severity": "medium",
+          "title": "结构与引用规范性 / 文本内容完整性",
+          "source_types": [
+            "llm_check"
+          ],
+          "evidence_count": 1,
+          "keys": [
+            "pdf"
+          ],
+          "summary": "结构与引用规范性 / 文本内容完整性",
+          "evidence": [
+            {
+              "id": "llm-1",
+              "source_type": "llm_check",
+              "severity": "medium",
+              "title": "结构与引用规范性 / 文本内容完整性",
+              "detail": "输入中没有论文内容，审查维度（如数据自洽性、图片异常等）无法评估。需人工核对原PDF或文档以获取全文",
+              "excerpt": "未找到直接原文证据",
+              "keys": [
+                "pdf"
+              ]
+            }
+          ]
+        }
+      ],
+      "claim_chain_findings": [],
+      "note": "单文件链条审查范围较窄；未发现可比较的跨文件材料。 该结果用于人工复核排序，不等同于科研不端判断。"
+    },
+    "artifact_type": "complete",
+    "artifact_suffix": "audit",
+    "report_actions": {
+      "host": "127.0.0.1",
+      "port": 8765,
+      "url": "http://127.0.0.1:8765",
+      "auto_start": false
+    },
+    "artifact_paths": {
+      "markdown": "Test_paper2/Test_paper2/test_paper2_audit.audit.md",
+      "html": "Test_paper2/Test_paper2/test_paper2_audit.audit.html",
+      "json": "Test_paper2/Test_paper2/test_paper2_audit.audit.json"
+    },
+    "followups_dir": "Test_paper2/Test_paper2/followups"
+  },
+  "reference_audit": {
+    "status": "ok",
+    "reference_count": 0,
+    "doi_count": 0,
+    "year_count": 0,
+    "online_enabled": false,
+    "online_checked": 0,
+    "issues": [],
+    "references": [],
+    "note": "离线格式/可核验性校检：检查DOI、年份、来源字段等基本信息；不代表已联网验证引用真实存在。"
+  },
+  "resource_audit": {
+    "status": "ok",
+    "resource_count": 0,
+    "online_enabled": true,
+    "online_checked": 0,
+    "issues": [],
+    "resources": [],
+    "note": "校检论文声明的代码仓库、在线计算器、部署平台等资源是否可访问；URL格式错误会单独标记。"
+  },
+  "cross_file_consistency_audit": {
+    "status": "skipped",
+    "checked_files": 1,
+    "finding_count": 0,
+    "strong_count": 0,
+    "medium_count": 0,
+    "weak_count": 0,
+    "findings": [],
+    "note": "缺少可比较的跨文件材料；跨文件一致性审查已跳过。"
+  },
+  "evidence_chain_audit": {
+    "status": "ok",
+    "checked_files": 1,
+    "cluster_count": 1,
+    "finding_count": 0,
+    "strong_count": 0,
+    "medium_count": 1,
+    "weak_count": 0,
+    "clusters": [
+      {
+        "id": "cluster-1",
+        "severity": "medium",
+        "title": "结构与引用规范性 / 文本内容完整性",
+        "source_types": [
+          "llm_check"
+        ],
+        "evidence_count": 1,
+        "keys": [
+          "pdf"
+        ],
+        "summary": "结构与引用规范性 / 文本内容完整性",
+        "evidence": [
+          {
+            "id": "llm-1",
+            "source_type": "llm_check",
+            "severity": "medium",
+            "title": "结构与引用规范性 / 文本内容完整性",
+            "detail": "输入中没有论文内容，审查维度（如数据自洽性、图片异常等）无法评估。需人工核对原PDF或文档以获取全文",
+            "excerpt": "未找到直接原文证据",
+            "keys": [
+              "pdf"
+            ]
+          }
+        ]
+      }
+    ],
+    "claim_chain_findings": [],
+    "note": "单文件链条审查范围较窄；未发现可比较的跨文件材料。 该结果用于人工复核排序，不等同于科研不端判断。"
+  }
+}

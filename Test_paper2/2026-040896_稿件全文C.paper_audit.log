@@ -1,0 +1,70 @@
+Paper Audit Log
+START 2026-06-02 17:01:14
+INPUT Test_paper2/2026-040896_稿件全文C.docx
+OUTPUT_DIR Test_paper2
+
+🧾 日志文件: Test_paper2/2026-040896_稿件全文C.paper_audit.log
+📁 所有输出将保存到: Test_paper2
+✅ 从 config.py 加载配置
+🤖 当前LLM: model=mimo-v2.5-free, url=https://hub.oaifree.com/v1
+🧹 --fresh: 清空断点续作缓存目录 Test_paper2/.2026-040896_稿件全文C.paper_audit_resume
+🔁 断点续作缓存目录: Test_paper2/.2026-040896_稿件全文C.paper_audit_resume
+🗂️ 本次运行工作区: Test_paper2/.paper_audit_runs/20260602-170114-2026-040896_稿件全文C-fea1ad03
+🧭 断点记录: init | done | input=Test_paper2/2026-040896_稿件全文C.docx; llm=mimo-v2.5-free; url=https://hub.oaifree.com/v1; max_chars=4096; use_mineru=False
+📊 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0/5   0.0% 初始化完成
+📄 检测到输入为单个文件: 2026-040896_稿件全文C.docx
+📖 正在提取.docx文件文本: Test_paper2/2026-040896_稿件全文C.docx
+✅ 提取完成: 21718 字符（全文保留）
+📊 [█████░░░░░░░░░░░░░░░░░░░░░░░] 1/5  20.0% 阶段1/5 单文件文本提取完成
+🧭 断点记录: stage1_extract | saved | chars=21718; use_mineru=False
+🔎 参考文献在线检索已启用: 上限None条, 超时10s
+🧭 断点记录: stage1_reference_online | saved | checked=34; cache_entries=34
+📚 已从主体审查中剥离参考文献: 34条, 11257字符；将单独校检
+🧭 断点记录: stage1_references | done | refs=34; chars=11257
+🧭 断点记录: stage1_resource_online | saved | checked=0; cache_entries=0
+🔗 未识别到代码仓库或论文部署的在线资源链接
+📊 [█████░░░░░░░░░░░░░░░░░░░░░░░] 1/5  20.0% 阶段2/5 开始本地统计检测
+🔢 正在执行本地统计检测...
+✅ 统计检测完成: Benford偏差=0.456, p值异常=3, 数字数=100
+🧭 断点记录: stage2_stat | done | numbers=100; benford=0.456
+📊 [███████████░░░░░░░░░░░░░░░░░] 2/5  40.0% 阶段2/5 本地统计检测完成
+🧪 关键能力预检: 文本语义审查LLM
+🧭 断点记录: preflight_text_llm | ok | ok
+🧭 断点记录: stage3_llm | start | chunks=3; chunk_size=4096; overlap=512
+📊 [███████████░░░░░░░░░░░░░░░░░] 2/5  40.0% 阶段3/5 开始LLM审查：3块
+🔍 论文较长(10460字符，已排除参考文献)，分为3块(每块≤4096字符，重叠512字符)进行审查...
+📊 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0/3   0.0% 阶段3/5 LLM审查中：第1/3块
+  📝 审查第1/3块(4086字符)...
+🧭 断点记录: stage3_llm_chunk | saved | chunk=1/3; chars=4086
+     → 第1块风险: 低
+📊 [█████████░░░░░░░░░░░░░░░░░░░] 1/3  33.3% 阶段3/5 LLM审查完成：第1/3块
+📊 [█████████░░░░░░░░░░░░░░░░░░░] 1/3  33.3% 阶段3/5 LLM审查中：第2/3块
+  📝 审查第2/3块(4005字符)...
+🧭 断点记录: stage3_llm_chunk | saved | chunk=2/3; chars=4005
+     → 第2块风险: 中
+📊 [██████████████████░░░░░░░░░░] 2/3  66.7% 阶段3/5 LLM审查完成：第2/3块
+📊 [██████████████████░░░░░░░░░░] 2/3  66.7% 阶段3/5 LLM审查中：第3/3块
+  📝 审查第3/3块(2364字符)...
+🧭 断点记录: stage3_llm_chunk | saved | chunk=3/3; chars=2364
+     → 第3块风险: 中
+📊 [████████████████████████████] 3/3 100.0% 阶段3/5 LLM审查完成：第3/3块
+📊 [████████████████░░░░░░░░░░░░] 3/5  60.0% 阶段3/5 LLM审查完成
+📊 [████████████████░░░░░░░░░░░░] 3/5  60.0% 阶段4/5 开始合并审查结果
+🔗 正在合并3块审查结果...
+✅ 合并完成: 来自3块，共6个检查项
+🧭 断点记录: stage4_merge | done | checks=6; coverage=3/3
+📊 [██████████████████████░░░░░░] 4/5  80.0% 阶段4/5 审查结果合并完成
+🧭 断点记录: stage4_image_semantic | saved | semantic_checked=0; cache_entries=0; local_cache=Test_paper2/image_semantic_cache.json
+🧭 断点记录: stage4_image_detector | saved | detector_checked=0; cache_entries=0
+📊 [██████████████████████░░░░░░] 4/5  80.0% 阶段5/5 开始生成报告
+✅ Markdown报告已保存: Test_paper2/Test_paper2/test_paper2_docx_direct.audit.md
+🧭 断点记录: stage5_report | markdown_saved | Test_paper2/Test_paper2/test_paper2_docx_direct.audit.md
+✅ HTML报告已保存: Test_paper2/Test_paper2/test_paper2_docx_direct.audit.html
+🧭 断点记录: stage5_report | html_saved | Test_paper2/Test_paper2/test_paper2_docx_direct.audit.html
+✅ 原始JSON已保存: Test_paper2/Test_paper2/test_paper2_docx_direct.audit.json
+🧭 断点记录: all | done | audit completed
+📊 [████████████████████████████] 5/5 100.0% 阶段5/5 全部完成
+🧾 完整日志: Test_paper2/2026-040896_稿件全文C.paper_audit.log
+🌐 已跳过自动打开HTML报告: Test_paper2/Test_paper2/test_paper2_docx_direct.audit.html
+
+📊 复核优先级: 高 | 总评: [合并3段审查] 复核优先级中；红旗1项；证据型疑点3项；提取质量疑点0项。

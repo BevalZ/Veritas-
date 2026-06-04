@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审查失败诊断</title>
+<style>
+body { margin:0; padding:24px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif; background:#f6f6f6; color:#171717; line-height:1.6; }
+main { max-width:1080px; margin:0 auto; }
+.hero, section { background:#fff; border:1px solid #d4d4d4; border-radius:8px; padding:18px; margin-bottom:14px; }
+.status { display:inline-block; border-radius:6px; background:#b42318; color:#fff; padding:6px 10px; font-weight:800; margin-bottom:10px; }
+h1 { font-size:24px; margin:0 0 8px; }
+h2 { font-size:17px; margin:0 0 10px; border-bottom:1px solid #d4d4d4; padding-bottom:6px; }
+.grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px; margin-top:12px; }
+.cell { border:1px solid #d4d4d4; border-radius:6px; background:#fafafa; padding:9px; font-size:13px; color:#666; }
+.cell strong { display:block; color:#171717; overflow-wrap:anywhere; }
+pre, code { white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; background:#f1f1f1; border:1px solid #d4d4d4; border-radius:6px; padding:10px; display:block; }
+ul { padding-left:22px; }
+@media (max-width:760px) { body { padding:12px; } .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <div class="status">失败诊断 failed</div>
+    <h1>未生成完整审查报告</h1>
+    <p>关键审查能力失败，本次运行只生成失败诊断产物；修复后可使用下方命令断点续跑。</p>
+    <div class="grid">
+      <div class="cell"><span>文件</span><strong>Test_paper2/2026-040896_稿件全文C.docx</strong></div>
+      <div class="cell"><span>失败能力</span><strong>input_extraction</strong></div>
+      <div class="cell"><span>错误类别</span><strong>missing_optional_dependency</strong></div>
+      <div class="cell"><span>运行时间</span><strong>2026-06-02T16:43:46+08:00</strong></div>
+      <div class="cell"><span>运行时 UTC 年份</span><strong>2026</strong></div>
+      <div class="cell"><span>产物类型</span><strong>failed</strong></div>
+    </div>
+  </div>
+  <section>
+    <h2>失败原因</h2>
+    <p>读取 .docx 文件需要安装可选依赖 python-docx。</p>
+  </section>
+  <section>
+    <h2>断点续跑命令</h2>
+    <code>python paper_audit.py 'Test_paper2/2026-040896_稿件全文C.docx' --output Test_paper2/test_paper2_docx_direct --mineru-model vlm --mineru-lang ch --max-chars 4096 --reference-timeout 10 --resource-timeout 10 --image-semantic-timeout 45 --image-detector-timeout 60 --llm-timeout 45 --llm-retries 1 --json --no-open</code>
+  </section>
+  <section>
+    <h2>已完成阶段</h2>
+    <ul><li>init</li><li>runtime_config_loaded</li></ul>
+  </section>
+  <section>
+    <h2>修复建议</h2>
+    <ul><li>安装 python-docx 后重试。</li><li>或转换为 PDF 后重新运行审查。</li></ul>
+  </section>
+  
+</main>
+</body>
+</html>

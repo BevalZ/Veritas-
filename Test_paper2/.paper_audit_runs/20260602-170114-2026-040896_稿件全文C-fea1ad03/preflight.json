@@ -1,0 +1,17 @@
+{
+  "results": [
+    {
+      "capability": "text_llm",
+      "ok": true,
+      "error_class": "",
+      "message": "",
+      "details": {
+        "http_status": 200,
+        "endpoint": "https://hub.oaifree.com/v1/chat/completions",
+        "model": "mimo-v2.5-free"
+      },
+      "created_at": "2026-06-02 17:05:58"
+    }
+  ],
+  "updated_at": "2026-06-02 17:05:58"
+}

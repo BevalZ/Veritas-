@@ -1,0 +1,19 @@
+{
+  "run_id": "20260602-164147-Test_paper2-67c0af62",
+  "outcome": "complete",
+  "root_shortcuts": [
+    "Test_paper2/Test_paper2/test_paper2_audit.audit.md",
+    "Test_paper2/Test_paper2/test_paper2_audit.audit.html",
+    "Test_paper2/Test_paper2/test_paper2_audit.audit.json"
+  ],
+  "workspace_artifacts": [
+    "Test_paper2/.paper_audit_runs/20260602-164147-Test_paper2-67c0af62/artifacts/test_paper2_audit.audit.md",
+    "Test_paper2/.paper_audit_runs/20260602-164147-Test_paper2-67c0af62/artifacts/test_paper2_audit.audit.html",
+    "Test_paper2/.paper_audit_runs/20260602-164147-Test_paper2-67c0af62/artifacts/test_paper2_audit.audit.json"
+  ],
+  "meta": {
+    "artifact_type": "complete",
+    "limited_reasons": []
+  },
+  "recorded_at": "2026-06-02 16:42:28"
+}

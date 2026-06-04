@@ -1,0 +1,41 @@
+{
+  "report": {
+    "summary": "论文摘要基本自洽，但英文摘要中模型数量表述存在不一致，且方法论可能缺乏多重比较校正，需人工核对。",
+    "risk_level": "低",
+    "detection_score": 5,
+    "checks": [
+      {
+        "category": "数据与结果自洽性",
+        "item": "英文摘要模型数量表述矛盾",
+        "verdict": "⚠️疑点",
+        "source": "英文摘要结果部分",
+        "source_text": "Compared with the other four models",
+        "evidence": "英文摘要中‘Four grouped models were constructed. Compared with the other four models...’，但四个模型中全特征模型是其中之一，因此‘other four models’应为‘other three models’。",
+        "reason": "模型数量表述逻辑不一致，可能因笔误导致，影响对模型比较的理解。",
+        "recommendation": "人工核对原PDF中模型数量和比较部分，确认是否为表述错误。",
+        "confidence": 0.7,
+        "detail": "英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者。"
+      },
+      {
+        "category": "方法论严谨性",
+        "item": "缺乏多重比较校正说明",
+        "verdict": "⚠️疑点",
+        "source": "摘要方法部分",
+        "source_text": "通过单因素、多因素Logistic回归分析筛选预测CLNM的独立影响因素，将P<0.05的特征用于模型构建",
+        "evidence": "方法中未说明对单因素分析进行多重比较校正，如Bonferroni校正。",
+        "reason": "多个变量同时测试可能增加假阳性风险，缺乏校正可能影响结果可靠性。",
+        "recommendation": "建议人工核对全文方法部分，确认是否进行多重比较校正。",
+        "confidence": 0.6,
+        "detail": "方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清。"
+      }
+    ],
+    "conclusion": "论文摘要整体逻辑连贯，数据基本一致，但英文摘要中模型数量表述和方法论校正存在疑点。建议人工复核原PDF，确认模型数量准确性并检查全文是否包含多重比较校正，以评估研究严谨性。",
+    "_raw_response_preserved": true
+  },
+  "raw_content": "{\n  \"summary\": \"论文摘要基本自洽，但英文摘要中模型数量表述存在不一致，且方法论可能缺乏多重比较校正，需人工核对。\",\n  \"risk_level\": \"低\",\n  \"detection_score\": 5,\n  \"checks\": [\n    {\n      \"category\": \"数据与结果自洽性\",\n      \"item\": \"英文摘要模型数量表述矛盾\",\n      \"verdict\": \"⚠️疑点\",\n      \"source\": \"英文摘要结果部分\",\n      \"source_text\": \"Compared with the other four models\",\n      \"evidence\": \"英文摘要中‘Four grouped models were constructed. Compared with the other four models...’，但四个模型中全特征模型是其中之一，因此‘other four models’应为‘other three models’。\",\n      \"reason\": \"模型数量表述逻辑不一致，可能因笔误导致，影响对模型比较的理解。\",\n      \"recommendation\": \"人工核对原PDF中模型数量和比较部分，确认是否为表述错误。\",\n      \"confidence\": 0.7,\n      \"detail\": \"英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者。\"\n    },\n    {\n      \"category\": \"方法论严谨性\",\n      \"item\": \"缺乏多重比较校正说明\",\n      \"verdict\": \"⚠️疑点\",\n      \"source\": \"摘要方法部分\",\n      \"source_text\": \"通过单因素、多因素Logistic回归分析筛选预测CLNM的独立影响因素，将P<0.05的特征用于模型构建\",\n      \"evidence\": \"方法中未说明对单因素分析进行多重比较校正，如Bonferroni校正。\",\n      \"reason\": \"多个变量同时测试可能增加假阳性风险，缺乏校正可能影响结果可靠性。\",\n      \"recommendation\": \"建议人工核对全文方法部分，确认是否进行多重比较校正。\",\n      \"confidence\": 0.6,\n      \"detail\": \"方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清。\"\n    }\n  ],\n  \"conclusion\": \"论文摘要整体逻辑连贯，数据基本一致，但英文摘要中模型数量表述和方法论校正存在疑点。建议人工复核原PDF，确认模型数量准确性并检查全文是否包含多重比较校正，以评估研究严谨性。\"\n}",
+  "saved_at": "2026-06-02 17:06:34",
+  "chunk_index": 0,
+  "total_chunks": 3,
+  "status": "ok",
+  "retry": false
+}

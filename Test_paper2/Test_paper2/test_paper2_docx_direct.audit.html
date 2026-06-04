@@ -1,0 +1,2096 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学术论文审查报告</title>
+<style>
+  :root {
+    --bg: #f7f3ec;
+    --paper: #fffdf8;
+    --surface: #fffaf1;
+    --surface2: #f3eadc;
+    --text: #2b241d;
+    --text-muted: #7b7065;
+    --accent: #c15f3c;
+    --accent2: #2f6f73;
+    --border: #e4d8c8;
+    --red: #b42318;
+    --yellow: #b7791f;
+    --green: #2f7d50;
+    --shadow: 0 22px 70px rgba(61, 45, 31, 0.10);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
+    background: #f6f6f6;
+    color: var(--text);
+    line-height: 1.6;
+    padding: 28px 20px;
+  }
+  .container { max-width: 1120px; margin: 0 auto; }
+  .header {
+    background: rgba(255,253,248,0.86);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 36px;
+    margin-bottom: 28px;
+    text-align: center;
+    box-shadow: none;
+  }
+  .header h1 { font-size: 32px; margin-bottom: 18px; letter-spacing: 0; }
+  .risk-badge {
+    display: inline-block;
+    font-size: 22px;
+    font-weight: 700;
+    padding: 8px 24px;
+    border-radius: 999px;
+    color: #fff;
+    background: #b42318;
+    margin: 8px 0;
+  }
+  .artifact-badge {
+    display: inline-block;
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 24px;
+    text-align: left;
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .meta-grid strong { color: var(--text); }
+  .section {
+    background: rgba(255,253,248,0.88);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 10px 34px rgba(61, 45, 31, 0.06);
+  }
+  .section h2 {
+    font-size: 20px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--surface2); color: var(--text-muted); font-weight: 650; text-transform: uppercase; font-size: 12px; }
+  tr:hover { background: rgba(193,95,60,0.05); }
+  .status-ok { color: var(--green); font-weight: 600; }
+  .status-warn { color: var(--yellow); font-weight: 600; }
+  .verdict-red { color: var(--red); font-weight: 700; }
+  .verdict-yellow { color: var(--yellow); font-weight: 700; }
+  .verdict-green { color: var(--green); font-weight: 700; }
+  .detail-card {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border-left: 4px solid var(--accent);
+  }
+  .detail-card[open] { background: #f8efe2; }
+  .detail-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .detail-summary { cursor: pointer; list-style: none; }
+  .detail-summary::-webkit-details-marker { display: none; }
+  .detail-summary::after {
+    content: "展开详情";
+    margin-left: auto;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .detail-card[open] .detail-summary::after { content: "收起详情"; }
+  .section-hint { color: var(--text-muted); margin: -6px 0 14px; font-size: 14px; }
+  .evidence-summary { border-left: 4px solid var(--red); }
+  .suspicion-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .suspicion-card {
+    background: #fff8ed;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--red);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .suspicion-summary {
+    cursor: pointer;
+    list-style: none;
+    display: grid;
+    grid-template-columns: 44px minmax(76px, 120px) minmax(180px, 1fr) auto;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .suspicion-summary::-webkit-details-marker { display: none; }
+  .suspicion-summary::after {
+    content: "展开详情";
+    grid-column: 4;
+    grid-row: 2;
+    justify-self: end;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .suspicion-card[open] .suspicion-summary::after { content: "收起详情"; }
+  .suspicion-rank {
+    background: rgba(248,113,113,0.16);
+    color: var(--red);
+    border-radius: 999px;
+    padding: 4px 8px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 13px;
+  }
+  .suspicion-title {
+    font-weight: 700;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .suspicion-score {
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .suspicion-brief {
+    grid-column: 2 / 4;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  .suspicion-body {
+    margin-top: 12px;
+  }
+  .action-section {
+    border-left: 5px solid var(--accent);
+  }
+  .action-list {
+    display: grid;
+    gap: 10px;
+  }
+  .action-card {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 140px;
+    gap: 12px;
+    align-items: start;
+    padding: 14px;
+    background: #fff8ed;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .action-rank {
+    background: rgba(193,95,60,0.14);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-weight: 800;
+    text-align: center;
+  }
+  .action-card p {
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-size: 13px;
+  }
+  .action-source {
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: right;
+  }
+  .checks-table { table-layout: fixed; }
+  .checks-table th:nth-child(1), .checks-table td:nth-child(1) { width: 44px; text-align: center; }
+  .checks-table th:nth-child(2), .checks-table td:nth-child(2) { width: 120px; }
+  .evidence-table th:nth-child(4), .evidence-table td:nth-child(4),
+  .evidence-table th:nth-child(5), .evidence-table td:nth-child(5) { width: 28%; }
+  .evidence-cell, .reason-cell {
+    color: var(--text);
+    line-height: 1.55;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .muted { color: var(--text-muted); text-align: center; padding: 18px; }
+  .detail-num {
+    background: var(--accent);
+    color: var(--bg);
+    border-radius: 50%;
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+  }
+  .detail-cat { color: var(--accent); font-weight: 600; }
+  .detail-item { flex: 1; }
+  .detail-verdict { font-size: 14px; }
+  .detail-brief {
+    flex-basis: 100%;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding-left: 40px;
+  }
+  .detail-body { margin-top: 12px; }
+  .detail-evidence {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: rgba(183,121,31,0.10);
+    border-radius: 6px;
+    font-size: 14px;
+    color: #6f4b12;
+  }
+  .detail-evidence blockquote {
+    margin-top: 8px;
+    white-space: pre-wrap;
+    color: #6f4b12;
+  }
+  .table-hint {
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 600;
+    margin-right: 8px;
+  }
+  .summary-excerpt {
+    color: var(--text-muted);
+    display: block;
+    margin-top: 4px;
+  }
+  .data-table-details {
+    margin-top: 8px;
+  }
+  .data-table-details summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .data-table-wrap {
+    margin-top: 8px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fffdf8;
+  }
+  .data-table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .data-table th,
+  .data-table td {
+    min-width: 96px;
+    max-width: 320px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+    white-space: normal;
+    color: var(--text);
+  }
+  .data-table th {
+    position: sticky;
+    top: 0;
+    background: #efe3d3;
+    color: var(--text);
+    z-index: 1;
+  }
+  .detail-text {
+    margin-top: 8px;
+    font-size: 14px;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+  }
+  .conclusion-section { border-left: 4px solid var(--green); }
+  .conclusion-text { font-size: 16px; white-space: pre-wrap; color: var(--text); }
+  .coverage-warning {
+    border-left: 5px solid var(--yellow);
+    background: rgba(183,121,31,0.10);
+  }
+  .coverage-warning code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; }
+  .coverage-ok {
+    border-left: 5px solid var(--green);
+    background: rgba(47,125,80,0.08);
+  }
+  .error-block {
+    background: rgba(180,35,24,0.08);
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    padding: 16px;
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 13px;
+    color: #fca5a5;
+    overflow-x: auto;
+  }
+  .score-bar {
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .score-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--red);
+    transition: none;
+  }
+  .score-breakdown {
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .reference-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .cross-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .cross-file-card {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--yellow);
+    border-radius: 10px;
+    background: #fff8ed;
+    padding: 12px 14px;
+  }
+  .cross-file-card[open] {
+    background: #fbfbfb;
+  }
+  .cross-file-summary {
+    cursor: pointer;
+    list-style: none;
+    display: grid;
+    grid-template-columns: 46px minmax(110px, 160px) minmax(180px, 1fr);
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .cross-file-summary::-webkit-details-marker { display: none; }
+  .cross-file-rank {
+    color: var(--accent);
+    font-weight: 800;
+  }
+  .cross-file-severity {
+    font-weight: 800;
+    border-radius: 999px;
+    padding: 3px 8px;
+    text-align: center;
+    background: rgba(183,121,31,0.12);
+  }
+  .cross-file-strong { color: var(--red); }
+  .cross-file-medium { color: var(--yellow); }
+  .cross-file-weak { color: var(--text-muted); }
+  .cross-file-title {
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+  .cross-file-reason {
+    grid-column: 2 / 4;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .cross-file-body {
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-size: 14px;
+    display: grid;
+    gap: 10px;
+  }
+  .cross-file-body p {
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+  }
+  .reference-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff8ed;
+    padding: 12px 14px;
+  }
+  .reference-summary {
+    cursor: pointer;
+    list-style: none;
+    display: grid;
+    grid-template-columns: 46px minmax(98px, 140px) minmax(220px, 1fr) auto;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .reference-summary::-webkit-details-marker { display: none; }
+  .reference-index {
+    color: var(--accent);
+    font-weight: 800;
+  }
+  .reference-status {
+    font-weight: 800;
+    border-radius: 999px;
+    padding: 3px 8px;
+    text-align: center;
+    background: rgba(47,111,115,0.10);
+  }
+  .reference-verified, .reference-likely { color: var(--green); }
+  .reference-weak, .reference-not_found, .reference-error { color: var(--red); }
+  .reference-title {
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+  .reference-confidence {
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .reference-issues {
+    grid-column: 2 / 5;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .reference-body {
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .reference-matches {
+    margin-top: 8px;
+    padding-left: 22px;
+  }
+  .reference-matches li {
+    margin: 8px 0;
+  }
+  .reference-matches a, .image-section a {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .image-table code {
+    color: var(--text-muted);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .detector-hint {
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 800;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .web-action-section {
+    border-left: 5px solid #2563eb;
+  }
+  .web-action-toolbar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .action-button, .secondary-button {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: var(--text-main);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .action-button {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+  }
+  .draft-language-select {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: var(--text-main);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-weight: 800;
+  }
+  .identity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .identity-grid label, .custom-concern-label, .inline-control {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .identity-grid input, .custom-concern-input {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 9px 10px;
+    color: var(--text-main);
+    background: #ffffff;
+    font: inherit;
+  }
+  .evidence-picker {
+    margin: 12px 0;
+  }
+  .evidence-choice-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .evidence-choice {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 8px;
+    align-items: start;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px;
+    background: #ffffff;
+  }
+  .evidence-choice small {
+    display: block;
+    color: var(--text-muted);
+    line-height: 1.45;
+    margin-top: 3px;
+  }
+  .custom-concern-input {
+    width: 100%;
+    min-height: 70px;
+    resize: vertical;
+  }
+  .manual-confirmation {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 8px;
+    align-items: start;
+    margin: 10px 0;
+    color: var(--text-main);
+    font-size: 13px;
+  }
+  .existing-followups {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 8px 0;
+  }
+  .action-button:hover, .secondary-button:hover {
+    filter: brightness(0.96);
+  }
+  .web-action-status {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 8px 0;
+  }
+  .web-action-status.error {
+    color: #b42318;
+    font-weight: 700;
+  }
+  .generated-draft {
+    width: 100%;
+    min-height: 260px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--text-main);
+    background: #fff;
+    resize: vertical;
+  }
+  .footer {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 32px;
+    padding: 16px;
+  }
+  /* Compact grayscale report skin: evidence first, decoration last. */
+  :root {
+    --bg: #f6f6f6;
+    --paper: #ffffff;
+    --surface: #ffffff;
+    --surface2: #eeeeee;
+    --text: #171717;
+    --text-muted: #666666;
+    --accent: #111111;
+    --accent2: #3f3f46;
+    --border: #d4d4d4;
+    --red: #b42318;
+    --yellow: #8a5a00;
+    --green: #166534;
+    --shadow: none;
+  }
+  body {
+    background: #f6f6f6;
+    color: var(--text);
+    line-height: 1.55;
+    padding: 18px;
+  }
+  .container { max-width: 1280px; }
+  .header, .section {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  .header {
+    padding: 18px;
+    margin-bottom: 14px;
+    text-align: left;
+  }
+  .report-topline {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .report-kicker {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  .header h1 {
+    font-size: 24px;
+    line-height: 1.2;
+    margin: 3px 0 8px;
+    letter-spacing: 0;
+  }
+  .report-summary {
+    max-width: 820px;
+    color: #333333;
+    font-size: 14px;
+  }
+  .risk-badge {
+    border-radius: 6px;
+    padding: 7px 10px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .score-panel {
+    display: grid;
+    grid-template-columns: 170px minmax(220px, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .score-value {
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 900;
+    color: #b42318;
+  }
+  .score-caption {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .priority-label {
+    font-weight: 900;
+    color: #b42318;
+    margin-bottom: 4px;
+  }
+  .score-bar {
+    height: 7px;
+    background: #e5e5e5;
+    border-radius: 4px;
+    margin-top: 0;
+  }
+  .score-fill {
+    background: #b42318;
+    border-radius: 4px;
+    transition: none;
+  }
+  .score-breakdown {
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .meta-grid > div, .meta-item {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 10px;
+    background: #fafafa;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .meta-grid strong, .meta-item strong {
+    display: block;
+    color: var(--text);
+    font-size: 13px;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+  }
+  .section {
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .section h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 17px;
+    line-height: 1.25;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+  }
+  .section-hint {
+    margin: -4px 0 12px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  table { font-size: 13px; }
+  th, td {
+    padding: 8px 9px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: #f1f1f1;
+    color: #444444;
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+  .action-card, .suspicion-card, .detail-card, .reference-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-left: 3px solid #111111;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .cross-file-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--yellow);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .evidence-summary { border-left: 3px solid var(--red); }
+  .suspicion-summary {
+    grid-template-columns: 44px minmax(72px, 112px) minmax(180px, 1fr) 96px;
+    gap: 7px 10px;
+  }
+  .suspicion-rank, .action-rank, .detail-num {
+    background: #f1f1f1;
+    color: #111111;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+  }
+  .suspicion-brief {
+    grid-column: 2 / 4;
+    color: var(--text-muted);
+  }
+  .summary-action {
+    grid-column: 4;
+    grid-row: 2;
+    justify-self: end;
+    color: #111111;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .detail-summary .summary-action {
+    grid-column: auto;
+    grid-row: auto;
+    margin-left: auto;
+  }
+  .detail-card[open], .suspicion-card[open] {
+    background: #fbfbfb;
+  }
+  .cross-file-card[open] {
+    background: #fbfbfb;
+  }
+  .detail-summary::after, .suspicion-summary::after {
+    content: none;
+  }
+  .detail-body, .suspicion-body {
+    border-top: 1px solid var(--border);
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+  .detail-evidence {
+    background: #f7f7f7;
+    color: #222222;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .detail-evidence blockquote {
+    color: #222222;
+  }
+  .detail-text {
+    color: #4b4b4b;
+  }
+  .data-table-wrap {
+    background: #ffffff;
+    border-radius: 6px;
+  }
+  .data-table th {
+    background: #ededed;
+  }
+  .merged-group {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fff;
+  }
+  .merged-group summary {
+    cursor: pointer;
+    font-weight: 800;
+    color: #111111;
+  }
+  .coverage-warning, .coverage-ok, .conclusion-section, .action-section, .web-action-section {
+    border-left-width: 3px;
+    background: #ffffff;
+  }
+  .web-action-section { border-left-color: #2563eb; }
+  .action-button, .secondary-button {
+    border-radius: 6px;
+    padding: 8px 11px;
+    color: #111111;
+  }
+  .action-button { color: #ffffff; }
+  .generated-draft {
+    border-radius: 6px;
+    min-height: 220px;
+    color: #111111;
+  }
+  .image-thumb {
+    max-width: 84px;
+    max-height: 64px;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #ffffff;
+  }
+  .muted-inline {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  @media (max-width: 900px) {
+    body { padding: 10px; }
+    .report-topline { flex-direction: column; }
+    .score-panel { grid-template-columns: 1fr; }
+    .meta-grid { grid-template-columns: 1fr 1fr; }
+    .suspicion-summary, .reference-summary {
+      grid-template-columns: 40px minmax(70px, 100px) 1fr;
+    }
+    .suspicion-score, .reference-confidence, .summary-action {
+      grid-column: 2 / 4;
+      justify-self: start;
+    }
+    .suspicion-brief, .reference-issues {
+      grid-column: 1 / 4;
+    }
+  }
+  @media (max-width: 560px) {
+    .meta-grid { grid-template-columns: 1fr; }
+    .checks-table { table-layout: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="report-topline">
+      <div>
+        <div class="report-kicker">Paper Audit / Veritas</div>
+        <h1>学术论文审查报告</h1>
+        <div class="report-summary">[合并3段审查] 复核优先级中；红旗1项；证据型疑点3项；提取质量疑点0项。</div>
+      </div>
+      <div class="artifact-badge" style="background:#166534;">完整审查 complete</div>
+    </div>
+    <div class="score-panel">
+      <div>
+        <div class="score-value">63</div>
+        <div class="score-caption">证据风险分 / 100，越高表示越需要优先复核</div>
+      </div>
+      <div>
+        <div class="priority-label">复核优先级：高复核优先级</div>
+        <div class="score-bar"><div class="score-fill" style="width:63%; background:#b42318;"></div></div>
+      
+      <div class="score-breakdown">
+        红旗 1 · 证据型疑点 3 · 提取质量疑点 0 · 统计调整 benford_high_deviation, p_value_abnormal
+      </div>
+      </div>
+    </div>
+    <div class="meta-grid">
+      <div><span>文件</span><strong>Test_paper2/2026-040896_稿件全文C.docx</strong></div>
+      <div><span>产物类型</span><strong>完整审查 (complete)</strong></div>
+      <div><span>Prompt版本</span><strong>text_audit_prompt_v1</strong></div>
+      <div><span>Schema版本</span><strong>strict_evidence_schema_v1</strong></div>
+      <div><span>Adapter版本</span><strong>audit_adapters_v1</strong></div>
+      <div><span>规则版本</span><strong>risk_rules_v1</strong></div>
+      <div><span>文件大小</span><strong>4.31 MB</strong></div>
+      <div><span>提取字符数</span><strong>21718</strong></div>
+      <div><span>提取方式</span><strong>docx_text</strong></div>
+      
+        <div class="meta-item">
+            <span>审查方式</span>
+            <strong>分块审查 · 3块 · 单块4096字符 · 重叠512字符</strong>
+        </div>
+      <div><span>审查时间</span><strong>2026-06-02T17:01:14+08:00</strong></div>
+      <div><span>运行时UTC年份</span><strong>2026</strong></div>
+    </div>
+  </div>
+
+  
+  <div class="section coverage-ok">
+    <h2>LLM覆盖率</h2>
+    <p>3/3 个分块全部成功。</p>
+  </div>
+  
+  
+  <div class="section action-section">
+    <h2>行动优先级摘要</h2>
+    <div class="action-list">
+            <div class="action-card">
+              <span class="action-rank">#1</span>
+              <div>
+                <strong>方法论 / 多重比较校正缺失</strong>
+                <p>这是一个明确的方法论缺陷（耿同学六式-统计异常，7类红旗-方法论缺陷）。频繁的DeLong检验比较未校正，会使报告的P值的可信度降低，影响对模型效能差异结论的可靠性判断。需在结论部分重新评估各比较结果的实际显著性</p>
+              </div>
+              <span class="action-source">LLM语义审查</span>
+            </div>
+            <div class="action-card">
+              <span class="action-rank">#2</span>
+              <div>
+                <strong>1个强证据簇需优先复核</strong>
+                <p>方法论 / 多重比较校正缺失: 方法论 / 多重比较校正缺失; 方法论严谨性 / 缺乏多重比较校正说明; Benford分布偏差较高; 参考文献 #1 在线证据不足。优先核对 Methods、Results、图表、补充材料和现有审查信号是否指向同一证据链。</p>
+              </div>
+              <span class="action-source">证据链与证据簇审查</span>
+            </div>
+            <div class="action-card">
+              <span class="action-rank">#3</span>
+              <div>
+                <strong>Benford分布偏差较高</strong>
+                <p>偏差=0.456，建议核对原始数值来源和批量生成痕迹。</p>
+              </div>
+              <span class="action-source">本地统计</span>
+            </div>
+            <div class="action-card">
+              <span class="action-rank">#4</span>
+              <div>
+                <strong>9条参考文献在线证据不足</strong>
+                <p>优先核对编号: [1, 8, 9, 23, 26, 28, 29, 30, 34]；检查DOI、题名、年份是否与数据库命中一致。</p>
+              </div>
+              <span class="action-source">参考文献在线检索</span>
+            </div>
+            <div class="action-card">
+              <span class="action-rank">#5</span>
+              <div>
+                <strong>数据与结果自洽性 / 英文摘要模型数量表述矛盾</strong>
+                <p>英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者</p>
+              </div>
+              <span class="action-source">LLM语义审查</span>
+            </div>
+            <div class="action-card">
+              <span class="action-rank">#6</span>
+              <div>
+                <strong>方法论严谨性 / 缺乏多重比较校正说明</strong>
+                <p>方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清</p>
+              </div>
+              <span class="action-source">LLM语义审查</span>
+            </div>
+            <div class="action-card">
+              <span class="action-rank">#7</span>
+              <div>
+                <strong>方法论 / 样本量不足与缺乏外部验证</strong>
+                <p>作者已指出方法论缺陷，但需人工复核原PDF表格以确认样本量和验证细节，避免过度推广结论</p>
+              </div>
+              <span class="action-source">LLM语义审查</span>
+            </div></div>
+  </div>
+
+  <div class="section">
+    <h2>本地统计检测结果</h2>
+    <table>
+      <thead><tr><th>检测项</th><th>结果</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>Benford分布偏差</td><td>0.456</td><td>高偏差⚠️</td></tr>
+        <tr><td>p值数量/异常</td><td>23 / 3个&gt;0.05</td><td><span class="status-warn">⚠️异常</span></td></tr>
+        <tr><td>标准差提及</td><td>0处</td><td>N/A</td></tr>
+        <tr><td>提取数字数</td><td>100</td><td>-</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+
+  
+        <div class="section evidence-summary">
+            <h2>Top 可复核证据</h2>
+            <p class="section-hint">按可复核性和证据强度排序；默认显示前5项，展开后查看原文证据、判断理由和相近疑点统合来源。</p>
+            <div class="suspicion-list">
+            <details class="suspicion-card">
+                <summary class="suspicion-summary">
+                    <span class="suspicion-rank">#1</span>
+                    <span class="verdict-red suspicion-verdict">🚩红旗</span>
+                    <span class="suspicion-title">方法论 / 多重比较校正缺失</span>
+                    <span class="suspicion-score">复核分 322</span>
+                    <span class="suspicion-brief"><strong>统计线索</strong> · 这是一个明确的方法论缺陷（耿同学六式-统计异常，7类红旗-方法论缺陷）。频繁的DeLong检验比较未校正，会使报告的P值的可信度降低，影响对模型效能差异结论的可靠性判断。需在结论部分重新评估各比较结果的实际显著性</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="suspicion-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>通过De Long 检验结果显示...Clin-US模型的AUC显著高于TN-LN-US模型...Clin-US模型显著优于所有亚组合模型及单一指标（均P&lt;0.001）...TN-LN-US模型显著优于LN-US模型...和TN-US模型...LN-US模型亦显著优于ALP...和年龄...TN-US模型与ALP...、年龄...差异无统计学意义，且ALP与年龄之间的差异亦无统计学意义</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>这是一个明确的方法论缺陷（耿同学六式-统计异常，7类红旗-方法论缺陷）。频繁的DeLong检验比较未校正，会使报告的P值的可信度降低，影响对模型效能差异结论的可靠性判断。需在结论部分重新评估各比较结果的实际显著性</p></div>
+                </div>
+            </details>
+            <details class="suspicion-card">
+                <summary class="suspicion-summary">
+                    <span class="suspicion-rank">#2</span>
+                    <span class="verdict-yellow suspicion-verdict">⚠️疑点</span>
+                    <span class="suspicion-title">数据与结果自洽性 / 英文摘要模型数量表述矛盾</span>
+                    <span class="suspicion-score">复核分 206</span>
+                    <span class="suspicion-brief"><strong>LLM语义</strong> · 英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="suspicion-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>Compared with the other four models</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者</p></div>
+                </div>
+            </details>
+            <details class="suspicion-card">
+                <summary class="suspicion-summary">
+                    <span class="suspicion-rank">#3</span>
+                    <span class="verdict-yellow suspicion-verdict">⚠️疑点</span>
+                    <span class="suspicion-title">方法论严谨性 / 缺乏多重比较校正说明</span>
+                    <span class="suspicion-score">复核分 198</span>
+                    <span class="suspicion-brief"><strong>LLM语义</strong> · 方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="suspicion-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>通过单因素、多因素Logistic回归分析筛选预测CLNM的独立影响因素，将P&lt;0.05的特征用于模型构建</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清</p></div>
+                </div>
+            </details>
+            <details class="suspicion-card">
+                <summary class="suspicion-summary">
+                    <span class="suspicion-rank">#4</span>
+                    <span class="verdict-yellow suspicion-verdict">⚠️疑点</span>
+                    <span class="suspicion-title">方法论 / 样本量不足与缺乏外部验证</span>
+                    <span class="suspicion-score">复核分 196</span>
+                    <span class="suspicion-brief"><strong>LLM语义</strong> · 作者已指出方法论缺陷，但需人工复核原PDF表格以确认样本量和验证细节，避免过度推广结论</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="suspicion-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>样本量相对较小，未设立外部验证集</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>作者已指出方法论缺陷，但需人工复核原PDF表格以确认样本量和验证细节，避免过度推广结论</p></div>
+                </div>
+            </details></div>
+        </div>
+        <div class="section">
+            <h2>全部检查项概览</h2>
+            <table class="checks-table">
+                <thead><tr><th>#</th><th>分类</th><th>检查项</th><th>判定</th><th>证据摘要</th></tr></thead>
+                <tbody>
+            <tr>
+                <td>1</td>
+                <td>方法论</td>
+                <td>多重比较校正缺失</td>
+                <td><span class="verdict-red">🚩红旗</span></td>
+                <td class="evidence-cell">通过De Long 检验结果显示...Clin-US模型的AUC显著高于TN-LN-US模型...Clin-US模型显著优于所有亚组合模型及单一指标（均P&lt;0.001）...TN-LN-US模型显著优于LN-US模型...和TN-US模型.…</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>数据与结果自洽性</td>
+                <td>英文摘要模型数量表述矛盾</td>
+                <td><span class="verdict-yellow">⚠️疑点</span></td>
+                <td class="evidence-cell">Compared with the other four models</td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>方法论严谨性</td>
+                <td>缺乏多重比较校正说明</td>
+                <td><span class="verdict-yellow">⚠️疑点</span></td>
+                <td class="evidence-cell">通过单因素、多因素Logistic回归分析筛选预测CLNM的独立影响因素，将P&lt;0.05的特征用于模型构建</td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>方法论</td>
+                <td>样本量不足与缺乏外部验证</td>
+                <td><span class="verdict-yellow">⚠️疑点</span></td>
+                <td class="evidence-cell">样本量相对较小，未设立外部验证集</td>
+            </tr>
+            <tr>
+                <td>5</td>
+                <td>数据与结果</td>
+                <td>数据与结果自洽性</td>
+                <td><span class="verdict-green">✅通过</span></td>
+                <td class="evidence-cell">本研究纳入PTC合并HT患者共261例，其中转移组141例（54.0%），无转移组120例（45.9%）</td>
+            </tr>
+            <tr>
+                <td>6</td>
+                <td>数据与结果</td>
+                <td>模型性能数字自洽性</td>
+                <td><span class="verdict-green">✅通过</span></td>
+                <td class="evidence-cell">TN-US模型敏感度91.49%，特异度32.50%；Clin-US模型AUC 0.842，敏感度70.92%，特异度84.17%</td>
+            </tr></tbody>
+            </table>
+        </div>
+        <div class="section">
+            <h2>逐条详细分析（含原文支撑）</h2>
+            
+            <details class="detail-card">
+                <summary class="detail-header detail-summary">
+                    <span class="detail-num">#1</span>
+                    <span class="detail-cat">方法论</span>
+                    <span class="detail-item">多重比较校正缺失</span>
+                    <span class="verdict-red detail-verdict">🚩红旗</span>
+                    <span class="detail-brief">这是一个明确的方法论缺陷（耿同学六式-统计异常，7类红旗-方法论缺陷）。频繁的DeLong检验比较未校正，会使报告的P值的可信度降低，影响对模型效能差异结论的可靠性判断。需在结论部分重新评估各比较结果的实际显著性</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="detail-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>通过De Long 检验结果显示...Clin-US模型的AUC显著高于TN-LN-US模型...Clin-US模型显著优于所有亚组合模型及单一指标（均P&lt;0.001）...TN-LN-US模型显著优于LN-US模型...和TN-US模型...LN-US模型亦显著优于ALP...和年龄...TN-US模型与ALP...、年龄...差异无统计学意义，且ALP与年龄之间的差异亦无统计学意义</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>这是一个明确的方法论缺陷（耿同学六式-统计异常，7类红旗-方法论缺陷）。频繁的DeLong检验比较未校正，会使报告的P值的可信度降低，影响对模型效能差异结论的可靠性判断。需在结论部分重新评估各比较结果的实际显著性</p></div>
+                </div>
+            </details>
+            <details class="detail-card">
+                <summary class="detail-header detail-summary">
+                    <span class="detail-num">#2</span>
+                    <span class="detail-cat">数据与结果自洽性</span>
+                    <span class="detail-item">英文摘要模型数量表述矛盾</span>
+                    <span class="verdict-yellow detail-verdict">⚠️疑点</span>
+                    <span class="detail-brief">英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="detail-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>Compared with the other four models</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者</p></div>
+                </div>
+            </details>
+            <details class="detail-card">
+                <summary class="detail-header detail-summary">
+                    <span class="detail-num">#3</span>
+                    <span class="detail-cat">方法论严谨性</span>
+                    <span class="detail-item">缺乏多重比较校正说明</span>
+                    <span class="verdict-yellow detail-verdict">⚠️疑点</span>
+                    <span class="detail-brief">方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="detail-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>通过单因素、多因素Logistic回归分析筛选预测CLNM的独立影响因素，将P&lt;0.05的特征用于模型构建</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清</p></div>
+                </div>
+            </details>
+            <details class="detail-card">
+                <summary class="detail-header detail-summary">
+                    <span class="detail-num">#4</span>
+                    <span class="detail-cat">方法论</span>
+                    <span class="detail-item">样本量不足与缺乏外部验证</span>
+                    <span class="verdict-yellow detail-verdict">⚠️疑点</span>
+                    <span class="detail-brief">作者已指出方法论缺陷，但需人工复核原PDF表格以确认样本量和验证细节，避免过度推广结论</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="detail-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>样本量相对较小，未设立外部验证集</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>作者已指出方法论缺陷，但需人工复核原PDF表格以确认样本量和验证细节，避免过度推广结论</p></div>
+                </div>
+            </details>
+            <details class="detail-card">
+                <summary class="detail-header detail-summary">
+                    <span class="detail-num">#5</span>
+                    <span class="detail-cat">数据与结果</span>
+                    <span class="detail-item">数据与结果自洽性</span>
+                    <span class="verdict-green detail-verdict">✅通过</span>
+                    <span class="detail-brief">经核查，正文文本中表述的样本量及分组比例无矛盾。建议在后续审查中对照原版表格进行最终确认，以排除潜在的印刷或排版错误</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="detail-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>本研究纳入PTC合并HT患者共261例，其中转移组141例（54.0%），无转移组120例（45.9%）</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>经核查，正文文本中表述的样本量及分组比例无矛盾。建议在后续审查中对照原版表格进行最终确认，以排除潜在的印刷或排版错误</p></div>
+                </div>
+            </details>
+            <details class="detail-card">
+                <summary class="detail-header detail-summary">
+                    <span class="detail-num">#6</span>
+                    <span class="detail-cat">数据与结果</span>
+                    <span class="detail-item">模型性能数字自洽性</span>
+                    <span class="verdict-green detail-verdict">✅通过</span>
+                    <span class="detail-brief">数字基于讨论部分摘录，未发现自洽性问题；需人工核对原PDF表格数据，排除OCR噪声影响</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="detail-body">
+                    
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong><blockquote>TN-US模型敏感度91.49%，特异度32.50%；Clin-US模型AUC 0.842，敏感度70.92%，特异度84.17%</blockquote></div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>数字基于讨论部分摘录，未发现自洽性问题；需人工核对原PDF表格数据，排除OCR噪声影响</p></div>
+                </div>
+            </details>
+        </div>
+  
+  <div class="section web-action-section">
+    <h2>一键生成后续沟通草稿</h2>
+    <p class="section-hint">草稿由本地配置的LLM生成。生成前请确认文章身份、证据范围和语气；生成后仍需人工核对。</p>
+    <div class="identity-grid" aria-label="文章身份确认">
+      <label>标题<input id="followup-title" type="text" placeholder="文章标题"></label>
+      <label>期刊<input id="followup-journal" type="text" placeholder="期刊"></label>
+      <label>作者<input id="followup-authors" type="text" placeholder="作者，逗号分隔"></label>
+      <label>DOI<input id="followup-doi" type="text" placeholder="DOI"></label>
+      <label>年份<input id="followup-year" type="text" placeholder="年份"></label>
+    </div>
+    <div class="web-action-toolbar">
+      <label class="inline-control">语言
+        <select id="draft-language" class="draft-language-select" aria-label="草稿语言">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <label class="inline-control">语气
+        <select id="draft-tone" class="draft-language-select" aria-label="草稿语气">
+          <option value="conservative">保守</option>
+          <option value="standard">标准</option>
+          <option value="firm">强硬</option>
+        </select>
+      </label>
+      <button type="button" class="action-button" data-action-kind="pubpeer_comment">生成 PubPeer Comment</button>
+      <button type="button" class="action-button" data-action-kind="journal_letter">生成期刊 Letter</button>
+      <button type="button" class="secondary-button" id="copy-generated-draft">复制草稿</button>
+    </div>
+    <div class="evidence-picker">
+      <strong>写入草稿的证据</strong>
+      <div id="followup-evidence-list" class="evidence-choice-list"></div>
+    </div>
+    <label class="custom-concern-label">自定义关注点
+      <textarea id="custom-followup-concerns" class="custom-concern-input" placeholder="每行一个人工补充关注点，会标记为 user_added。"></textarea>
+    </label>
+    <label class="manual-confirmation">
+      <input id="manual-review-confirmation" type="checkbox">
+      我已确认文章身份、证据选择和语气设置；生成内容仅作为基于阅读和理解文章后的学术问题表达草稿，发送前仍需人工复核。
+    </label>
+    <div id="existing-followups" class="existing-followups"></div>
+    <div id="web-action-status" class="web-action-status">动作服务: <code>http://127.0.0.1:8765</code></div>
+    <textarea id="generated-draft" class="generated-draft" spellcheck="false" placeholder="生成的草稿会显示在这里，可直接编辑。"></textarea>
+  </div>
+  <script id="paper-audit-action-context" type="application/json">{"paper": "Test_paper2/2026-040896_稿件全文C.docx", "artifact_type": "complete", "limited_reasons": [], "artifact_paths": {"markdown": "Test_paper2/Test_paper2/test_paper2_docx_direct.audit.md", "html": "Test_paper2/Test_paper2/test_paper2_docx_direct.audit.html", "json": "Test_paper2/Test_paper2/test_paper2_docx_direct.audit.json"}, "followups_dir": "Test_paper2/Test_paper2/followups", "paper_identity": {"title": "Development and Performance Evaluation of a Risk Assessment Model for Cervical Lymph Node Metastasis in Patients with Papillary Thyroid Carcinoma with Hashimoto's Thyroiditis", "journal": "", "authors": ["Table 2 Univariate", "multivariate logistic regression analysis"], "doi": "", "year": ""}, "summary": "[合并3段审查] 复核优先级中；红旗1项；证据型疑点3项；提取质量疑点0项。", "risk_level": "高", "detection_score": 63, "conclusion": "综合结论：合并3段审查后，当前复核优先级为中；最终结论以合并后检查项为准，而不是逐段LLM原始措辞。 保留红旗1项，优先核对：方法论/多重比较校正缺失。 证据型疑点3项，优先复核：数据与结果自洽性/英文摘要模型数量表述矛盾、方法论严谨性/缺乏多重比较校正说明、方法论/样本量不足与缺乏外部验证。 Benford分布偏差较高，仅作为批量数值复核线索；在缺少表格语义和原始数据上下文时，不单独构成造假结论。 p值异常计数提示需核对统计报告，但仍应回到原文方法、样本量和多重比较设置判断。 建议复核顺序：先展开可疑点详情核对原PDF表格/补充材料，再查看图像检测清单，最后检查参考文献真实性校检结果。", "top_issues": [{"id": "cluster-1", "source": "evidence_chain_audit", "category": "证据链与证据簇审查", "item": "方法论 / 多重比较校正缺失", "verdict": "强证据冲突", "evidence": "方法论 / 多重比较校正缺失; 方法论严谨性 / 缺乏多重比较校正说明; Benford分布偏差较高; 参考文献 #1 在线证据不足", "reason": "来源: llm_check, local_stat, reference_audit；证据数: 6。", "default_selected": true}, {"id": "cluster-2", "source": "evidence_chain_audit", "category": "证据链与证据簇审查", "item": "p值分布需复核", "verdict": "中等疑点", "evidence": "p值分布需复核", "reason": "来源: local_stat；证据数: 1。", "default_selected": false}, {"id": "cluster-3", "source": "evidence_chain_audit", "category": "证据链与证据簇审查", "item": "数据与结果自洽性 / 英文摘要模型数量表述矛盾", "verdict": "中等疑点", "evidence": "数据与结果自洽性 / 英文摘要模型数量表述矛盾", "reason": "来源: llm_check；证据数: 1。", "default_selected": false}, {"id": "cluster-4", "source": "evidence_chain_audit", "category": "证据链与证据簇审查", "item": "方法论 / 样本量不足与缺乏外部验证", "verdict": "中等疑点", "evidence": "方法论 / 样本量不足与缺乏外部验证", "reason": "来源: llm_check；证据数: 1。", "default_selected": false}, {"id": "issue-1", "source": "audit", "category": "方法论", "item": "多重比较校正缺失", "verdict": "🚩红旗", "evidence": "通过De Long 检验结果显示...Clin-US模型的AUC显著高于TN-LN-US模型...Clin-US模型显著优于所有亚组合模型及单一指标（均P\u003c0.001）...TN-LN-US模型显著优于LN-US模型...和TN-US模型...LN-US模型亦显著优于ALP...和年龄...TN-US模型与ALP...、年龄...差异无统计学意义，且ALP与年龄之间的差异亦无统计学意义", "reason": "这是一个明确的方法论缺陷（耿同学六式-统计异常，7类红旗-方法论缺陷）。频繁的DeLong检验比较未校正，会使报告的P值的可信度降低，影响对模型效能差异结论的可靠性判断。需在结论部分重新评估各比较结果的实际显著性"}, {"id": "issue-2", "source": "audit", "category": "数据与结果自洽性", "item": "英文摘要模型数量表述矛盾", "verdict": "⚠️疑点", "evidence": "Compared with the other four models", "reason": "英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者"}, {"id": "issue-3", "source": "audit", "category": "方法论严谨性", "item": "缺乏多重比较校正说明", "verdict": "⚠️疑点", "evidence": "通过单因素、多因素Logistic回归分析筛选预测CLNM的独立影响因素，将P\u003c0.05的特征用于模型构建", "reason": "方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清"}, {"id": "issue-4", "source": "audit", "category": "方法论", "item": "样本量不足与缺乏外部验证", "verdict": "⚠️疑点", "evidence": "样本量相对较小，未设立外部验证集", "reason": "作者已指出方法论缺陷，但需人工复核原PDF表格以确认样本量和验证细节，避免过度推广结论"}], "cross_file_consistency": {"status": "skipped", "checked_files": 1, "finding_count": 0, "findings": []}, "evidence_chain_audit": {"status": "ok", "cluster_count": 4, "finding_count": 0, "strong_count": 1, "clusters": [{"id": "cluster-1", "source": "evidence_chain_audit", "category": "证据链与证据簇审查", "item": "方法论 / 多重比较校正缺失", "verdict": "强证据冲突", "evidence": "方法论 / 多重比较校正缺失; 方法论严谨性 / 缺乏多重比较校正说明; Benford分布偏差较高; 参考文献 #1 在线证据不足", "reason": "来源: llm_check, local_stat, reference_audit；证据数: 6。", "default_selected": true}, {"id": "cluster-2", "source": "evidence_chain_audit", "category": "证据链与证据簇审查", "item": "p值分布需复核", "verdict": "中等疑点", "evidence": "p值分布需复核", "reason": "来源: local_stat；证据数: 1。", "default_selected": false}, {"id": "cluster-3", "source": "evidence_chain_audit", "category": "证据链与证据簇审查", "item": "数据与结果自洽性 / 英文摘要模型数量表述矛盾", "verdict": "中等疑点", "evidence": "数据与结果自洽性 / 英文摘要模型数量表述矛盾", "reason": "来源: llm_check；证据数: 1。", "default_selected": false}, {"id": "cluster-4", "source": "evidence_chain_audit", "category": "证据链与证据簇审查", "item": "方法论 / 样本量不足与缺乏外部验证", "verdict": "中等疑点", "evidence": "方法论 / 样本量不足与缺乏外部验证", "reason": "来源: llm_check；证据数: 1。", "default_selected": false}]}, "stat": {"number_count": 100, "p_value_count": 23, "p_value_abnormal": 3, "number_consistency": null, "benford_status": "高偏差⚠️"}, "references": {"reference_count": 34, "online_checked": 34, "issues": [{"index": 1, "issues": ["missing_doi", "missing_journal_or_source", "online_error", "no_online_match", "partial_source_error"], "text": "Xu S, Huang H, Qian J, et al. Prevalence of Hashimoto Thyroiditis in Adults With Papillary Thyroid Cancer and Its Association With Cancer Recurrence and Outcomes [J]. 2021, 4(7): e2118526."}, {"index": 2, "issues": ["missing_doi", "missing_journal_or_source", "partial_source_error"], "text": "Antonaci A, Consorti F, Mardente S, et al. Clinical and biological relationship between chronic lymphocytic thyroiditis and papillary thyroid carcinoma [J]. 2009, 17(10): 495–503."}, {"index": 3, "issues": ["missing_doi", "missing_journal_or_source", "partial_source_error"], "text": "Marotta V, Sciammarella C, Chiofalo M G, et al. Hashimoto's thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer [J]. Endocr Relat Cancer, 2017, 24(9): 485–493."}, {"index": 4, "issues": ["missing_doi", "partial_source_error"], "text": "Hu X, Wang X, Liang Y, et al. Cancer Risk in Hashimoto's Thyroiditis: a Systematic Review and Meta-Analysis [J]. Frontiers in endocrinology, 2022, 13: 937871."}, {"index": 5, "issues": ["missing_doi", "partial_source_error"], "text": "Xu S J, Jin B, Zhao W J, et al. The Specifically Androgen-Regulated Gene (SARG) Promotes Papillary Thyroid Carcinoma (PTC) Lymphatic Metastasis Through Vascular Endothelial Growth Factor C (VEGF-C) and VEGF Receptor 3 (VEGFR-3) Axis [J]. Frontiers in oncology, 2022, 12: 817660."}, {"index": 6, "issues": ["missing_doi", "partial_source_error"], "text": "Kobawala T P, Trivedi T I, Gajjar K K, et al. Significance of TNF-α and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma [J]. Journal of thyroid research, 2016, 2016: 8143695."}, {"index": 7, "issues": ["missing_doi", "missing_journal_or_source", "partial_source_error"], "text": "Wang Y, Zong H, Zhou H. Circular RNA circ_0062389 modulates papillary thyroid carcinoma progression via the miR-1179/high mobility group box 1 axis [J]. Bioengineered, 2021, 12(1): 1484–1494."}, {"index": 8, "issues": ["missing_doi", "missing_journal_or_source", "online_not_found", "partial_source_error", "title_low_similarity"], "text": "余小情, 傅晓红, 沈燕, 等. 超声特征预测甲状腺微小乳头状癌颈部淋巴转移的相关因素分析 [J]. 2023, 39(11): 1212–1215."}]}, "resources": {"resource_count": 0, "online_checked": 0, "issues": []}, "images": []}</script>
+  <script>
+  (function() {
+    const statusEl = document.getElementById('web-action-status');
+    const outputEl = document.getElementById('generated-draft');
+    const contextEl = document.getElementById('paper-audit-action-context');
+    const languageEl = document.getElementById('draft-language');
+    const toneEl = document.getElementById('draft-tone');
+    const evidenceEl = document.getElementById('followup-evidence-list');
+    const existingEl = document.getElementById('existing-followups');
+    const confirmationEl = document.getElementById('manual-review-confirmation');
+    const actionLabels = {
+      pubpeer_comment: 'PubPeer comment',
+      journal_letter: 'journal letter'
+    };
+    const languageLabels = { zh: '中文', en: 'English' };
+    const generateUrl = "http://127.0.0.1:8765/generate";
+    const followupsUrl = "http://127.0.0.1:8765/followups";
+    const serviceUrl = "http://127.0.0.1:8765";
+    const startupCommand = "python paper_audit.py --serve-report-actions --report-actions-port 8765";
+    let reportContext = {};
+    function esc(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    }
+    function setStatus(text, isError) {
+      statusEl.textContent = text;
+      statusEl.className = 'web-action-status' + (isError ? ' error' : '');
+    }
+    function setStatusHtml(html, isError) {
+      statusEl.innerHTML = html;
+      statusEl.className = 'web-action-status' + (isError ? ' error' : '');
+    }
+    function serviceFailure(prefix, err) {
+      setStatusHtml(
+        esc(prefix) + '：本机动作服务未响应。服务地址: <code>' + esc(serviceUrl) + '</code>。请运行: <code>' +
+        esc(startupCommand) + '</code>，然后刷新本页面或重新点击生成。详情: ' + esc(err && err.message ? err.message : err),
+        true
+      );
+    }
+    function readContext() {
+      try {
+        reportContext = JSON.parse(contextEl.textContent || '{}');
+        return reportContext;
+      } catch (err) {
+        setStatus('无法读取报告上下文: ' + err.message, true);
+        return {};
+      }
+    }
+    function populateIdentity(identity) {
+      identity = identity || {};
+      document.getElementById('followup-title').value = identity.title || '';
+      document.getElementById('followup-journal').value = identity.journal || '';
+      document.getElementById('followup-authors').value = Array.isArray(identity.authors) ? identity.authors.join(', ') : (identity.authors || '');
+      document.getElementById('followup-doi').value = identity.doi || '';
+      document.getElementById('followup-year').value = identity.year || '';
+    }
+    function identityFromForm() {
+      return {
+        title: document.getElementById('followup-title').value.trim(),
+        journal: document.getElementById('followup-journal').value.trim(),
+        authors: document.getElementById('followup-authors').value.split(/[,;，；]/).map(function(x) { return x.trim(); }).filter(Boolean),
+        doi: document.getElementById('followup-doi').value.trim(),
+        year: document.getElementById('followup-year').value.trim()
+      };
+    }
+    function renderEvidence(context) {
+      const issues = Array.isArray(context.top_issues) ? context.top_issues : [];
+      if (!issues.length) {
+        evidenceEl.innerHTML = '<p class="section-hint">没有可自动勾选的高优先级证据；可在自定义关注点中补充。</p>';
+        return;
+      }
+      evidenceEl.innerHTML = issues.map(function(issue, idx) {
+        const verdict = String(issue.verdict || '');
+        const checked = (issue.default_selected || verdict.indexOf('红旗') >= 0 || verdict.indexOf('高') >= 0 || verdict.indexOf('强证据') >= 0 || idx < 3) ? ' checked' : '';
+        const label = [issue.category, issue.item, issue.verdict].filter(Boolean).join(' · ');
+        const detail = issue.reason || issue.evidence || '';
+        return '<label class="evidence-choice"><input type="checkbox" data-issue-index="' + idx + '"' + checked + '> <span><strong>' +
+          esc(label || ('证据 ' + (idx + 1))) + '</strong><small>' + esc(detail).slice(0, 220) + '</small></span></label>';
+      }).join('');
+    }
+    function selectedIssues() {
+      const issues = Array.isArray(reportContext.top_issues) ? reportContext.top_issues : [];
+      return Array.from(evidenceEl.querySelectorAll('input[type="checkbox"]:checked')).map(function(input) {
+        return issues[Number(input.getAttribute('data-issue-index'))];
+      }).filter(Boolean);
+    }
+    function customConcerns() {
+      return document.getElementById('custom-followup-concerns').value.split(/\n+/).map(function(x) { return x.trim(); }).filter(Boolean);
+    }
+    function renderExisting(data) {
+      const drafts = (data && data.drafts) || {};
+      const kinds = Object.keys(drafts);
+      if (!kinds.length) {
+        existingEl.textContent = '当前语言暂无已生成草稿。';
+        return;
+      }
+      existingEl.innerHTML = '已生成: ' + kinds.map(function(kind) {
+        return '<button type="button" class="secondary-button existing-draft-button" data-existing-kind="' + esc(kind) + '">' + esc(actionLabels[kind] || kind) + '</button>';
+      }).join(' ');
+      existingEl.querySelectorAll('[data-existing-kind]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          const kind = btn.getAttribute('data-existing-kind');
+          outputEl.value = drafts[kind] && drafts[kind].text ? drafts[kind].text : '';
+          setStatus('已载入已生成的 ' + (actionLabels[kind] || kind) + '。', false);
+        });
+      });
+    }
+    async function loadExisting() {
+      const context = readContext();
+      if (context.artifact_type === 'failed') {
+        setStatus('失败诊断报告不允许生成 PubPeer Comment 或期刊 Letter；请先修复关键服务后重新生成审查报告。', true);
+        document.querySelectorAll('[data-action-kind]').forEach(function(btn) { btn.disabled = true; });
+        return;
+      }
+      try {
+        const resp = await fetch(followupsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ context: context, language: (languageEl && languageEl.value) || 'zh' })
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) { throw new Error(data.error || ('HTTP ' + resp.status)); }
+        if (data.identity && (data.identity.title || data.identity.journal || data.identity.authors)) {
+          populateIdentity(data.identity);
+        }
+        renderExisting(data);
+      } catch (err) {
+        serviceFailure('读取已生成草稿失败', err);
+      }
+    }
+    async function generate(kind) {
+      const context = readContext();
+      if (context.artifact_type === 'failed') {
+        setStatus('失败诊断报告不允许生成 PubPeer Comment 或期刊 Letter。', true);
+        return;
+      }
+      if (!confirmationEl.checked) {
+        setStatus('请先勾选人工复核确认，再生成外部沟通草稿。', true);
+        return;
+      }
+      const language = (languageEl && languageEl.value) || 'zh';
+      setStatus('正在生成 ' + languageLabels[language] + ' ' + actionLabels[kind] + ' ...', false);
+      outputEl.value = '';
+      try {
+        const resp = await fetch(generateUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            kind,
+            context,
+            language,
+            tone: (toneEl && toneEl.value) || 'conservative',
+            identity: identityFromForm(),
+            selected_issues: selectedIssues(),
+            custom_concerns: customConcerns(),
+            disclaimer_confirmed: true
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {
+          throw new Error(data.error || ('HTTP ' + resp.status));
+        }
+        outputEl.value = data.text || '';
+        const path = data.paths && data.paths.draft_path ? ' 已保存: ' + data.paths.draft_path : '';
+        setStatus('已生成 ' + actionLabels[kind] + '。请人工核对后再使用。' + path, false);
+        loadExisting();
+      } catch (err) {
+        serviceFailure('生成失败', err);
+      }
+    }
+    document.querySelectorAll('[data-action-kind]').forEach((btn) => {
+      btn.addEventListener('click', () => generate(btn.getAttribute('data-action-kind')));
+    });
+    document.getElementById('copy-generated-draft').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(outputEl.value || '');
+        setStatus('草稿已复制到剪贴板。', false);
+      } catch (err) {
+        outputEl.select();
+        setStatus('浏览器未允许自动复制，请手动复制文本框内容。', true);
+      }
+    });
+    const initialContext = readContext();
+    populateIdentity(initialContext.paper_identity || {});
+    renderEvidence(initialContext);
+    if (languageEl) { languageEl.addEventListener('change', loadExisting); }
+    loadExisting();
+  })();
+  </script>
+  
+            <div class="section conclusion-section">
+                <h2>综合结论</h2>
+                <p class="conclusion-text">综合结论：合并3段审查后，当前复核优先级为中；最终结论以合并后检查项为准，而不是逐段LLM原始措辞。<br><br>保留红旗1项，优先核对：方法论/多重比较校正缺失。<br><br>证据型疑点3项，优先复核：数据与结果自洽性/英文摘要模型数量表述矛盾、方法论严谨性/缺乏多重比较校正说明、方法论/样本量不足与缺乏外部验证。<br><br>Benford分布偏差较高，仅作为批量数值复核线索；在缺少表格语义和原始数据上下文时，不单独构成造假结论。<br><br>p值异常计数提示需核对统计报告，但仍应回到原文方法、样本量和多重比较设置判断。<br><br>建议复核顺序：先展开可疑点详情核对原PDF表格/补充材料，再查看图像检测清单，最后检查参考文献真实性校检结果。</p>
+            </div>
+  
+  <div class="section cross-file-section evidence-chain-section">
+    <h2>证据链与证据簇审查</h2>
+    <p class="section-hint">单文件链条审查范围较窄；未发现可比较的跨文件材料。 该结果用于人工复核排序，不等同于科研不端判断。</p>
+    <p><strong>状态</strong>: ok | <strong>证据簇</strong>: 4（强 1 / 中 3 / 弱 0） | <strong>链条发现</strong>: 0</p>
+    <h3>链条发现</h3>
+    <div class="muted">未发现明确 Methods/Results/Abstract/Conclusion 链条问题。</div>
+    <h3>证据簇</h3>
+    
+        <details class="cross-file-card evidence-cluster-card">
+          <summary class="cross-file-summary">
+            <span class="cross-file-rank">#1</span>
+            <span class="cross-file-severity cross-file-strong">强证据冲突</span>
+            <span class="cross-file-title">方法论 / 多重比较校正缺失</span>
+            <span class="cross-file-reason">方法论 / 多重比较校正缺失; 方法论严谨性 / 缺乏多重比较校正说明; Benford分布偏差较高; 参考文献 #1 在线证据不足</span>
+          </summary>
+          <div class="cross-file-body">
+            <p><strong>来源</strong>: llm_check, local_stat, reference_audit · <strong>证据数</strong>: 6</p>
+            <ul>
+            <li><strong>llm_check</strong> · 方法论 / 多重比较校正缺失<br><small>这是一个明确的方法论缺陷（耿同学六式-统计异常，7类红旗-方法论缺陷）。频繁的DeLong检验比较未校正，会使报告的P值的可信度降低，影响对模型效能差异结论的可靠性判断。需在结论部分重新评估各比较结果的实际显著性</small></li>
+            <li><strong>llm_check</strong> · 方法论严谨性 / 缺乏多重比较校正说明<br><small>方法论部分未明确多重比较校正，可能影响独立危险因素筛选的严谨性，需核对全文以澄清</small></li>
+            <li><strong>local_stat</strong> · Benford分布偏差较高<br><small>偏差=0.456；建议核对原始数值来源。</small></li>
+            <li><strong>reference_audit</strong> · 参考文献 #1 在线证据不足<br><small>missing_doi；missing_journal_or_source；online_error；no_online_match；partial_source_error</small></li>
+            <li><strong>reference_audit</strong> · 参考文献 #8 在线证据不足<br><small>missing_doi；missing_journal_or_source；online_not_found；partial_source_error；title_low_similarity</small></li>
+            <li><strong>reference_audit</strong> · 参考文献 #9 在线证据不足<br><small>missing_doi；missing_journal_or_source；online_not_found；partial_source_error；title_low_similarity；year_mismatch</small></li></ul>
+          </div>
+        </details>
+        <details class="cross-file-card evidence-cluster-card">
+          <summary class="cross-file-summary">
+            <span class="cross-file-rank">#2</span>
+            <span class="cross-file-severity cross-file-medium">中等疑点</span>
+            <span class="cross-file-title">p值分布需复核</span>
+            <span class="cross-file-reason">p值分布需复核</span>
+          </summary>
+          <div class="cross-file-body">
+            <p><strong>来源</strong>: local_stat · <strong>证据数</strong>: 1</p>
+            <ul>
+            <li><strong>local_stat</strong> · p值分布需复核<br><small>p值数量/异常: 23 / 3。</small></li></ul>
+          </div>
+        </details>
+        <details class="cross-file-card evidence-cluster-card">
+          <summary class="cross-file-summary">
+            <span class="cross-file-rank">#3</span>
+            <span class="cross-file-severity cross-file-medium">中等疑点</span>
+            <span class="cross-file-title">数据与结果自洽性 / 英文摘要模型数量表述矛盾</span>
+            <span class="cross-file-reason">数据与结果自洽性 / 英文摘要模型数量表述矛盾</span>
+          </summary>
+          <div class="cross-file-body">
+            <p><strong>来源</strong>: llm_check · <strong>证据数</strong>: 1</p>
+            <ul>
+            <li><strong>llm_check</strong> · 数据与结果自洽性 / 英文摘要模型数量表述矛盾<br><small>英文摘要中模型数量描述存在潜在矛盾，需人工复核以确认准确性，避免误导读者</small></li></ul>
+          </div>
+        </details>
+        <details class="cross-file-card evidence-cluster-card">
+          <summary class="cross-file-summary">
+            <span class="cross-file-rank">#4</span>
+            <span class="cross-file-severity cross-file-medium">中等疑点</span>
+            <span class="cross-file-title">方法论 / 样本量不足与缺乏外部验证</span>
+            <span class="cross-file-reason">方法论 / 样本量不足与缺乏外部验证</span>
+          </summary>
+          <div class="cross-file-body">
+            <p><strong>来源</strong>: llm_check · <strong>证据数</strong>: 1</p>
+            <ul>
+            <li><strong>llm_check</strong> · 方法论 / 样本量不足与缺乏外部验证<br><small>作者已指出方法论缺陷，但需人工复核原PDF表格以确认样本量和验证细节，避免过度推广结论</small></li></ul>
+          </div>
+        </details>
+  </div>
+  
+  <div class="section image-section">
+    <h2>图像AI/合理性检测</h2>
+    <p class="section-hint">本地做尺寸、空白、噪声/对比度筛查；图像语义分析模型做图片语义理解；imagedetector.com子工具自动上传并记录AI概率。</p>
+    <p><strong>检测网站</strong>: <a href="https://imagedetector.com/" target="_blank" rel="noopener">https://imagedetector.com/</a> | <strong>图片</strong>: 0 / 0 | <strong>语义模型</strong>: mimo-v2.5-free（0张） | <strong>imagedetector</strong>: 0张</p>
+    <table class="checks-table image-table">
+      <thead><tr><th>#</th><th>预览</th><th>文件</th><th>尺寸</th><th>本地结论</th><th>本地问题</th><th>图像语义分析</th><th>imagedetector自动结果 / 路径</th></tr></thead>
+      <tbody><tr><td colspan="8" class="muted">未发现可检测图片。</td></tr></tbody>
+    </table>
+  </div>
+  
+  <div class="section cross-file-section">
+    <h2>跨文件一致性审查</h2>
+    <p><strong>状态</strong>: skipped | <strong>文件</strong>: 1 | <strong>发现</strong>: 0（强 0 / 中 0 / 弱 0）</p>
+    <p class="section-hint">缺少可比较的跨文件材料；跨文件一致性审查已跳过。</p>
+    <div class="cross-file-list"><div class="muted">未发现明确跨文件不一致；仍建议人工抽查关键表格、补充材料和正文结论。</div></div>
+  </div>
+  
+  <div class="section resource-section">
+    <h2>代码仓库与在线资源可用性校检</h2>
+    <p><strong>状态</strong>: ok | <strong>数量</strong>: 0 | <strong>在线检测</strong>: 启用（0项）</p>
+    <p class="section-hint">校检论文声明的代码仓库、在线计算器、部署平台等资源是否可访问；URL格式错误会单独标记。</p>
+    <p class="section-hint">未识别到代码仓库或论文部署的在线资源链接。</p>
+  </div>
+  
+  <div class="section reference-section">
+    <h2>参考文献真实性/可核验性校检</h2>
+    <p><strong>状态</strong>: online_needs_review | <strong>数量</strong>: 34 | <strong>DOI</strong>: 0 | <strong>年份</strong>: 34 | <strong>在线检索</strong>: 启用（34条）</p>
+    <p class="section-hint">在线真实性校检：优先用DOI精确检索，再用题名/年份在Crossref、OpenAlex和PubMed进行多源核验；结果为尽力检索证据，不等同于绝对证明。</p>
+    <div class="reference-list">
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#1</span>
+            <span class="reference-status reference-error">检索异常</span>
+            <span class="reference-title">Prevalence of Hashimoto Thyroiditis in Adults With Papillary Thyroid Cancer and Its Association With Cancer Recurrence and Outcomes [J]</span>
+            <span class="reference-confidence">置信度 0.0</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线检索异常, 无在线命中, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Xu S, Huang H, Qian J, et al. Prevalence of Hashimoto Thyroiditis in Adults With Papillary Thyroid Cancer and Its Association With Cancer Recurrence and Outcomes [J]. 2021, 4(7): e2118526.</div>
+            <p><strong>检索式</strong>: Xu S, Huang H, Qian J, et al. Prevalence of Hashimoto Thyroiditis in Adults With Papillary Thyroid Cancer and Its Association With Cancer Recurrence and Outcomes [J]. 2021, 4(7): e2118526.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线检索异常, 无在线命中, 部分外部源异常</p>
+            <ul class="reference-matches"><li>无在线命中记录</li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#2</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Clinical and biological relationship between chronic lymphocytic thyroiditis and papillary thyroid carcinoma [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Antonaci A, Consorti F, Mardente S, et al. Clinical and biological relationship between chronic lymphocytic thyroiditis and papillary thyroid carcinoma [J]. 2009, 17(10): 495–503.</div>
+            <p><strong>检索式</strong>: Antonaci A, Consorti F, Mardente S, et al. Clinical and biological relationship between chronic lymphocytic thyroiditis and papillary thyroid carcinoma [J]. 2009, 17(10): 495–503.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Clinical and Biological Relationship Between Chronic Lymphocytic Thyroiditis and Papillary Thyroid Carcinoma</strong><br><span>Crossref | 2009 | 10.3727/096504009789735431</span> <a href="https://doi.org/10.3727/096504009789735431" target="_blank" rel="noopener">来源</a></li><li><strong>Clinical and Biological Relationship Between Chronic Lymphocytic Thyroiditis and Papillary Thyroid Carcinoma</strong><br><span>Crossref | 2009 | 10.3727/096504009789735431</span> <a href="https://doi.org/10.3727/096504009789735431" target="_blank" rel="noopener">来源</a></li><li><strong>Cross-talk between NO and HMGB1 in lymphocytic thyroiditis and papillary thyroid cancer</strong><br><span>Crossref | 2010 | 10.3892/or_00001005</span> <a href="https://doi.org/10.3892/or_00001005" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#3</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Hashimoto's thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Marotta V, Sciammarella C, Chiofalo M G, et al. Hashimoto's thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer [J]. Endocr Relat Cancer, 2017, 24(9): 485–493.</div>
+            <p><strong>检索式</strong>: Marotta V, Sciammarella C, Chiofalo M G, et al. Hashimoto's thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer [J]. Endocr Relat Cancer, 2017, 24(9): 485–493.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Hashimoto’s thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer</strong><br><span>Crossref | 2017 | 10.1530/erc-17-0085</span> <a href="https://doi.org/10.1530/erc-17-0085" target="_blank" rel="noopener">来源</a></li><li><strong>Hashimoto’s thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer</strong><br><span>Crossref | 2017 | 10.1530/erc-17-0085</span> <a href="https://doi.org/10.1530/erc-17-0085" target="_blank" rel="noopener">来源</a></li><li><strong>Multifocality and Hashimoto’s thyroiditis as independent predictors of structural recurrence in a cohort of low risk intrathyroidal papillary thyroid…</strong><br><span>Crossref | 2017 | 10.1200/jco.2017.35.15_suppl.e17577</span> <a href="https://doi.org/10.1200/jco.2017.35.15_suppl.e17577" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#4</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Cancer Risk in Hashimoto's Thyroiditis: a Systematic Review and Meta-Analysis [J]</span>
+            <span class="reference-confidence">置信度 1.0</span>
+            <span class="reference-issues">缺少DOI, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Hu X, Wang X, Liang Y, et al. Cancer Risk in Hashimoto's Thyroiditis: a Systematic Review and Meta-Analysis [J]. Frontiers in endocrinology, 2022, 13: 937871.</div>
+            <p><strong>检索式</strong>: Hu X, Wang X, Liang Y, et al. Cancer Risk in Hashimoto's Thyroiditis: a Systematic Review and Meta-Analysis [J]. Frontiers in endocrinology, 2022, 13: 937871.</p>
+            <p><strong>问题</strong>: 缺少DOI, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Cancer Risk in Hashimoto’s Thyroiditis: a Systematic Review and Meta-Analysis</strong><br><span>Crossref | 2022 | 10.3389/fendo.2022.937871</span> <a href="https://doi.org/10.3389/fendo.2022.937871" target="_blank" rel="noopener">来源</a></li><li><strong>Cancer Risk in Hashimoto’s Thyroiditis: a Systematic Review and Meta-Analysis</strong><br><span>Crossref | 2022 | 10.3389/fendo.2022.937871</span> <a href="https://doi.org/10.3389/fendo.2022.937871" target="_blank" rel="noopener">来源</a></li><li><strong>Benign thyroid disease and the risk of breast cancer: An updated systematic review and meta-analysis</strong><br><span>Crossref | 2022 | 10.3389/fendo.2022.984593</span> <a href="https://doi.org/10.3389/fendo.2022.984593" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#5</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">The Specifically Androgen-Regulated Gene (SARG) Promotes Papillary Thyroid Carcinoma (PTC) Lymphatic Metastasis Through Vascular Endothelial…</span>
+            <span class="reference-confidence">置信度 1.0</span>
+            <span class="reference-issues">缺少DOI, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Xu S J, Jin B, Zhao W J, et al. The Specifically Androgen-Regulated Gene (SARG) Promotes Papillary Thyroid Carcinoma (PTC) Lymphatic Metastasis Through Vascular Endothelial Growth Factor C (VEGF-C) and VEGF Receptor 3 (VEGFR-3) Axis [J]. Frontiers in oncology, 2022, 12: 817660.</div>
+            <p><strong>检索式</strong>: Xu S J, Jin B, Zhao W J, et al. The Specifically Androgen-Regulated Gene (SARG) Promotes Papillary Thyroid Carcinoma (PTC) Lymphatic Metastasis Through Vascular Endothelial Growth Factor C (VEGF-C) and VEGF Receptor 3 (VEGFR-3) Axis [J]. Frontiers in oncology, 2022, 12: 817660.</p>
+            <p><strong>问题</strong>: 缺少DOI, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>The Specifically Androgen-Regulated Gene (SARG) Promotes Papillary Thyroid Carcinoma (PTC) Lymphatic Metastasis Through Vascular Endothelial Growth Fa…</strong><br><span>Crossref | 2022 | 10.3389/fonc.2022.817660</span> <a href="https://doi.org/10.3389/fonc.2022.817660" target="_blank" rel="noopener">来源</a></li><li><strong>Expression of Vascular Endothelial Growth Factor (VEGF), Vascular Endothelial Growth Factor Receptor-1 (VEGFR-1), Hypoxic Induced Factor-1alpha (HIF-1…</strong><br><span>Crossref | 2005 | 10.16956/kjes.2005.5.1.18</span> <a href="https://doi.org/10.16956/kjes.2005.5.1.18" target="_blank" rel="noopener">来源</a></li><li><strong>Vascular endothelial growth factor (VEGF)-D in association with VEGF receptor-3 in lymphatic metastasis of breast cancer</strong><br><span>Crossref | 2009 | 10.5732/cjc.009.10070</span> <a href="https://doi.org/10.5732/cjc.009.10070" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#6</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Significance of TNF-α and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma [J]</span>
+            <span class="reference-confidence">置信度 1.0</span>
+            <span class="reference-issues">缺少DOI, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Kobawala T P, Trivedi T I, Gajjar K K, et al. Significance of TNF-α and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma [J]. Journal of thyroid research, 2016, 2016: 8143695.</div>
+            <p><strong>检索式</strong>: Kobawala T P, Trivedi T I, Gajjar K K, et al. Significance of TNF-α and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma [J]. Journal of thyroid research, 2016, 2016: 8143695.</p>
+            <p><strong>问题</strong>: 缺少DOI, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Significance of TNF-&lt;i&gt;α&lt;/i&gt;and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma</strong><br><span>Crossref | 2016 | 10.1155/2016/8143695</span> <a href="https://doi.org/10.1155/2016/8143695" target="_blank" rel="noopener">来源</a></li><li><strong>Significance of TNF-&lt;i&gt;α&lt;/i&gt;and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma</strong><br><span>Crossref | 2016 | 10.1155/2016/8143695</span> <a href="https://doi.org/10.1155/2016/8143695" target="_blank" rel="noopener">来源</a></li><li><strong>Significance of Interleukin-6 in Papillary Thyroid Carcinoma</strong><br><span>Crossref | 2016 | 10.1155/2016/6178921</span> <a href="https://doi.org/10.1155/2016/6178921" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#7</span>
+            <span class="reference-status reference-likely">较可能真实</span>
+            <span class="reference-title">Wang Y, Zong H, Zhou H</span>
+            <span class="reference-confidence">置信度 0.739</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Wang Y, Zong H, Zhou H. Circular RNA circ_0062389 modulates papillary thyroid carcinoma progression via the miR-1179/high mobility group box 1 axis [J]. Bioengineered, 2021, 12(1): 1484–1494.</div>
+            <p><strong>检索式</strong>: Wang Y, Zong H, Zhou H. Circular RNA circ_0062389 modulates papillary thyroid carcinoma progression via the miR-1179/high mobility group box 1 axis [J]. Bioengineered, 2021, 12(1): 1484–1494.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Circular RNA circ_0062389 modulates papillary thyroid carcinoma progression via the miR-1179/high mobility group box 1 axis</strong><br><span>Crossref | 2021 | 10.1080/21655979.2021.1914470</span> <a href="https://doi.org/10.1080/21655979.2021.1914470" target="_blank" rel="noopener">来源</a></li><li><strong>Circular RNA circ_0001162 promotes cell proliferation and invasion of glioma via the miR-936/ERBB4 axis</strong><br><span>Crossref | 2021 | 10.1080/21655979.2021.1932221</span> <a href="https://doi.org/10.1080/21655979.2021.1932221" target="_blank" rel="noopener">来源</a></li><li><strong>The long non-coding RNA NNT-AS1 promotes clear cell renal cell carcinoma progression via regulation of the miR-137/ Y-box binding protein 1 axis</strong><br><span>Crossref | 2021 | 10.1080/21655979.2021.1992330</span> <a href="https://doi.org/10.1080/21655979.2021.1992330" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#8</span>
+            <span class="reference-status reference-not_found">未检索到</span>
+            <span class="reference-title">余小情, 傅晓红, 沈燕, 等</span>
+            <span class="reference-confidence">置信度 0.16</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: 余小情, 傅晓红, 沈燕, 等. 超声特征预测甲状腺微小乳头状癌颈部淋巴转移的相关因素分析 [J]. 2023, 39(11): 1212–1215.</div>
+            <p><strong>检索式</strong>: 余小情, 傅晓红, 沈燕, 等. 超声特征预测甲状腺微小乳头状癌颈部淋巴转移的相关因素分析 [J]. 2023, 39(11): 1212–1215.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低</p>
+            <ul class="reference-matches"><li><strong>红色小象</strong><br><span>Crossref | 2023 | 10.2307/jj.8595646.78</span> <a href="https://doi.org/10.2307/jj.8595646.78" target="_blank" rel="noopener">来源</a></li><li><strong>The Value of Multimodal Ultrasound in Predicting Lymph Node Metastasis in the Central Neck Region of Thyroid Papillary Carcinoma</strong><br><span>Crossref | 2023 | 10.12677/acm.2023.134923</span> <a href="https://doi.org/10.12677/acm.2023.134923" target="_blank" rel="noopener">来源</a></li><li><strong>Analysis of Predictive Factors for Central Lymph Node Metastasis in 103 Cases of Micropapillary Thyroid Carcinoma</strong><br><span>Crossref | 2024 | 10.12677/acm.2024.1482323</span> <a href="https://doi.org/10.12677/acm.2024.1482323" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#9</span>
+            <span class="reference-status reference-not_found">未检索到</span>
+            <span class="reference-title">葛均波, 徐永健, 王辰</span>
+            <span class="reference-confidence">置信度 0.0</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低, 年份不一致</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: 葛均波, 徐永健, 王辰. 内科学 [M]. 北京: 人民卫生出版社, 2018:693-694.</div>
+            <p><strong>检索式</strong>: 葛均波, 徐永健, 王辰. 内科学 [M]. 北京: 人民卫生出版社, 2018:693-694.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低, 年份不一致</p>
+            <ul class="reference-matches"><li><strong>永續健保與社會團結</strong><br><span>Crossref | 2022 | 10.53106/241553062022090071001</span> <a href="https://doi.org/10.53106/241553062022090071001" target="_blank" rel="noopener">来源</a></li><li><strong>王小波論--경험이성주의와 反유토피아주의 고찰</strong><br><span>Crossref | 2011 | 10.18212/cccs.2011..19.010</span> <a href="https://doi.org/10.18212/cccs.2011..19.010" target="_blank" rel="noopener">来源</a></li><li><strong>Roger Yonchien Tsien, 錢永健 2004 Wolf Prize in Medicine</strong><br><span>Crossref | 2025 | 10.1142/9789819823338_0009</span> <a href="https://doi.org/10.1142/9789819823338_0009" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#10</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Hashimoto's thyroiditis: Epidemiology, pathogenesis, clinic and therapy [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Ragusa F, Fallahi P, Elia G, et al. Hashimoto's thyroiditis: Epidemiology, pathogenesis, clinic and therapy [J]. Best Pract Res Clin Endocrinol Metab, 2019, 33(6): 101367.</div>
+            <p><strong>检索式</strong>: Ragusa F, Fallahi P, Elia G, et al. Hashimoto's thyroiditis: Epidemiology, pathogenesis, clinic and therapy [J]. Best Pract Res Clin Endocrinol Metab, 2019, 33(6): 101367.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Hashimotos’ thyroiditis: Epidemiology, pathogenesis, clinic and therapy</strong><br><span>Crossref | 2019 | 10.1016/j.beem.2019.101367</span> <a href="https://doi.org/10.1016/j.beem.2019.101367" target="_blank" rel="noopener">来源</a></li><li><strong>Hashimoto Thyroiditis</strong><br><span>Crossref | 2020 | 10.32388/riqaka</span> <a href="https://doi.org/10.32388/riqaka" target="_blank" rel="noopener">来源</a></li><li><strong>Microorganisms in Pathogenesis and Management of Hashimoto Thyroiditis</strong><br><span>Crossref | 2022 | 10.1007/978-981-19-1946-6_15</span> <a href="https://doi.org/10.1007/978-981-19-1946-6_15" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#11</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Prognosis of patients with papillary thyroid carcinoma having clinically apparent metastasis to the lateral compartment [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Ito Y, Fukushima M, Tomoda C, et al. Prognosis of patients with papillary thyroid carcinoma having clinically apparent metastasis to the lateral compartment [J]. Endocr J, 2009, 56(6): 759–766.</div>
+            <p><strong>检索式</strong>: Ito Y, Fukushima M, Tomoda C, et al. Prognosis of patients with papillary thyroid carcinoma having clinically apparent metastasis to the lateral compartment [J]. Endocr J, 2009, 56(6): 759–766.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Prognosis of Patients with Papillary Thyroid Carcinoma Having Clinically Apparent Metastasis to the Lateral Compartment</strong><br><span>Crossref | 2009 | 10.1507/endocrj.k09e-025</span> <a href="https://doi.org/10.1507/endocrj.k09e-025" target="_blank" rel="noopener">来源</a></li><li><strong>Prognosis of Patients with Papillary Thyroid Carcinoma Having Clinically Apparent Metastasis to the Lateral Compartment</strong><br><span>Crossref | 2009 | 10.1507/endocrj.k09e-025</span> <a href="https://doi.org/10.1507/endocrj.k09e-025" target="_blank" rel="noopener">来源</a></li><li><strong>Macrofollicular Variant of Papillary Thyroid Carcinoma: Its Clinicopathological Features and Long-Term Prognosis</strong><br><span>Crossref | 2009 | 10.1507/endocrj.k08e-346</span> <a href="https://doi.org/10.1507/endocrj.k08e-346" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#12</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Nomogram for Predicting Central Lymph Node Metastasis in Papillary Thyroid Cancer: A Retrospective Cohort Study of Two Clinical Centers [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Yang Z, Heng Y, Lin J, et al. Nomogram for Predicting Central Lymph Node Metastasis in Papillary Thyroid Cancer: A Retrospective Cohort Study of Two Clinical Centers [J]. 2020, (4).</div>
+            <p><strong>检索式</strong>: Yang Z, Heng Y, Lin J, et al. Nomogram for Predicting Central Lymph Node Metastasis in Papillary Thyroid Cancer: A Retrospective Cohort Study of Two Clinical Centers [J]. 2020, (4).</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Nomogram for Predicting Central Lymph Node Metastasis in Papillary Thyroid Cancer: A Retrospective Cohort Study of Two Clinical Centers</strong><br><span>Crossref | 2020 | 10.4143/crt.2020.254</span> <a href="https://doi.org/10.4143/crt.2020.254" target="_blank" rel="noopener">来源</a></li><li><strong>A Nomogram Predicting Central Lymph Node Metastasis for Patients with Papillary Thyroid Cancer</strong><br><span>Crossref | 2021 | 10.21203/rs.3.rs-182268/v1</span> <a href="https://doi.org/10.21203/rs.3.rs-182268/v1" target="_blank" rel="noopener">来源</a></li><li><strong>Nomogram for predicting central lymph node metastasis in papillary thyroid microcarcinoma: A retrospective cohort study of 8668 patients</strong><br><span>Crossref | 2018 | 10.1016/j.ijsu.2018.05.023</span> <a href="https://doi.org/10.1016/j.ijsu.2018.05.023" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#13</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Zhao L, Sun X, Luo Y, et al. Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas [J]. 2020, 49: 151647.</div>
+            <p><strong>检索式</strong>: Zhao L, Sun X, Luo Y, et al. Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas [J]. 2020, 49: 151647.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas</strong><br><span>Crossref | 2020 | 10.1016/j.anndiagpath.2020.151647</span> <a href="https://doi.org/10.1016/j.anndiagpath.2020.151647" target="_blank" rel="noopener">来源</a></li><li><strong>Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas</strong><br><span>Crossref | 2020 | 10.1016/j.anndiagpath.2020.151647</span> <a href="https://doi.org/10.1016/j.anndiagpath.2020.151647" target="_blank" rel="noopener">来源</a></li><li><strong>Clinical and Pathologic Predictors of Lymph Node Metastasis and Recurrence in Papillary Thyroid Microcarcinoma</strong><br><span>Crossref | 2016 | 10.1089/thy.2015.0429</span> <a href="https://doi.org/10.1089/thy.2015.0429" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#14</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">The 2024 revised clinical guidelines on the management of thyroid tumors by the Japan Association of Endocrine Surgery [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Sugitani I, Kiyota N, Ito Y, et al. The 2024 revised clinical guidelines on the management of thyroid tumors by the Japan Association of Endocrine Surgery [J]. Endocr J, 2025, 72(5): 545–635.</div>
+            <p><strong>检索式</strong>: Sugitani I, Kiyota N, Ito Y, et al. The 2024 revised clinical guidelines on the management of thyroid tumors by the Japan Association of Endocrine Surgery [J]. Endocr J, 2025, 72(5): 545–635.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>The 2024 revised clinical guidelines on the management of thyroid tumors by the Japan Association of Endocrine Surgery</strong><br><span>Crossref | 2025 | 10.1507/endocrj.ej24-0644</span> <a href="https://doi.org/10.1507/endocrj.ej24-0644" target="_blank" rel="noopener">来源</a></li><li><strong>The revised clinical practice guidelines on the management of thyroid tumors by the Japan Associations of Endocrine Surgeons: Core questions and recom…</strong><br><span>Crossref | 2020 | 10.1507/endocrj.ej20-0025</span> <a href="https://doi.org/10.1507/endocrj.ej20-0025" target="_blank" rel="noopener">来源</a></li><li><strong>2016 Guidelines for the management of thyroid storm from The Japan Thyroid Association and Japan Endocrine Society (First edition)</strong><br><span>Crossref | 2016 | 10.1507/endocrj.ej16-0336</span> <a href="https://doi.org/10.1507/endocrj.ej16-0336" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#15</span>
+            <span class="reference-status reference-likely">较可能真实</span>
+            <span class="reference-title">Zheng K, Mao J</span>
+            <span class="reference-confidence">置信度 0.729</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Zheng K, Mao J. Comparison and Analysis of Clinical Features of Papillary Thyroid Cancer Complicated With Hashimoto's Thyroiditis [J]. Clinical Medicine Insights Oncology, 2024, 18: 11795549241287085.</div>
+            <p><strong>检索式</strong>: Zheng K, Mao J. Comparison and Analysis of Clinical Features of Papillary Thyroid Cancer Complicated With Hashimoto's Thyroiditis [J]. Clinical Medicine Insights Oncology, 2024, 18: 11795549241287085.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Comparison and Analysis of Clinical Features of Papillary Thyroid Cancer Complicated With Hashimoto’s Thyroiditis</strong><br><span>Crossref | 2024 | 10.1177/11795549241287085</span> <a href="https://doi.org/10.1177/11795549241287085" target="_blank" rel="noopener">来源</a></li><li><strong>Comparison and Analysis of Clinical Features of Papillary Thyroid Cancer Complicated With Hashimoto's Thyroiditis.</strong><br><span>PubMed | 2024 | 10.1177/11795549241287085</span> <a href="https://pubmed.ncbi.nlm.nih.gov/39429680/" target="_blank" rel="noopener">来源</a></li><li><strong>Surgical Complications in Papillary Thyroid Cancer Patients with Cervical Lymph Node Metastases</strong><br><span>Crossref | 2024 | 10.1177/11795549241233692</span> <a href="https://doi.org/10.1177/11795549241233692" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#16</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer [J]</span>
+            <span class="reference-confidence">置信度 1.0</span>
+            <span class="reference-issues">缺少DOI, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Liu W C, Li M P, Hong W Y, et al. A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer [J]. Frontiers in endocrinology, 2023, 14: 1142796.</div>
+            <p><strong>检索式</strong>: Liu W C, Li M P, Hong W Y, et al. A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer [J]. Frontiers in endocrinology, 2023, 14: 1142796.</p>
+            <p><strong>问题</strong>: 缺少DOI, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer</strong><br><span>Crossref | 2023 | 10.3389/fendo.2023.1142796</span> <a href="https://doi.org/10.3389/fendo.2023.1142796" target="_blank" rel="noopener">来源</a></li><li><strong>A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer</strong><br><span>Crossref | 2023 | 10.3389/fendo.2023.1142796</span> <a href="https://doi.org/10.3389/fendo.2023.1142796" target="_blank" rel="noopener">来源</a></li><li><strong>Nomogram for predicting central lymph node metastasis in T1-T2 papillary thyroid cancer with no lateral lymph node metastasis</strong><br><span>Crossref | 2023 | 10.3389/fendo.2023.1112506</span> <a href="https://doi.org/10.3389/fendo.2023.1112506" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#17</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict c…</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Zhao W, He L, Zhu J, et al. A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict central lymph node metastasis [J]. 2021, 94(2): 310–321.</div>
+            <p><strong>检索式</strong>: Zhao W, He L, Zhu J, et al. A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict central lymph node metastasis [J]. 2021, 94(2): 310–321.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict central lym…</strong><br><span>Crossref | 2021 | 10.1111/cen.14302</span> <a href="https://doi.org/10.1111/cen.14302" target="_blank" rel="noopener">来源</a></li><li><strong>Nomogram model based on preoperative serum thyroglobulin and clinical characteristics of papillary thyroid carcinoma to predict cervical lymph node me…</strong><br><span>Crossref | 2022 | 10.3389/fendo.2022.937049</span> <a href="https://doi.org/10.3389/fendo.2022.937049" target="_blank" rel="noopener">来源</a></li><li><strong>A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict central lym…</strong><br><span>Crossref | 2021 | 10.1111/cen.14302</span> <a href="https://doi.org/10.1111/cen.14302" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#18</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study […</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Zhong M, Zhang Z, Xiao Y, et al. The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study [J]. 2022, 2022: 4412725.</div>
+            <p><strong>检索式</strong>: Zhong M, Zhang Z, Xiao Y, et al. The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study [J]. 2022, 2022: 4412725.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源</p>
+            <ul class="reference-matches"><li><strong>The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study</strong><br><span>Crossref | 2022 | 10.1155/2022/4412725</span> <a href="https://doi.org/10.1155/2022/4412725" target="_blank" rel="noopener">来源</a></li><li><strong>The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study</strong><br><span>Crossref | 2022 | 10.1155/2022/4412725</span> <a href="https://doi.org/10.1155/2022/4412725" target="_blank" rel="noopener">来源</a></li><li><strong>THE VALUE OF THE NOMOGRAM MODEL BASED ON ACR TI-RADS: PREDICTION OF THE CENTRAL CERVICAL LYMPH NODE METASTASIS IN THYROID PAPILLARY CARCINOMA</strong><br><span>Crossref | 2022 | 10.1016/j.ultrasmedbio.2022.04.045</span> <a href="https://doi.org/10.1016/j.ultrasmedbio.2022.04.045" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#19</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Liu C, Xiao C, Chen J, et al. Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients [J]. 2019, 19(1): 622.</div>
+            <p><strong>检索式</strong>: Liu C, Xiao C, Chen J, et al. Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients [J]. 2019, 19(1): 622.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源</p>
+            <ul class="reference-matches"><li><strong>Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients</strong><br><span>Crossref | 2019 | 10.1186/s12885-019-5835-6</span> <a href="https://doi.org/10.1186/s12885-019-5835-6" target="_blank" rel="noopener">来源</a></li><li><strong>Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients</strong><br><span>Crossref | 2019 | 10.1186/s12885-019-5835-6</span> <a href="https://doi.org/10.1186/s12885-019-5835-6" target="_blank" rel="noopener">来源</a></li><li><strong>Related factor analysis for predicting large-volume central cervical lymph node metastasis in papillary thyroid carcinoma</strong><br><span>Crossref | 2022 | 10.3389/fendo.2022.935559</span> <a href="https://doi.org/10.3389/fendo.2022.935559" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#20</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">AGK-BRAF is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Sisdelli L, Cordioli M, Vaisman F, et al. AGK-BRAF is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma [J]. Pediatric blood &amp; cancer, 2019, 66(7): e27707.</div>
+            <p><strong>检索式</strong>: Sisdelli L, Cordioli M, Vaisman F, et al. AGK-BRAF is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma [J]. Pediatric blood &amp; cancer, 2019, 66(7): e27707.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>&lt;i&gt;AGK‐BRAF&lt;/i&gt; is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma</strong><br><span>Crossref | 2019 | 10.1002/pbc.27707</span> <a href="https://doi.org/10.1002/pbc.27707" target="_blank" rel="noopener">来源</a></li><li><strong>&lt;i&gt;AGK‐BRAF&lt;/i&gt; is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma</strong><br><span>Crossref | 2019 | 10.1002/pbc.27707</span> <a href="https://doi.org/10.1002/pbc.27707" target="_blank" rel="noopener">来源</a></li><li><strong>Late distant metastasis from papillary carcinoma of thyroid gland</strong><br><span>Crossref | 2019 | 10.15406/jcpcr.2019.10.00384</span> <a href="https://doi.org/10.15406/jcpcr.2019.10.00384" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#21</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto's thyroiditis [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Wang L, Chen J, Yuan X, et al. Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto's thyroiditis [J]. 2022, 22(1).</div>
+            <p><strong>检索式</strong>: Wang L, Chen J, Yuan X, et al. Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto's thyroiditis [J]. 2022, 22(1).</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto’s thyroiditis</strong><br><span>Crossref | 2022 | 10.1186/s12902-021-00923-2</span> <a href="https://doi.org/10.1186/s12902-021-00923-2" target="_blank" rel="noopener">来源</a></li><li><strong>Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto’s thyroiditis</strong><br><span>Crossref | 2022 | 10.1186/s12902-021-00923-2</span> <a href="https://doi.org/10.1186/s12902-021-00923-2" target="_blank" rel="noopener">来源</a></li><li><strong>Influence Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: Hashimoto’s Thyroiditis Has a Weak Effect on Central or Lateral Lymph Node…</strong><br><span>Crossref | 2021 | 10.2147/cmar.s310773</span> <a href="https://doi.org/10.2147/cmar.s310773" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#22</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Risk Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Mao J, Zhang Q, Zhang H, et al. Risk Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis [J]. 2020, 11.</div>
+            <p><strong>检索式</strong>: Mao J, Zhang Q, Zhang H, et al. Risk Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis [J]. 2020, 11.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源</p>
+            <ul class="reference-matches"><li><strong>Risk Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis</strong><br><span>Crossref | 2020 | 10.3389/fendo.2020.00265</span> <a href="https://doi.org/10.3389/fendo.2020.00265" target="_blank" rel="noopener">来源</a></li><li><strong>Risk factors for right paraesophageal lymph node metastasis in papillary thyroid carcinoma: A meta-analysis</strong><br><span>Crossref | 2020 | 10.1016/j.suronc.2019.11.007</span> <a href="https://doi.org/10.1016/j.suronc.2019.11.007" target="_blank" rel="noopener">来源</a></li><li><strong>Risk Factors for Central Lymph Node Metastasis in CN0 Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis</strong><br><span>Crossref | 2015 | 10.1371/journal.pone.0139021</span> <a href="https://doi.org/10.1371/journal.pone.0139021" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#23</span>
+            <span class="reference-status reference-not_found">未检索到</span>
+            <span class="reference-title">Dioufa N, Baloch Z W</span>
+            <span class="reference-confidence">置信度 0.21</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 年份不一致</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Dioufa N, Baloch Z W. Encapsulated neoplasms of the thyroid gland [J]. Virchows Arch, 2026, 488(1): 95–111.</div>
+            <p><strong>检索式</strong>: Dioufa N, Baloch Z W. Encapsulated neoplasms of the thyroid gland [J]. Virchows Arch, 2026, 488(1): 95–111.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 年份不一致</p>
+            <ul class="reference-matches"><li><strong>Khadim Baloch</strong><br><span>Crossref | 2020 | 10.1136/bmj.m356</span> <a href="https://doi.org/10.1136/bmj.m356" target="_blank" rel="noopener">来源</a></li><li><strong>Baloch Midwives</strong><br><span>Crossref | 2024 | 10.4324/9781003437895</span> <a href="https://doi.org/10.4324/9781003437895" target="_blank" rel="noopener">来源</a></li><li><strong>Abdul Ghafoor Baloch</strong><br><span>Crossref | 2005 | 10.1136/bmj.331.7522.968</span> <a href="https://doi.org/10.1136/bmj.331.7522.968" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#24</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto's thyroiditis [J]</span>
+            <span class="reference-confidence">置信度 1.0</span>
+            <span class="reference-issues">缺少DOI</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Fang M, Lei M, Chen X, et al. Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto's thyroiditis [J]. Frontiers in endocrinology, 2023, 14: 1267886.</div>
+            <p><strong>检索式</strong>: Fang M, Lei M, Chen X, et al. Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto's thyroiditis [J]. Frontiers in endocrinology, 2023, 14: 1267886.</p>
+            <p><strong>问题</strong>: 缺少DOI</p>
+            <ul class="reference-matches"><li><strong>Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto’s thyroiditis</strong><br><span>Crossref | 2023 | 10.3389/fendo.2023.1267886</span> <a href="https://doi.org/10.3389/fendo.2023.1267886" target="_blank" rel="noopener">来源</a></li><li><strong>Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto’s thyroiditis</strong><br><span>Crossref | 2023 | 10.3389/fendo.2023.1267886</span> <a href="https://doi.org/10.3389/fendo.2023.1267886" target="_blank" rel="noopener">来源</a></li><li><strong>Ultrasonography-based radiomics and computer-aided diagnosis in thyroid nodule management: performance comparison and clinical strategy optimization</strong><br><span>Crossref | 2023 | 10.3389/fendo.2023.1140816</span> <a href="https://doi.org/10.3389/fendo.2023.1140816" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#25</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">The role of the HIF-1α/ALYREF/PKM2 axis in glycolysis and tumorigenesis of bladder cancer [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Wang J Z, Zhu W, Han J, et al. The role of the HIF-1α/ALYREF/PKM2 axis in glycolysis and tumorigenesis of bladder cancer [J]. 2021, 41(7): 16.</div>
+            <p><strong>检索式</strong>: Wang J Z, Zhu W, Han J, et al. The role of the HIF-1α/ALYREF/PKM2 axis in glycolysis and tumorigenesis of bladder cancer [J]. 2021, 41(7): 16.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源</p>
+            <ul class="reference-matches"><li><strong>The role of the HIF‐1α/ALYREF/PKM2 axis in glycolysis and tumorigenesis of bladder cancer</strong><br><span>Crossref | 2021 | 10.1002/cac2.12158</span> <a href="https://doi.org/10.1002/cac2.12158" target="_blank" rel="noopener">来源</a></li><li><strong>Reviewer #1 (Public review): TIPE drives a cancer stem-like phenotype by promoting glycolysis via PKM2/HIF-1α axis in melanoma</strong><br><span>Crossref | 2024 | 10.7554/elife.92741.3.sa2</span> <a href="https://doi.org/10.7554/elife.92741.3.sa2" target="_blank" rel="noopener">来源</a></li><li><strong>Reviewer #2 (Public Review): TIPE drives a cancer stem-like phenotype by promoting glycolysis via PKM2/HIF-1α axis in melanoma</strong><br><span>Crossref | 2024 | 10.7554/elife.92741.1.sa0</span> <a href="https://doi.org/10.7554/elife.92741.1.sa0" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#26</span>
+            <span class="reference-status reference-not_found">未检索到</span>
+            <span class="reference-title">巴楚医学, 2025, 8(1): 75–81</span>
+            <span class="reference-confidence">置信度 0.204</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低, 年份接近但不一致</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: 闵楠, 艾空, 杨新宇, 等. 甲状腺乳头状癌合并桥本甲状腺炎患者发生淋巴结转移的风险预测模型构建 [J]. 巴楚医学, 2025, 8(1): 75–81.</div>
+            <p><strong>检索式</strong>: 闵楠, 艾空, 杨新宇, 等. 甲状腺乳头状癌合并桥本甲状腺炎患者发生淋巴结转移的风险预测模型构建 [J]. 巴楚医学, 2025, 8(1): 75–81.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低, 年份接近但不一致</p>
+            <ul class="reference-matches"><li><strong>UOEH International Symposium 2025 産業医科大学国際シンポジウム2025</strong><br><span>Crossref | 2026 | 10.7888/juoeh.48.s_1</span> <a href="https://doi.org/10.7888/juoeh.48.s_1" target="_blank" rel="noopener">来源</a></li><li><strong>札幌医科大学医学部リハビリテーション医学講座</strong><br><span>Crossref | 2025 | 10.2490/jjrmc.62.960</span> <a href="https://doi.org/10.2490/jjrmc.62.960" target="_blank" rel="noopener">来源</a></li><li><strong>单纯甲状腺乳头状癌患者与合并桥本甲状腺炎的甲状腺乳头状癌患者的临床特点分析</strong><br><span>Crossref | 2025 | 10.37155/2661-4766-0703-10</span> <a href="https://doi.org/10.37155/2661-4766-0703-10" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#27</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Can Supplementation with Vitamin D Modify Thyroid Autoantibodies (Anti-TPO Ab, Anti-Tg Ab) and Thyroid Profile (T3, T4, TSH) in Hashimoto's…</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Chahardoli R, Saboor-Yaraghi A A, Amouzegar A, et al. Can Supplementation with Vitamin D Modify Thyroid Autoantibodies (Anti-TPO Ab, Anti-Tg Ab) and Thyroid Profile (T3, T4, TSH) in Hashimoto's Thyroiditis? A Double Blind, Randomized Clinical Trial [J]. Hormone and metabolic research = Hormon- und Stoffwechselforschung = Hormones et metabolisme, 2019, 51(5): 296–301.</div>
+            <p><strong>检索式</strong>: Chahardoli R, Saboor-Yaraghi A A, Amouzegar A, et al. Can Supplementation with Vitamin D Modify Thyroid Autoantibodies (Anti-TPO Ab, Anti-Tg Ab) and Thyroid Profile (T3, T4, TSH) in Hashimoto's Thyroiditis? A Double Blind, Randomized Clinical Trial [J]. Hormone and metabolic research = Hormon- und Stoffwechselforschung = Hormones et metabolisme, 2019, 51(5): 296–301.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Can Supplementation with Vitamin D Modify Thyroid Autoantibodies (Anti-TPO Ab, Anti-Tg Ab) and Thyroid Profile (T3, T4, TSH) in Hashimoto’s Thyroiditi…</strong><br><span>Crossref | 2019 | 10.1055/a-0856-1044</span> <a href="https://doi.org/10.1055/a-0856-1044" target="_blank" rel="noopener">来源</a></li><li><strong>Anticuerpos antiperoxidasa (anti-TPO) y antitiroglobulina (anti-TG) en pacientes con sospecha clínica de tiroiditis de Hashimoto Anti-thyroid peroxida…</strong><br><span>Crossref | 2026 | 10.66913/orinoco.v16i1.85</span> <a href="https://doi.org/10.66913/orinoco.v16i1.85" target="_blank" rel="noopener">来源</a></li><li><strong>T3, T4, TSH, Anti-TPO, and Anti-TG Autoantibodies Distribution in Autoimmune Thyroid Patients with Chlamydia Trachomatis Infection</strong><br><span>Crossref | 2024 | 10.61707/9907zx61</span> <a href="https://doi.org/10.61707/9907zx61" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#28</span>
+            <span class="reference-status reference-weak">弱匹配</span>
+            <span class="reference-title">Rosario P W, Côrtes M C S, Franco Mourão G</span>
+            <span class="reference-confidence">置信度 0.592</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线弱匹配, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Rosario P W, Côrtes M C S, Franco Mourão G. Follow-up of patients with thyroid cancer and antithyroglobulin antibodies: a review for clinicians [J]. Endocr Relat Cancer, 2021, 28(4): R111–r119.</div>
+            <p><strong>检索式</strong>: Rosario P W, Côrtes M C S, Franco Mourão G. Follow-up of patients with thyroid cancer and antithyroglobulin antibodies: a review for clinicians [J]. Endocr Relat Cancer, 2021, 28(4): R111–r119.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线弱匹配, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Follow-up of patients with thyroid cancer and antithyroglobulin antibodies: a review for clinicians</strong><br><span>Crossref | 2021 | 10.1530/erc-21-0012</span> <a href="https://doi.org/10.1530/erc-21-0012" target="_blank" rel="noopener">来源</a></li><li><strong>Antithyroglobulin Antibody Variation During Follow-Up Has a Good Prognostic Value for Preoperative Antithyroglobulin Antibody-Positive Differentiated…</strong><br><span>Crossref | 2021 | 10.3389/fendo.2021.774275</span> <a href="https://doi.org/10.3389/fendo.2021.774275" target="_blank" rel="noopener">来源</a></li><li><strong>ENTREVISTA COM FLÁVIA CÔRTES</strong><br><span>Crossref | 2022 | 10.12957/seminal.2022.64735</span> <a href="https://doi.org/10.12957/seminal.2022.64735" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#29</span>
+            <span class="reference-status reference-not_found">未检索到</span>
+            <span class="reference-title">柯晓丽, 沈浩霖, 吕国荣,等l</span>
+            <span class="reference-confidence">置信度 0.16</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: 柯晓丽, 沈浩霖, 吕国荣,等l. 颈部淋巴结超声良恶性风险预测模型的构建及价值 [J]. 中国超声医学杂志, 2020, 36(4): 314–317.</div>
+            <p><strong>检索式</strong>: 柯晓丽, 沈浩霖, 吕国荣,等l. 颈部淋巴结超声良恶性风险预测模型的构建及价值 [J]. 中国超声医学杂志, 2020, 36(4): 314–317.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低</p>
+            <ul class="reference-matches"><li><strong>寺田浩明著『中国法制史』</strong><br><span>Crossref | 2020 | 10.5955/jalha.69.185</span> <a href="https://doi.org/10.5955/jalha.69.185" target="_blank" rel="noopener">来源</a></li><li><strong>中国华丽鲎科(新科)的发现</strong><br><span>Crossref | 1981 | 10.1360/csb1981-26-11-675</span> <a href="https://doi.org/10.1360/csb1981-26-11-675" target="_blank" rel="noopener">来源</a></li><li><strong>Zhongguo Fojiao shilun 中国佛教史论 by Wang Rongguo 王荣国 (review)</strong><br><span>Crossref | 2009 | 10.1353/jcr.2009.0029</span> <a href="https://doi.org/10.1353/jcr.2009.0029" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#30</span>
+            <span class="reference-status reference-weak">弱匹配</span>
+            <span class="reference-title">Ahuja A, Ying M</span>
+            <span class="reference-confidence">置信度 0.586</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线弱匹配</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Ahuja A, Ying M. Sonography of neck lymph nodes. Part II: abnormal lymph nodes [J]. Clinical radiology, 2003, 58(5): 359–366.</div>
+            <p><strong>检索式</strong>: Ahuja A, Ying M. Sonography of neck lymph nodes. Part II: abnormal lymph nodes [J]. Clinical radiology, 2003, 58(5): 359–366.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线弱匹配</p>
+            <ul class="reference-matches"><li><strong>Sonography of Neck Lymph Nodes. Part II: Abnormal Lymph Nodes</strong><br><span>Crossref | 2003 | 10.1016/s0009-9260(02)00585-8</span> <a href="https://doi.org/10.1016/s0009-9260(02)00585-8" target="_blank" rel="noopener">来源</a></li><li><strong>Sonography of Neck Lymph Nodes. Part I: Normal Lymph Nodes</strong><br><span>Crossref | 2003 | 10.1016/s0009-9260(02)00584-6</span> <a href="https://doi.org/10.1016/s0009-9260(02)00584-6" target="_blank" rel="noopener">来源</a></li><li><strong>Vishal Ahuja</strong><br><span>Crossref | 2023 | 10.1287/d9565ac3-2fd1-46ce-90e0-d84d5bd920e2</span> <a href="https://doi.org/10.1287/d9565ac3-2fd1-46ce-90e0-d84d5bd920e2" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#31</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Thyroglobulin Measurement Through Fine-Needle Aspiration for Optimizing Neck Node Dissection in Papillary Thyroid Cancer [J]</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Jia X, Wang Y, Liu Y, et al. Thyroglobulin Measurement Through Fine-Needle Aspiration for Optimizing Neck Node Dissection in Papillary Thyroid Cancer [J]. Ann Surg Oncol, 2022, 29(1): 88–96.</div>
+            <p><strong>检索式</strong>: Jia X, Wang Y, Liu Y, et al. Thyroglobulin Measurement Through Fine-Needle Aspiration for Optimizing Neck Node Dissection in Papillary Thyroid Cancer [J]. Ann Surg Oncol, 2022, 29(1): 88–96.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源</p>
+            <ul class="reference-matches"><li><strong>Thyroglobulin Measurement Through Fine-Needle Aspiration for Optimizing Neck Node Dissection in Papillary Thyroid Cancer</strong><br><span>Crossref | 2022 | 10.1245/s10434-021-10549-2</span> <a href="https://doi.org/10.1245/s10434-021-10549-2" target="_blank" rel="noopener">来源</a></li><li><strong>Measurement of thyroglobulin level in lateral neck lymph node fine needle aspiration washout fluid in papillary thyroid cancer</strong><br><span>Crossref | 2021 | 10.21037/gs-21-366</span> <a href="https://doi.org/10.21037/gs-21-366" target="_blank" rel="noopener">来源</a></li><li><strong>Thyroglobulin measurement in fine‐needle aspirate washouts: the criteria for neck node dissection for patients with thyroid cancer</strong><br><span>Crossref | 2009 | 10.1111/j.1365-2265.2008.03297.x</span> <a href="https://doi.org/10.1111/j.1365-2265.2008.03297.x" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#32</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for…</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Chung S R, Baek J H, Rho Y H, et al. Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for Stratifying the Risk of Malignant Lymph Node [J]. Korean J Radiol, 2022, 23(11): 1102–1111.</div>
+            <p><strong>检索式</strong>: Chung S R, Baek J H, Rho Y H, et al. Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for Stratifying the Risk of Malignant Lymph Node [J]. Korean J Radiol, 2022, 23(11): 1102–1111.</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for Stratifyi…</strong><br><span>Crossref | 2022 | 10.3348/kjr.2022.0358</span> <a href="https://doi.org/10.3348/kjr.2022.0358" target="_blank" rel="noopener">来源</a></li><li><strong>Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for Stratifyi…</strong><br><span>Crossref | 2022 | 10.3348/kjr.2022.0358</span> <a href="https://doi.org/10.3348/kjr.2022.0358" target="_blank" rel="noopener">来源</a></li><li><strong>Validation of CT-Based Risk Stratification System for Lymph Node Metastasis in Patients With Thyroid Cancer</strong><br><span>Crossref | 2023 | 10.3348/kjr.2023.0308</span> <a href="https://doi.org/10.3348/kjr.2023.0308" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#33</span>
+            <span class="reference-status reference-verified">已验证</span>
+            <span class="reference-title">The prognostic significance of nodal metastases from papillary thyroid carcinoma can be stratified based on the size and number of metastati…</span>
+            <span class="reference-confidence">置信度 0.93</span>
+            <span class="reference-issues">缺少DOI, 部分外部源异常</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: Randolph G W, Duh Q Y, Heller K S, et al. The prognostic significance of nodal metastases from papillary thyroid carcinoma can be stratified based on the size and number of metastatic lymph nodes, as well as the presence of extranodal extension [J]. Thyroid : official journal of the American Thyroid Association, 2012, 22(11): 1144–1152.</div>
+            <p><strong>检索式</strong>: Randolph G W, Duh Q Y, Heller K S, et al. The prognostic significance of nodal metastases from papillary thyroid carcinoma can be stratified based on the size and number of metastatic lymph nodes, as well as the presence of extranodal extension [J]. Thyroid : official journal of the American Thyroid Association, 2012, 22(11): 1144–1152.</p>
+            <p><strong>问题</strong>: 缺少DOI, 部分外部源异常</p>
+            <ul class="reference-matches"><li><strong>The Prognostic Significance of Nodal Metastases from Papillary Thyroid Carcinoma Can Be Stratified Based on the Size and Number of Metastatic Lymph No…</strong><br><span>Crossref | 2012 | 10.1089/thy.2012.0043</span> <a href="https://doi.org/10.1089/thy.2012.0043" target="_blank" rel="noopener">来源</a></li><li><strong>The Prognostic Significance of Nodal Metastases from Papillary Thyroid Carcinoma Can Be Stratified Based on the Size and Number of Metastatic Lymph No…</strong><br><span>Crossref | 2012 | 10.1089/thy.2012.0043</span> <a href="https://doi.org/10.1089/thy.2012.0043" target="_blank" rel="noopener">来源</a></li><li><strong>The Prognostic Significance of Nodal Metastases from Papillary Thyroid Carcinoma can be Stratified Based on the Size and Number of Metastatic Lymph No…</strong><br><span>Crossref | 2012 | 10.1089/thy.2012-0043</span> <a href="https://doi.org/10.1089/thy.2012-0043" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details>
+        <details class="reference-card">
+          <summary class="reference-summary">
+            <span class="reference-index">#34</span>
+            <span class="reference-status reference-not_found">未检索到</span>
+            <span class="reference-title">杨高怡;张文智;徐栋</span>
+            <span class="reference-confidence">置信度 0.08</span>
+            <span class="reference-issues">缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低, 年份接近但不一致</span>
+          </summary>
+          <div class="reference-body">
+            <div><strong>引用原文</strong>: 杨高怡;张文智;徐栋. 浅表淋巴疾病超声诊断 [M]. 中华医学电子音像出版社, 2019: 22-27. 创新性说明: 目前桥本甲状腺炎合并甲状腺乳头状癌患者颈部淋巴结转移风险的关系存在争议，桥本甲状腺炎常导致多个颈部淋巴结肿大，超声表现可能与转移性淋巴结特征存在重叠，常规超声对颈部淋巴结转移识别的敏感性及诊断效能有限，本研究拟整合临床资料、血清生物标志物及超声影像学特征等多维数据，筛选分析PTC合并HT状态下CLNM的危险因素，通过构建不同分组模型并分析具有最佳诊断效能的模型，旨在为PTC合并HT患者的临床诊断及手术决策提供更为便捷、可靠的依据。 变量 | 淋巴结转移组(n=141) | 非淋巴结转移组(n=120) | P values 临床信息 | | | 性别: | | | 0.295 男 | 24 (17.0) | 14 (11.7) | 女 | 117 (83.0) | 106 (88.3) | 年龄(岁) | 37.1 (9.81) | 42.5 (11.5) | &lt;0.001* BMI: | | | 0.053 ＜24 | 94 (66.7) | 65 (54.2) | ≥24 | 47 (33.3) | 55 (45.8) | 碱性磷酸酶 | 62.0 (29.8) | 80.7 (38.3) | &lt;0.001* FT3 | 4.72 (1.00) | 4.72 (0.69) | 0.967 FT4 | 18.2 (8.11) | 17.0 (3.61) | 0.110 TSH | 3.99 (8.98) | 3.29 (2.58) | 0.377 TGAB | 542 (951) | 412 (632) | 0.187 TPOAB | 222 (299) | 169 (210) | 0.098 血红蛋白 | 140 (15.2) | 138 (16.0) | 0.206 原发肿瘤超声特征 | | | 位置 | | | 0.072 上部 | 35 (24.8) | 18 (15.0) | 下部 | 48 (34.0) | 38 (31.7) | 中部 | 58 (41.1) | 64 (53.3) | 纵横比 | | | 0.813 ＜1 | 76 (53.9) | 62 (51.7) | ≥1 | 65 (46.1) | 58 (48.3) | 边缘 | | | 0.122 不规则 | 93 (66.0) | 67 (55.8) | 规则 | 48 (34.0) | 53 (44.2) | 边界 | | | 0.556 不模糊 | 40 (28.4) | 39 (32.5) | 模糊 | 101 (71.6) | 81 (67.5) | 侵犯包膜 | | | 1.000 有 | 14 (9.93) | 12 (10.0) | 无 | 127 (90.1) | 108 (90.0) | 钙化类型 | | | &lt;0.001* 微钙化 | 123 (87.2) | 78 (65.0) | 无、大钙化 | 18 (12.8) | 42 (35.0) | 血流信号 | | | &lt;0.001* 乏血供 | 94 (78.3) | 77 (54.6) | 富血供 | 26 (21.7) | 64 (45.4) | 肿瘤直径 | | | 0.003* &gt;10mm | 82 (58.2) | 47 (39.2) | ≤10mm | 59 (41.8) | 73 (60.8) | 淋巴结超声特征 | | | 位置 | | | 0.191 侧颈区 | 50 (35.5) | 53 (44.2) | 中央区 | 91 (64.5) | 67 (55.8) | 形态 | | | &lt;0.001* 不规则 | 48 (34.0) | 14 (11.7) | 规则 | 93 (66.0) | 106 (88.3) | 边界 | | | 0.028* 不清晰 | 10 (7.09) | 1 (0.83) | 清晰 | 131 (92.9) | 119 (99.2) | 长轴/短轴（L/S）: | | | 0.415 ＞2 | 45 (31.9) | 45 (37.5) | ≤2 | 96 (68.1) | 75 (62.5) | 淋巴门 | | | 0.001* 有 | 24 (17.0) | 42 (35.0) | 无 | 117 (83.0) | 78 (65.0) | 皮质回声: | | | &lt;0.00* 低、等回声 | 94 (66.7) | 114 (95.0) | 高回声 | 47 (33.3) | 6 (5.00) | 钙化 | | | &lt;0.001* 有 | 62 (44.0) | 19 (15.8) | 无 | 79 (56.0) | 101 (84.2) | 血流信号 | | | 0.001* 无、门型血流 | 53 (37.6) | 70 (58.3) | 异常血流 | 76 (53.9) | 19 (15.8) | 囊性改变 | | | 0.012* 无 | 127 (90.1) | 118 (98.3) | 有 | 14 (9.93) | 2 (1.67) | 变量 | 单因素Logistic | 单因素Logistic | 多因素Logistic | 多因素Logistic | OR 95%CI | P values | OR 95%CI | P values 年龄 | 0.953(0.930-0.976) | &lt;0.001 | 0.965(0.936-0.995) | 0.021 ALP | 0.983(0.975-0.991) | &lt;0.001 | 0.986(0.976-0.996) | 0.006 肿瘤钙化 | 3.679(1.978-6.845) | &lt;0.001 | 2.821(1.231-6.462) | 0.014 肿瘤直径 | 2.159(1.314-3.546) | 0.002 | | 肿瘤血流信号 | 3.005(1.740-5.190) | &lt;0.001 | 2.247(1.098-4.600) | 0.027 淋巴结形态 | 3.908(2.025-7.540) | &lt;0.001 | 3.061(1.358-6.900) | 0.007 淋巴结边界 | 9.084(1.146-72.029) | 0.037 | | 淋巴门 | 2.625(1.473-4.677) | 0.001 | | 淋巴结皮质回声 | 0.105(0.043-0.257) | &lt;0.001 | 0.130(0.045-0.378) | &lt;0.001 淋巴结钙化 | 0.240(0.133-0.433) | &lt;0.001 | 0.408(0.195-0.851) | 0.017 淋巴结血流信号 | 2.325(1.413-3.824) | 0.001 | | 淋巴结囊性变 | 6.504(1.447-29.226) | 0.015 | | 变量 | AUC | SE | 约登指数 | 敏感度(%) | 特异度(%) | 95% CI 年龄 | 0.641 | 0.035 | 0.315 | 72.34 | 59.17 | 0.580-0.700 ALP | 0.647 | 0.034 | 0.277 | 60.99 | 66.67 | 0.586-0.705 肿瘤微钙化 | 0.611 | 0.026 | 0.222 | 87.23 | 35 | 0.549-0.671 肿瘤血流信号 | 0.619 | 0.028 | 0.237 | 45.39 | 78.33 | 0.557-0.678 淋巴结形态 | 0.612 | 0.025 | 0.224 | 34.04 | 88.33 | 0.550-0.671 淋巴结皮质回声 | 0.642 | 0.022 | 0.283 | 33.33 | 95 | 0.580-0.700 淋巴结微钙化 | 0.641 | 0.027 | 0.281 | 43.97 | 84.17 | 0.579-0.699 TN-US | 0.667 | 0.026 | 0.240 | 91.49 | 32.5 | 0.756-0.855 LN-US | 0.757 | 0.028 | 0.433 | 71.63 | 71.67 | 0.700-0.808 TN-LN-US | 0.809 | 0.026 | 0.465 | 67.38 | 79.17 | 0.756-0.855 Clin-US | 0.842 | 0.024 | 0.551 | 70.92 | 84.17 | 0.792-0.884 变量 | AUC | SE | 95% CI | Z | P Clin-USvsTN-LN-US | 0.0326 | 0.0143 | 0.0046–0.0606 | 2.281 | 0.0225 Clin-US vs LN-US | 0.0847 | 0.0215 | 0.0424–0.1270 | 3.929 | 0.0001 Clin-US vs TN-US | 0.1750 | 0.0298 | 0.1160–0.2330 | 5.865 | &lt;0.0001 Clin-US vs ALP | 0.1950 | 0.0339 | 0.1280–0.2610 | 5.75 | &lt;0.0001 Clin-US vs Age | 0.2000 | 0.0342 | 0.1330–0.2670 | 5.855 | &lt;0.0001 TN-LN-USvsLN-US | 0.0521 | 0.017 | 0.0188–0.0853 | 3.068 | 0.0022 TN-LN-USvsTN-US | 0.1420 | 0.0291 | 0.0851–0.1990 | 4.885 | &lt;0.0001 TN-LN-USvsALP | 0.1620 | 0.0413 | 0.0813-0.2430 | 3.296 | 0.0001 TN-LN-USvs年龄 | 0.1680 | 0.0424 | 0.0847-0.2510 | 3.957 | 0.0001 LN-USvsTN-US | 0.0900 | 0.0413 | 0.0091-0.1710 | 2.180 | 0.0292 LN-US vs ALP | 0.1100 | 0.043 | 0.0259–0.1950 | 2.561 | 0.0104 LN-US vs 年龄 | 0.1160 | 0.0438 | 0.0299–0.2020 | 2.643 | 0.0082 TN-US vs ALP | 0.0202 | 0.0456 | –0.0691–0.1100 | 0.444 | 0.6571 TN-US vs 年龄 | 0.0257 | 0.0453 | –0.0631–0.1150 | 0.568 | 0.5700 ALP vs 年龄 | 0.0055 | 0.0443 | –0.0814–0.0924 | 0.124 | 0.9013</div>
+            <p><strong>检索式</strong>: 杨高怡;张文智;徐栋. 浅表淋巴疾病超声诊断 [M]. 中华医学电子音像出版社, 2019: 22-27. 创新性说明: 目前桥本甲状腺炎合并甲状腺乳头状癌患者颈部淋巴结转移风险的关系存在争议，桥本甲状腺炎常导致多个颈部淋巴结肿大，超声表现可能与转移性淋巴结特征存在重叠，常规超声对颈部淋巴结转移识别的敏感性及诊断效能有限，本研究拟整合临床资料、血清生物标志物及超声影像学特征等多维数据，筛选分析PTC合并HT状态下CLNM的危险因素，通过构建不同分组模型并分析具有最佳诊断效能的模型，旨在为PTC合并HT患者的临床诊断及手术决策提供更为便捷、可靠的依据。 变量 | 淋巴结转移组(n=141) | 非淋巴结转移组(n=120) | P values 临床信息 | | | 性别: | | | 0.295 男 | 24 (17.0) | 14 (11.7) | 女 | 117 (83.0) | 106 (88.3) | 年龄(岁) | 37.1 (9.81) | 42.5 (11.5) | &lt;0.001* BMI: | | | 0.053 ＜24 | 94 (66.7) | 65 (54.2) | ≥24 | 47 (33.3) | 55 (45.8) | 碱性磷酸酶 | 62.0 (29.8) | 80.7 (38.3) | &lt;0.001* FT3 | 4.72 (1.00) | 4.72</p>
+            <p><strong>问题</strong>: 缺少DOI, 缺少期刊/来源, 在线未检索到, 部分外部源异常, 题名相似度低, 年份接近但不一致</p>
+            <ul class="reference-matches"><li><strong>张景中、杨路先生简介</strong><br><span>Crossref | 2021 | 10.1360/ssm-2019-0345</span> <a href="https://doi.org/10.1360/ssm-2019-0345" target="_blank" rel="noopener">来源</a></li><li><strong>Yang Wenguang 杨文广</strong><br><span>Crossref | 2017 | 10.1515/9781438464855-007</span> <a href="https://doi.org/10.1515/9781438464855-007" target="_blank" rel="noopener">来源</a></li><li><strong>Yang Wenguang 杨文广</strong><br><span>Crossref | 2017 | 10.2307/jj.18254891.10</span> <a href="https://doi.org/10.2307/jj.18254891.10" target="_blank" rel="noopener">来源</a></li></ul>
+          </div>
+        </details></div>
+  </div>
+
+  <div class="footer">
+    Generated by <strong>Veritas</strong> — 学术论文自动审查工具（耿同学标准） | 2026-06-02 17:07:59
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,45 @@
+Paper Audit Log
+START 2026-06-02 16:41:47
+INPUT Test_paper2
+OUTPUT_DIR Test_paper2
+
+🧾 日志文件: Test_paper2/Test_paper2.paper_audit.log
+📁 所有输出将保存到: Test_paper2
+✅ 从 config.py 加载配置
+🤖 当前LLM: model=mimo-v2.5-free, url=https://hub.oaifree.com/v1
+🔁 断点续作缓存目录: Test_paper2/.Test_paper2.paper_audit_resume
+🗂️ 本次运行工作区: Test_paper2/.paper_audit_runs/20260602-164147-Test_paper2-67c0af62
+🧭 断点记录: init | done | input=Test_paper2; llm=mimo-v2.5-free; url=https://hub.oaifree.com/v1; max_chars=4096; use_mineru=False
+📊 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0/5   0.0% 初始化完成
+🔁 断点续作：复用阶段1文本缓存 Test_paper2/.Test_paper2.paper_audit_resume/stage1_extract.json (100字符)
+🧭 断点记录: stage1_extract | cache_hit | chars=100
+📊 [█████░░░░░░░░░░░░░░░░░░░░░░░] 1/5  20.0% 阶段1/5 文本提取缓存命中
+🧭 断点记录: stage1_extract | saved | chars=100; use_mineru=False
+📚 未识别到独立参考文献章节，主体审查不做引用剥离
+🧭 断点记录: stage1_resource_online | saved | checked=0; cache_entries=0
+🔗 未识别到代码仓库或论文部署的在线资源链接
+📊 [█████░░░░░░░░░░░░░░░░░░░░░░░] 1/5  20.0% 阶段2/5 开始本地统计检测
+🔢 正在执行本地统计检测...
+✅ 统计检测完成: Benford偏差=N/A, p值异常=0, 数字数=0
+🧭 断点记录: stage2_stat | done | numbers=0; benford=N/A
+📊 [███████████░░░░░░░░░░░░░░░░░] 2/5  40.0% 阶段2/5 本地统计检测完成
+🧪 关键能力预检: 文本语义审查LLM
+🧭 断点记录: preflight_text_llm | ok | ok
+🧭 断点记录: stage3_llm | start | chunks=1; chunk_size=4096; overlap=512
+📊 [███████████░░░░░░░░░░░░░░░░░] 2/5  40.0% 阶段3/5 开始LLM审查：1块
+🔍 论文长度(100字符，已排除参考文献)在单块范围内，直接审查...
+🧭 断点记录: stage3_llm_chunk | saved | chunk=1/1
+🧭 断点记录: stage4_image_semantic | saved | semantic_checked=0; cache_entries=0; local_cache=Test_paper2/image_semantic_cache.json
+🧭 断点记录: stage4_image_detector | saved | detector_checked=0; cache_entries=0
+📊 [██████████████████████░░░░░░] 4/5  80.0% 阶段5/5 开始生成报告
+✅ Markdown报告已保存: Test_paper2/Test_paper2/test_paper2_audit.audit.md
+🧭 断点记录: stage5_report | markdown_saved | Test_paper2/Test_paper2/test_paper2_audit.audit.md
+✅ HTML报告已保存: Test_paper2/Test_paper2/test_paper2_audit.audit.html
+🧭 断点记录: stage5_report | html_saved | Test_paper2/Test_paper2/test_paper2_audit.audit.html
+✅ 原始JSON已保存: Test_paper2/Test_paper2/test_paper2_audit.audit.json
+🧭 断点记录: all | done | audit completed
+📊 [████████████████████████████] 5/5 100.0% 阶段5/5 全部完成
+🧾 完整日志: Test_paper2/Test_paper2.paper_audit.log
+🌐 已跳过自动打开HTML报告: Test_paper2/Test_paper2/test_paper2_audit.audit.html
+
+📊 复核优先级: 中 | 总评: 论文文本未提供，无法进行实质性审查。

@@ -1,0 +1,3173 @@
+{
+  "title:bdfe755a44fd1539ecbc1e88": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Hashimoto's thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer [J]",
+      "author": "Marotta Sciammarella Chiofalo",
+      "container": "",
+      "year": "2017",
+      "bibliographic": "Marotta V, Sciammarella C, Chiofalo M G, et al. Hashimoto's thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer [J]. Endocr Relat Cancer, 2017, 24(9): 485–493."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Hashimoto’s thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer",
+        "year": "2017",
+        "doi": "10.1530/erc-17-0085",
+        "authors": [
+          "Vincenzo Marotta",
+          "Concetta Sciammarella",
+          "Maria Grazia Chiofalo",
+          "Claudio Gambardella",
+          "Claudio Bellevicine"
+        ],
+        "container": "Endocrine-Related Cancer",
+        "url": "https://doi.org/10.1530/erc-17-0085",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Hashimoto’s thyroiditis predicts outcome in intrathyroidal papillary thyroid cancer",
+        "year": "2017",
+        "doi": "10.1530/erc-17-0085",
+        "authors": [
+          "Vincenzo Marotta",
+          "Concetta Sciammarella",
+          "Maria Grazia Chiofalo",
+          "Claudio Gambardella",
+          "Claudio Bellevicine"
+        ],
+        "container": "Endocrine-Related Cancer",
+        "url": "https://doi.org/10.1530/erc-17-0085",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Multifocality and Hashimoto’s thyroiditis as independent predictors of structural recurrence in a cohort of low risk intrathyroidal papillary thyroid cancer.",
+        "year": "2017",
+        "doi": "10.1200/jco.2017.35.15_suppl.e17577",
+        "authors": [
+          "Luciano Pezzullo",
+          "Vincenzo Marotta",
+          "Maria Grazia Chiofalo",
+          "Claudio Gambardella",
+          "Claudio Bellevicine"
+        ],
+        "container": "Journal of Clinical Oncology",
+        "url": "https://doi.org/10.1200/jco.2017.35.15_suppl.e17577",
+        "retracted": false,
+        "match_score": 0.519
+      },
+      {
+        "source": "Crossref",
+        "title": "Histologically-proven Hashimoto's thyroiditis significantly decreases the risk of structural recurrence in patients with low risk intra-thyroidal papillary thyroid cancer",
+        "year": "2017",
+        "doi": "10.1530/endoabs.49.ep1407",
+        "authors": [
+          "Vincenzo Marotta",
+          "Concetta Sciammarella",
+          "Maria Grazia Chiofalo",
+          "Claudio Gambardella",
+          "Claudio Bellevicine"
+        ],
+        "container": "Endocrine Abstracts",
+        "url": "https://doi.org/10.1530/endoabs.49.ep1407",
+        "retracted": false,
+        "match_score": 0.494
+      },
+      {
+        "source": "Crossref",
+        "title": "Association of Hashimoto Thyroiditis (HT) with Papillary Thyroid Cancer (PTC)",
+        "year": "2016",
+        "doi": "10.21275/v5i3.nov162070",
+        "authors": [],
+        "container": "International Journal of Science and Research (IJSR)",
+        "url": "https://doi.org/10.21275/v5i3.nov162070",
+        "retracted": false,
+        "match_score": 0.468
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:f8b6ad2841634b1fcaae11df": {
+    "online_status": "error",
+    "confidence": 0.0,
+    "query": {
+      "doi": "",
+      "title": "Prevalence of Hashimoto Thyroiditis in Adults With Papillary Thyroid Cancer and Its Association With Cancer Recurrence and Outcomes [J]",
+      "author": "Huang Qian",
+      "container": "",
+      "year": "2021",
+      "bibliographic": "Xu S, Huang H, Qian J, et al. Prevalence of Hashimoto Thyroiditis in Adults With Papillary Thyroid Cancer and Its Association With Cancer Recurrence and Outcomes [J]. 2021, 4(7): e2118526."
+    },
+    "matched_sources": [],
+    "problems": [
+      "no_online_match",
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "crossref: HTTPError",
+      "openalex: ReadTimeout",
+      "official_site: HTTPError"
+    ]
+  },
+  "title:aaf94c126642dc885745a84d": {
+    "online_status": "verified",
+    "confidence": 1.0,
+    "query": {
+      "doi": "",
+      "title": "Cancer Risk in Hashimoto's Thyroiditis: a Systematic Review and Meta-Analysis [J]",
+      "author": "Wang Liang",
+      "container": "Frontiers in endocrinology,",
+      "year": "2022",
+      "bibliographic": "Hu X, Wang X, Liang Y, et al. Cancer Risk in Hashimoto's Thyroiditis: a Systematic Review and Meta-Analysis [J]. Frontiers in endocrinology, 2022, 13: 937871."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Cancer Risk in Hashimoto’s Thyroiditis: a Systematic Review and Meta-Analysis",
+        "year": "2022",
+        "doi": "10.3389/fendo.2022.937871",
+        "authors": [
+          "Xiaojie Hu",
+          "Xuanyu Wang",
+          "Yue Liang",
+          "Xin Chen",
+          "Siyuan Zhou"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2022.937871",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Cancer Risk in Hashimoto’s Thyroiditis: a Systematic Review and Meta-Analysis",
+        "year": "2022",
+        "doi": "10.3389/fendo.2022.937871",
+        "authors": [
+          "Xiaojie Hu",
+          "Xuanyu Wang",
+          "Yue Liang",
+          "Xin Chen",
+          "Siyuan Zhou"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2022.937871",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Benign thyroid disease and the risk of breast cancer: An updated systematic review and meta-analysis",
+        "year": "2022",
+        "doi": "10.3389/fendo.2022.984593",
+        "authors": [
+          "Mingyue Han",
+          "Yao Wang",
+          "Yuanhui Jin",
+          "Xue Zhao",
+          "Haiying Cui"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2022.984593",
+        "retracted": false,
+        "match_score": 0.62
+      },
+      {
+        "source": "Crossref",
+        "title": "Fermented Dairy Food Intake and Risk of Colorectal Cancer: A Systematic Review and Meta-Analysis",
+        "year": "2022",
+        "doi": "10.3389/fonc.2022.812679",
+        "authors": [
+          "Zhi Liang",
+          "Xiaobiao Song",
+          "Jiang Hu",
+          "Riga Wu",
+          "Pengda Li"
+        ],
+        "container": "Frontiers in Oncology",
+        "url": "https://doi.org/10.3389/fonc.2022.812679",
+        "retracted": false,
+        "match_score": 0.58
+      },
+      {
+        "source": "Crossref",
+        "title": "Comment on ‘hemoglobin A1c and serum glucose levels and risk of gastric cancer: A systematic review and meta-analysis’",
+        "year": "2022",
+        "doi": "10.3389/fendo.2022.966464",
+        "authors": [
+          "Haiyang Wang",
+          "Yamei Wang",
+          "Huawen Xia"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2022.966464",
+        "retracted": false,
+        "match_score": 0.568
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:92a971e13db338117e574383": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Clinical and biological relationship between chronic lymphocytic thyroiditis and papillary thyroid carcinoma [J]",
+      "author": "Antonaci Consorti Mardente",
+      "container": "",
+      "year": "2009",
+      "bibliographic": "Antonaci A, Consorti F, Mardente S, et al. Clinical and biological relationship between chronic lymphocytic thyroiditis and papillary thyroid carcinoma [J]. 2009, 17(10): 495–503."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Clinical and Biological Relationship Between Chronic Lymphocytic Thyroiditis and Papillary Thyroid Carcinoma",
+        "year": "2009",
+        "doi": "10.3727/096504009789735431",
+        "authors": [
+          "Alfredo Antonaci",
+          "Fabrizio Consorti",
+          "Stefania Mardente",
+          "Gloria Giovannone"
+        ],
+        "container": "Oncology Research Featuring Preclinical and Clinical Cancer Therapeutics",
+        "url": "https://doi.org/10.3727/096504009789735431",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Clinical and Biological Relationship Between Chronic Lymphocytic Thyroiditis and Papillary Thyroid Carcinoma",
+        "year": "2009",
+        "doi": "10.3727/096504009789735431",
+        "authors": [
+          "Alfredo Antonaci",
+          "Fabrizio Consorti",
+          "Stefania Mardente",
+          "Gloria Giovannone"
+        ],
+        "container": "Oncology Research Featuring Preclinical and Clinical Cancer Therapeutics",
+        "url": "https://doi.org/10.3727/096504009789735431",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Cross-talk between NO and HMGB1 in lymphocytic thyroiditis and papillary thyroid cancer",
+        "year": "2010",
+        "doi": "10.3892/or_00001005",
+        "authors": [
+          "Mardente"
+        ],
+        "container": "Oncology Reports",
+        "url": "https://doi.org/10.3892/or_00001005",
+        "retracted": false,
+        "match_score": 0.437
+      },
+      {
+        "source": "Crossref",
+        "title": "Survivin and cyclin D1 are jointly expressed in thyroid papillary carcinoma and microcarcinoma",
+        "year": "2008",
+        "doi": "10.3892/or.20.1.63",
+        "authors": [
+          "Alfredo Antonaci",
+          "Fabrizio Consorti",
+          "Stefania Mardente",
+          "Stefania Natalizi",
+          "Gloria Giovannone"
+        ],
+        "container": "Oncology Reports",
+        "url": "https://doi.org/10.3892/or.20.1.63",
+        "retracted": false,
+        "match_score": 0.406
+      },
+      {
+        "source": "Crossref",
+        "title": "Clinical Relationship Between IgG4-Positive Hashimoto's Thyroiditis and Papillary Thyroid Carcinoma",
+        "year": "2016",
+        "doi": "10.1210/jc.2015-3783",
+        "authors": [
+          "Yang Yu",
+          "Jing Zhang",
+          "Guizhi Lu",
+          "Ting Li",
+          "Yang Zhang"
+        ],
+        "container": "The Journal of Clinical Endocrinology &amp; Metabolism",
+        "url": "https://doi.org/10.1210/jc.2015-3783",
+        "retracted": false,
+        "match_score": 0.334
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:2045cc6524ad47fb9479dff8": {
+    "online_status": "verified",
+    "confidence": 1.0,
+    "query": {
+      "doi": "",
+      "title": "The Specifically Androgen-Regulated Gene (SARG) Promotes Papillary Thyroid Carcinoma (PTC) Lymphatic Metastasis Through Vascular Endothelial Growth Factor C (VEGF-C) and VEGF Receptor 3 (VEGFR-3) Axis [J]",
+      "author": "Jin Zhao",
+      "container": "Frontiers in oncology,",
+      "year": "2022",
+      "bibliographic": "Xu S J, Jin B, Zhao W J, et al. The Specifically Androgen-Regulated Gene (SARG) Promotes Papillary Thyroid Carcinoma (PTC) Lymphatic Metastasis Through Vascular Endothelial Growth Factor C (VEGF-C) and VEGF Receptor 3 (VEGFR-3) Axis [J]. Frontiers in oncology, 2022, 12: 817660."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "The Specifically Androgen-Regulated Gene (SARG) Promotes Papillary Thyroid Carcinoma (PTC) Lymphatic Metastasis Through Vascular Endothelial Growth Factor C (VEGF-C) and VEGF Receptor 3 (VEGFR-3) Axis",
+        "year": "2022",
+        "doi": "10.3389/fonc.2022.817660",
+        "authors": [
+          "Shuai-Jun Xu",
+          "Bin Jin",
+          "Wei-Jun Zhao",
+          "Xue-Xian Chen",
+          "Ying-Ying Tong"
+        ],
+        "container": "Frontiers in Oncology",
+        "url": "https://doi.org/10.3389/fonc.2022.817660",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Expression of Vascular Endothelial Growth Factor (VEGF), Vascular Endothelial Growth Factor Receptor-1 (VEGFR-1), Hypoxic Induced Factor-1alpha (HIF-1α) mRNA in Papillary Thyroid Microcarcinoma (PTMC)",
+        "year": "2005",
+        "doi": "10.16956/kjes.2005.5.1.18",
+        "authors": [
+          "Tae II Yoon",
+          "Yong Sik Jung",
+          "Jin Cheol Koe",
+          "Ki Baek Ham",
+          "Euy Young Soh"
+        ],
+        "container": "Korean Journal of Endocrine Surgery",
+        "url": "https://doi.org/10.16956/kjes.2005.5.1.18",
+        "retracted": false,
+        "match_score": 0.236
+      },
+      {
+        "source": "Crossref",
+        "title": "Vascular endothelial growth factor (VEGF)-D in association with VEGF receptor-3 in lymphatic metastasis of breast cancer",
+        "year": "2009",
+        "doi": "10.5732/cjc.009.10070",
+        "authors": [
+          "Ya-Ning Chen",
+          "Yan Gu"
+        ],
+        "container": "Chinese Journal of Cancer",
+        "url": "https://doi.org/10.5732/cjc.009.10070",
+        "retracted": false,
+        "match_score": 0.136
+      },
+      {
+        "source": "Crossref",
+        "title": "The potential clinical relevance of serum vascular endothelial growth factor (VEGF) and VEGF-C in recurrent papillary thyroid carcinoma",
+        "year": "2008",
+        "doi": "10.1016/j.surg.2008.07.027",
+        "authors": [
+          "Xiao-Min Yu",
+          "Chung-Yau Lo",
+          "Alfred King-Yin Lam",
+          "Brian Hung-Hin Lang",
+          "Pauline Leung"
+        ],
+        "container": "Surgery",
+        "url": "https://doi.org/10.1016/j.surg.2008.07.027",
+        "retracted": false,
+        "match_score": 0.136
+      },
+      {
+        "source": "Crossref",
+        "title": "Vascular Endothelial Growth Factor (VEGF) and Epidermal Growth Factor (EGF) in Papillary Thyroid Cancer",
+        "year": "2012",
+        "doi": "10.5772/37571",
+        "authors": [
+          "Aleksander Konturek",
+          "Marcin Barczynski"
+        ],
+        "container": "Thyroid and Parathyroid Diseases - New Insights into Some Old and Some New Issues",
+        "url": "https://doi.org/10.5772/37571",
+        "retracted": false,
+        "match_score": 0.107
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:9f634b624f98606bd3874e07": {
+    "online_status": "likely",
+    "confidence": 0.739,
+    "query": {
+      "doi": "",
+      "title": "Wang Y, Zong H, Zhou H",
+      "author": "Wang Zong Zhou",
+      "container": "",
+      "year": "2021",
+      "bibliographic": "Wang Y, Zong H, Zhou H. Circular RNA circ_0062389 modulates papillary thyroid carcinoma progression via the miR-1179/high mobility group box 1 axis [J]. Bioengineered, 2021, 12(1): 1484–1494."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Circular RNA circ_0062389 modulates papillary thyroid carcinoma progression via the miR-1179/high mobility group box 1 axis",
+        "year": "2021",
+        "doi": "10.1080/21655979.2021.1914470",
+        "authors": [
+          "Yujuan Wang",
+          "Huafeng Zong",
+          "Haicheng Zhou"
+        ],
+        "container": "Bioengineered",
+        "url": "https://doi.org/10.1080/21655979.2021.1914470",
+        "retracted": false,
+        "match_score": 0.739
+      },
+      {
+        "source": "Crossref",
+        "title": "Circular RNA circ_0001162 promotes cell proliferation and invasion of glioma via the miR-936/ERBB4 axis",
+        "year": "2021",
+        "doi": "10.1080/21655979.2021.1932221",
+        "authors": [
+          "Dexiang Zhou",
+          "Xiaofeng Lin",
+          "Peng Wang",
+          "Yong Yang",
+          "Jiantao Zheng"
+        ],
+        "container": "Bioengineered",
+        "url": "https://doi.org/10.1080/21655979.2021.1932221",
+        "retracted": false,
+        "match_score": 0.408
+      },
+      {
+        "source": "Crossref",
+        "title": "The long non-coding RNA NNT-AS1 promotes clear cell renal cell carcinoma progression via regulation of the miR-137/ Y-box binding protein 1 axis",
+        "year": "2021",
+        "doi": "10.1080/21655979.2021.1992330",
+        "authors": [
+          "Yadi Zhou",
+          "Zhenghao Zhang",
+          "Mingyi Wo",
+          "Wenfang Xu"
+        ],
+        "container": "Bioengineered",
+        "url": "https://doi.org/10.1080/21655979.2021.1992330",
+        "retracted": false,
+        "match_score": 0.388
+      },
+      {
+        "source": "Crossref",
+        "title": "Circular RNA hsa_circ_0033144 (CircBCL11B) regulates oral squamous cell carcinoma progression via the miR-579/LASP1 axis",
+        "year": "2021",
+        "doi": "10.1080/21655979.2021.1953214",
+        "authors": [
+          "Wei Zeng",
+          "Mengmeng Guo",
+          "Lin Yao",
+          "Zhang Deng"
+        ],
+        "container": "Bioengineered",
+        "url": "https://doi.org/10.1080/21655979.2021.1953214",
+        "retracted": false,
+        "match_score": 0.367
+      },
+      {
+        "source": "Crossref",
+        "title": "Circular RNA circ_UBAP2 facilitates the progression of osteosarcoma by regulating microRNA miR-637/high-mobility group box (HMGB) 2 axis",
+        "year": "2022",
+        "doi": "10.1080/21655979.2022.2033447",
+        "authors": [
+          "Weiguo Ma",
+          "Xin Zhao",
+          "Yun Gao",
+          "Xiaobin Yao",
+          "Junhua Zhang"
+        ],
+        "container": "Bioengineered",
+        "url": "https://doi.org/10.1080/21655979.2022.2033447",
+        "retracted": false,
+        "match_score": 0.338
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout",
+      "official_site: HTTPError"
+    ]
+  },
+  "title:a852ea31b2326e8b7fe5c4d1": {
+    "online_status": "not_found",
+    "confidence": 0.16,
+    "query": {
+      "doi": "",
+      "title": "余小情, 傅晓红, 沈燕, 等",
+      "author": "",
+      "container": "",
+      "year": "2023",
+      "bibliographic": "余小情, 傅晓红, 沈燕, 等. 超声特征预测甲状腺微小乳头状癌颈部淋巴转移的相关因素分析 [J]. 2023, 39(11): 1212–1215."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "红色小象",
+        "year": "2023",
+        "doi": "10.2307/jj.8595646.78",
+        "authors": [
+          "Zao Bubu"
+        ],
+        "container": "Writing Woman Anthology",
+        "url": "https://doi.org/10.2307/jj.8595646.78",
+        "retracted": false,
+        "match_score": 0.16
+      },
+      {
+        "source": "Crossref",
+        "title": "The Value of Multimodal Ultrasound in Predicting Lymph Node Metastasis in the Central Neck Region of Thyroid Papillary Carcinoma",
+        "year": "2023",
+        "doi": "10.12677/acm.2023.134923",
+        "authors": [
+          "思瑶 李"
+        ],
+        "container": "Advances in Clinical Medicine",
+        "url": "https://doi.org/10.12677/acm.2023.134923",
+        "retracted": false,
+        "match_score": 0.16
+      },
+      {
+        "source": "Crossref",
+        "title": "Analysis of Predictive Factors for Central Lymph Node Metastasis in 103 Cases of Micropapillary Thyroid Carcinoma",
+        "year": "2024",
+        "doi": "10.12677/acm.2024.1482323",
+        "authors": [
+          "淼 张"
+        ],
+        "container": "Advances in Clinical Medicine",
+        "url": "https://doi.org/10.12677/acm.2024.1482323",
+        "retracted": false,
+        "match_score": 0.08
+      },
+      {
+        "source": "Crossref",
+        "title": "Analysis of Clinical Factors Related to Central Lymph Node Metastasis in Papillary Thyroid Carcinoma",
+        "year": "2024",
+        "doi": "10.12677/acm.2024.1461869",
+        "authors": [
+          "中音 方"
+        ],
+        "container": "Advances in Clinical Medicine",
+        "url": "https://doi.org/10.12677/acm.2024.1461869",
+        "retracted": false,
+        "match_score": 0.08
+      },
+      {
+        "source": "Crossref",
+        "title": "Preoperative Diagnosis of Cervical Lymph Node Metastasis in Papillary Thyroid Carcinoma",
+        "year": "2024",
+        "doi": "10.12677/acm.2024.14123182",
+        "authors": [
+          "瑜瑜 叶"
+        ],
+        "container": "Advances in Clinical Medicine",
+        "url": "https://doi.org/10.12677/acm.2024.14123182",
+        "retracted": false,
+        "match_score": 0.08
+      }
+    ],
+    "problems": [
+      "partial_source_error",
+      "title_low_similarity"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:c0451cc64631f51289dfd533": {
+    "online_status": "verified",
+    "confidence": 1.0,
+    "query": {
+      "doi": "",
+      "title": "Significance of TNF-α and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma [J]",
+      "author": "Kobawala Trivedi Gajjar",
+      "container": "Journal of thyroid research,",
+      "year": "2016",
+      "bibliographic": "Kobawala T P, Trivedi T I, Gajjar K K, et al. Significance of TNF-α and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma [J]. Journal of thyroid research, 2016, 2016: 8143695."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Significance of TNF-<i>α</i>and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma",
+        "year": "2016",
+        "doi": "10.1155/2016/8143695",
+        "authors": [
+          "Toral P. Kobawala",
+          "Trupti I. Trivedi",
+          "Kinjal K. Gajjar",
+          "Darshita H. Patel",
+          "Girish H. Patel"
+        ],
+        "container": "Journal of Thyroid Research",
+        "url": "https://doi.org/10.1155/2016/8143695",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Significance of TNF-<i>α</i>and the Adhesion Molecules: L-Selectin and VCAM-1 in Papillary Thyroid Carcinoma",
+        "year": "2016",
+        "doi": "10.1155/2016/8143695",
+        "authors": [
+          "Toral P. Kobawala",
+          "Trupti I. Trivedi",
+          "Kinjal K. Gajjar",
+          "Darshita H. Patel",
+          "Girish H. Patel"
+        ],
+        "container": "Journal of Thyroid Research",
+        "url": "https://doi.org/10.1155/2016/8143695",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Significance of Interleukin-6 in Papillary Thyroid Carcinoma",
+        "year": "2016",
+        "doi": "10.1155/2016/6178921",
+        "authors": [
+          "Toral P. Kobawala",
+          "Trupti I. Trivedi",
+          "Kinjal K. Gajjar",
+          "Darshita H. Patel",
+          "Girish H. Patel"
+        ],
+        "container": "Journal of Thyroid Research",
+        "url": "https://doi.org/10.1155/2016/6178921",
+        "retracted": false,
+        "match_score": 0.656
+      },
+      {
+        "source": "Crossref",
+        "title": "Adhesion Molecules (ICAM-1, VCAM-1, E-selectin, P-selectin)",
+        "year": "2016",
+        "doi": "10.1201/9780429196393-39",
+        "authors": [],
+        "container": "Adhesion Molecules",
+        "url": "https://doi.org/10.1201/9780429196393-39",
+        "retracted": false,
+        "match_score": 0.436
+      },
+      {
+        "source": "Crossref",
+        "title": "Adhesion Molecules (ICAM-1, VCAM-1, E-selectin, P-selectin)",
+        "year": "2016",
+        "doi": "10.1201/9780429196393-39",
+        "authors": [],
+        "container": "Adhesion Molecules",
+        "url": "https://doi.org/10.1201/9780429196393-39",
+        "retracted": false,
+        "match_score": 0.436
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:3c00a7a9cf1d98ef016209ca": {
+    "online_status": "not_found",
+    "confidence": 0.0,
+    "query": {
+      "doi": "",
+      "title": "葛均波, 徐永健, 王辰",
+      "author": "",
+      "container": "",
+      "year": "2018",
+      "bibliographic": "葛均波, 徐永健, 王辰. 内科学 [M]. 北京: 人民卫生出版社, 2018:693-694."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "永續健保與社會團結",
+        "year": "2022",
+        "doi": "10.53106/241553062022090071001",
+        "authors": [
+          "葉明叡 葉明叡"
+        ],
+        "container": "月旦醫事法報告",
+        "url": "https://doi.org/10.53106/241553062022090071001",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "王小波論--경험이성주의와 反유토피아주의 고찰",
+        "year": "2011",
+        "doi": "10.18212/cccs.2011..19.010",
+        "authors": [
+          "조혜영"
+        ],
+        "container": "The Journal of Chinese Cultural Studies",
+        "url": "https://doi.org/10.18212/cccs.2011..19.010",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Roger Yonchien Tsien, 錢永健 2004 Wolf Prize in Medicine",
+        "year": "2025",
+        "doi": "10.1142/9789819823338_0009",
+        "authors": [
+          "Keith K. Lau",
+          "Thomas M. S. Chang",
+          "Alfreda Stadlin"
+        ],
+        "container": "Fields Medal and Wolf Prize Laureates of Chinese Descent",
+        "url": "https://doi.org/10.1142/9789819823338_0009",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "醫者精神永存：緬懷徐茂銘教授 (1935-2022)",
+        "year": "2022",
+        "doi": "10.53106/199457952022111606001",
+        "authors": [
+          "王拔群 王拔群"
+        ],
+        "container": "醫療品質雜誌",
+        "url": "https://doi.org/10.53106/199457952022111606001",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "健保永續發展藍圖──健保會的運作與改革",
+        "year": "2022",
+        "doi": "10.53106/241553062022090071002",
+        "authors": [
+          "楊哲銘 楊哲銘"
+        ],
+        "container": "月旦醫事法報告",
+        "url": "https://doi.org/10.53106/241553062022090071002",
+        "retracted": false,
+        "match_score": 0.0
+      }
+    ],
+    "problems": [
+      "partial_source_error",
+      "title_low_similarity",
+      "year_mismatch"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:c535c600413db63e6a67eeb9": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Hashimoto's thyroiditis: Epidemiology, pathogenesis, clinic and therapy [J]",
+      "author": "Ragusa Fallahi Elia",
+      "container": "",
+      "year": "2019",
+      "bibliographic": "Ragusa F, Fallahi P, Elia G, et al. Hashimoto's thyroiditis: Epidemiology, pathogenesis, clinic and therapy [J]. Best Pract Res Clin Endocrinol Metab, 2019, 33(6): 101367."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Hashimotos’ thyroiditis: Epidemiology, pathogenesis, clinic and therapy",
+        "year": "2019",
+        "doi": "10.1016/j.beem.2019.101367",
+        "authors": [
+          "Francesca Ragusa",
+          "Poupak Fallahi",
+          "Giusy Elia",
+          "Debora Gonnella",
+          "Sabrina Rosaria Paparo"
+        ],
+        "container": "Best Practice &amp; Research Clinical Endocrinology &amp; Metabolism",
+        "url": "https://doi.org/10.1016/j.beem.2019.101367",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Hashimoto Thyroiditis",
+        "year": "2020",
+        "doi": "10.32388/riqaka",
+        "authors": [],
+        "container": "Definitions",
+        "url": "https://doi.org/10.32388/riqaka",
+        "retracted": false,
+        "match_score": 0.287
+      },
+      {
+        "source": "Crossref",
+        "title": "Microorganisms in Pathogenesis and Management of Hashimoto Thyroiditis",
+        "year": "2022",
+        "doi": "10.1007/978-981-19-1946-6_15",
+        "authors": [
+          "Y. Cuan-Baltazar",
+          "E. Soto-Vega"
+        ],
+        "container": "Role of Microorganisms in Pathogenesis and Management of Autoimmune Diseases",
+        "url": "https://doi.org/10.1007/978-981-19-1946-6_15",
+        "retracted": false,
+        "match_score": 0.21
+      },
+      {
+        "source": "Crossref",
+        "title": "Hashimoto thyroiditis",
+        "year": "2023",
+        "doi": "10.53347/rid-176295",
+        "authors": [
+          "Jorge Ariel Torres"
+        ],
+        "container": "Radiopaedia.org",
+        "url": "https://doi.org/10.53347/rid-176295",
+        "retracted": false,
+        "match_score": 0.107
+      },
+      {
+        "source": "Crossref",
+        "title": "Hashimoto Thyroiditis",
+        "year": "2016",
+        "doi": "10.1515/iupac.84.0615",
+        "authors": [
+          "Douglas M. Templeton",
+          "Michael Schwenk",
+          "Reinhild Klein",
+          "John H. Duffus"
+        ],
+        "container": "IUPAC Standards Online",
+        "url": "https://doi.org/10.1515/iupac.84.0615",
+        "retracted": false,
+        "match_score": 0.107
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:e3af49d7051c9c241ef3be87": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Nomogram for Predicting Central Lymph Node Metastasis in Papillary Thyroid Cancer: A Retrospective Cohort Study of Two Clinical Centers [J]",
+      "author": "Yang Heng Lin",
+      "container": "",
+      "year": "2020",
+      "bibliographic": "Yang Z, Heng Y, Lin J, et al. Nomogram for Predicting Central Lymph Node Metastasis in Papillary Thyroid Cancer: A Retrospective Cohort Study of Two Clinical Centers [J]. 2020, (4)."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Nomogram for Predicting Central Lymph Node Metastasis in Papillary Thyroid Cancer: A Retrospective Cohort Study of Two Clinical Centers",
+        "year": "2020",
+        "doi": "10.4143/crt.2020.254",
+        "authors": [
+          "Zheyu Yang",
+          "Yu Heng",
+          "Jianwei Lin",
+          "Chenghao Lu",
+          "Dingye Yu"
+        ],
+        "container": "Cancer Research and Treatment",
+        "url": "https://doi.org/10.4143/crt.2020.254",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "A Nomogram Predicting Central Lymph Node Metastasis for Patients with Papillary Thyroid Cancer",
+        "year": "2021",
+        "doi": "10.21203/rs.3.rs-182268/v1",
+        "authors": [
+          "Yu Min",
+          "Yang Feng",
+          "Ke Xiang",
+          "Hang Chen",
+          "Xing Wang"
+        ],
+        "container": "",
+        "url": "https://doi.org/10.21203/rs.3.rs-182268/v1",
+        "retracted": false,
+        "match_score": 0.525
+      },
+      {
+        "source": "Crossref",
+        "title": "Nomogram for predicting central lymph node metastasis in papillary thyroid microcarcinoma: A retrospective cohort study of 8668 patients",
+        "year": "2018",
+        "doi": "10.1016/j.ijsu.2018.05.023",
+        "authors": [
+          "Yunjun Wang",
+          "Qing Guan",
+          "Jun Xiang"
+        ],
+        "container": "International Journal of Surgery",
+        "url": "https://doi.org/10.1016/j.ijsu.2018.05.023",
+        "retracted": false,
+        "match_score": 0.343
+      },
+      {
+        "source": "Crossref",
+        "title": "Nomogram for predicting central lymph node metastasis in T1-T2 papillary thyroid cancer with no lateral lymph node metastasis",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1112506",
+        "authors": [
+          "Yubo Sun",
+          "Wei Sun",
+          "Jingzhe Xiang",
+          "Hao Zhang"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1112506",
+        "retracted": false,
+        "match_score": 0.299
+      },
+      {
+        "source": "Crossref",
+        "title": "Corrigendum: Nomogram for predicting central lymph node metastasis in T1-T2 papillary thyroid cancer with no lateral lymph node metastasis",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1148920",
+        "authors": [
+          "Yubo Sun",
+          "Wei Sun",
+          "Jingzhe Xiang",
+          "Hao Zhang"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1148920",
+        "retracted": false,
+        "match_score": 0.299
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:acf0fd9763f5a7eaa25ebaf9": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Prognosis of patients with papillary thyroid carcinoma having clinically apparent metastasis to the lateral compartment [J]",
+      "author": "Ito Fukushima Tomoda",
+      "container": "",
+      "year": "2009",
+      "bibliographic": "Ito Y, Fukushima M, Tomoda C, et al. Prognosis of patients with papillary thyroid carcinoma having clinically apparent metastasis to the lateral compartment [J]. Endocr J, 2009, 56(6): 759–766."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Prognosis of Patients with Papillary Thyroid Carcinoma Having Clinically Apparent Metastasis to the Lateral Compartment",
+        "year": "2009",
+        "doi": "10.1507/endocrj.k09e-025",
+        "authors": [
+          "Yasuhiro ITO",
+          "Mitsuhiro FUKUSHIMA",
+          "Chisato TOMODA",
+          "Hiroyuki INOUE",
+          "Minoru KIHARA"
+        ],
+        "container": "Endocrine Journal",
+        "url": "https://doi.org/10.1507/endocrj.k09e-025",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Prognosis of Patients with Papillary Thyroid Carcinoma Having Clinically Apparent Metastasis to the Lateral Compartment",
+        "year": "2009",
+        "doi": "10.1507/endocrj.k09e-025",
+        "authors": [
+          "Yasuhiro ITO",
+          "Mitsuhiro FUKUSHIMA",
+          "Chisato TOMODA",
+          "Hiroyuki INOUE",
+          "Minoru KIHARA"
+        ],
+        "container": "Endocrine Journal",
+        "url": "https://doi.org/10.1507/endocrj.k09e-025",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Macrofollicular Variant of Papillary Thyroid Carcinoma: Its Clinicopathological Features and Long-Term Prognosis",
+        "year": "2009",
+        "doi": "10.1507/endocrj.k08e-346",
+        "authors": [
+          "Mitsuhiro FUKUSHIMA",
+          "Yasuhiro ITO",
+          "Mitsuyoshi HIROKAWA",
+          "Kaoru KOBAYASHI",
+          "Akihiro MIYA"
+        ],
+        "container": "Endocrine Journal",
+        "url": "https://doi.org/10.1507/endocrj.k08e-346",
+        "retracted": false,
+        "match_score": 0.479
+      },
+      {
+        "source": "Crossref",
+        "title": "Clinical Significance of Extrathyroid Extension to the Parathyroid Gland of Papillary Thyroid Carcinoma",
+        "year": "2009",
+        "doi": "10.1507/endocrj.k08e-297",
+        "authors": [
+          "Yasuhiro ITO",
+          "Kennichi KAKUDO",
+          "Mitsuyoshi HIROKAWA",
+          "Mitsuhiro FUKUSHIMA",
+          "Chisato TOMODA"
+        ],
+        "container": "Endocrine Journal",
+        "url": "https://doi.org/10.1507/endocrj.k08e-297",
+        "retracted": false,
+        "match_score": 0.469
+      },
+      {
+        "source": "Crossref",
+        "title": "Prognosis and prognostic factors of patients with papillary carcinoma showing distant metastasis at surgery (M1 patients) in Japan",
+        "year": "2010",
+        "doi": "10.1507/endocrj.k10e-019",
+        "authors": [
+          "Yasuhiro Ito",
+          "Hiroo Masuoka",
+          "Mitsuhiro Fukushima",
+          "Hiroyuki Inoue",
+          "Minoru Kihara"
+        ],
+        "container": "Endocrine Journal",
+        "url": "https://doi.org/10.1507/endocrj.k10e-019",
+        "retracted": false,
+        "match_score": 0.455
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:8b28015243d27bc5a3b64296": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas [J]",
+      "author": "Zhao Sun Luo",
+      "container": "",
+      "year": "2020",
+      "bibliographic": "Zhao L, Sun X, Luo Y, et al. Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas [J]. 2020, 49: 151647."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas",
+        "year": "2020",
+        "doi": "10.1016/j.anndiagpath.2020.151647",
+        "authors": [
+          "Ling Zhao",
+          "Xiaoya Sun",
+          "Yukun Luo",
+          "Fulin Wang",
+          "Zhaohui Lyu"
+        ],
+        "container": "Annals of Diagnostic Pathology",
+        "url": "https://doi.org/10.1016/j.anndiagpath.2020.151647",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Clinical and pathologic predictors of lymph node metastasis in papillary thyroid microcarcinomas",
+        "year": "2020",
+        "doi": "10.1016/j.anndiagpath.2020.151647",
+        "authors": [
+          "Ling Zhao",
+          "Xiaoya Sun",
+          "Yukun Luo",
+          "Fulin Wang",
+          "Zhaohui Lyu"
+        ],
+        "container": "Annals of Diagnostic Pathology",
+        "url": "https://doi.org/10.1016/j.anndiagpath.2020.151647",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Clinical and Pathologic Predictors of Lymph Node Metastasis and Recurrence in Papillary Thyroid Microcarcinoma",
+        "year": "2016",
+        "doi": "10.1089/thy.2015.0429",
+        "authors": [
+          "Saaduddin Siddiqui",
+          "Michael G. White",
+          "Tatjana Antic",
+          "Raymon H. Grogan",
+          "Peter Angelos"
+        ],
+        "container": "Thyroid®",
+        "url": "https://doi.org/10.1089/thy.2015.0429",
+        "retracted": false,
+        "match_score": 0.396
+      },
+      {
+        "source": "Crossref",
+        "title": "Clinical and Pathologic Predictors of Lymph Node Metastasis and Recurrence in Papillary Thyroid Microcarcinoma",
+        "year": "2016",
+        "doi": "10.1089/thy.2015.0429",
+        "authors": [
+          "Saaduddin Siddiqui",
+          "Michael G. White",
+          "Tatjana Antic",
+          "Raymon H. Grogan",
+          "Peter Angelos"
+        ],
+        "container": "Thyroid®",
+        "url": "https://doi.org/10.1089/thy.2015.0429",
+        "retracted": false,
+        "match_score": 0.396
+      },
+      {
+        "source": "Crossref",
+        "title": "Lymph Node Metastasis From 259 Papillary Thyroid Microcarcinomas",
+        "year": "2003",
+        "doi": "10.1097/01.sla.0000055273.58908.19",
+        "authors": [
+          "Nobuyuki Wada",
+          "Quan-Yang Duh",
+          "Kiminori Sugino",
+          "Hiroyuki Iwasaki",
+          "Kaori Kameyama"
+        ],
+        "container": "Annals of Surgery",
+        "url": "https://doi.org/10.1097/01.sla.0000055273.58908.19",
+        "retracted": false,
+        "match_score": 0.313
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:08c38fe84f93b640727dd644": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "The 2024 revised clinical guidelines on the management of thyroid tumors by the Japan Association of Endocrine Surgery [J]",
+      "author": "Sugitani Kiyota Ito",
+      "container": "",
+      "year": "2025",
+      "bibliographic": "Sugitani I, Kiyota N, Ito Y, et al. The 2024 revised clinical guidelines on the management of thyroid tumors by the Japan Association of Endocrine Surgery [J]. Endocr J, 2025, 72(5): 545–635."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "The 2024 revised clinical guidelines on the management of thyroid tumors by the Japan Association of Endocrine Surgery",
+        "year": "2025",
+        "doi": "10.1507/endocrj.ej24-0644",
+        "authors": [
+          "Iwao Sugitani",
+          "Naomi Kiyota",
+          "Yasuhiro Ito",
+          "Naoyoshi Onoda",
+          "Tomo Hiromasa"
+        ],
+        "container": "Endocrine Journal",
+        "url": "https://doi.org/10.1507/endocrj.ej24-0644",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "The revised clinical practice guidelines on the management of thyroid tumors by the Japan Associations of Endocrine Surgeons: Core questions and recommendations for treatments of thyroid cancer",
+        "year": "2020",
+        "doi": "10.1507/endocrj.ej20-0025",
+        "authors": [
+          "Yasuhiro Ito",
+          "Naoyoshi Onoda",
+          "Takahiro Okamoto"
+        ],
+        "container": "Endocrine Journal",
+        "url": "https://doi.org/10.1507/endocrj.ej20-0025",
+        "retracted": false,
+        "match_score": 0.257
+      },
+      {
+        "source": "Crossref",
+        "title": "2016 Guidelines for the management of thyroid storm from The Japan Thyroid Association and Japan Endocrine Society (First edition)",
+        "year": "2016",
+        "doi": "10.1507/endocrj.ej16-0336",
+        "authors": [
+          "Tetsurou Satoh",
+          "Osamu Isozaki",
+          "Atsushi Suzuki",
+          "Shu Wakino",
+          "Tadao Iburi"
+        ],
+        "container": "Endocrine Journal",
+        "url": "https://doi.org/10.1507/endocrj.ej16-0336",
+        "retracted": false,
+        "match_score": 0.238
+      },
+      {
+        "source": "Crossref",
+        "title": "Revised American Thyroid Association Guidelines for the Management of Medullary Thyroid Carcinoma",
+        "year": "2015",
+        "doi": "10.1089/thy.2014.0335",
+        "authors": [
+          "Samuel A. Wells",
+          "Sylvia L. Asa",
+          "Henning Dralle",
+          "Rossella Elisei",
+          "Douglas B. Evans"
+        ],
+        "container": "Thyroid®",
+        "url": "https://doi.org/10.1089/thy.2014.0335",
+        "retracted": false,
+        "match_score": 0.182
+      },
+      {
+        "source": "Crossref",
+        "title": "Revised American Thyroid Association Guidelines for the Management of Medullary Thyroid Carcinoma",
+        "year": "2018",
+        "doi": "10.1542/peds.2018-3062",
+        "authors": [],
+        "container": "Pediatrics",
+        "url": "https://doi.org/10.1542/peds.2018-3062",
+        "retracted": false,
+        "match_score": 0.182
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:49037357e76bffdbd825cab7": {
+    "online_status": "likely",
+    "confidence": 0.729,
+    "query": {
+      "doi": "",
+      "title": "Zheng K, Mao J",
+      "author": "Zheng Mao",
+      "container": "Clinical Medicine Insights Oncology,",
+      "year": "2024",
+      "bibliographic": "Zheng K, Mao J. Comparison and Analysis of Clinical Features of Papillary Thyroid Cancer Complicated With Hashimoto's Thyroiditis [J]. Clinical Medicine Insights Oncology, 2024, 18: 11795549241287085."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Comparison and Analysis of Clinical Features of Papillary Thyroid Cancer Complicated With Hashimoto’s Thyroiditis",
+        "year": "2024",
+        "doi": "10.1177/11795549241287085",
+        "authors": [
+          "Ke Zheng",
+          "Jingxin Mao"
+        ],
+        "container": "Clinical Medicine Insights: Oncology",
+        "url": "https://doi.org/10.1177/11795549241287085",
+        "retracted": false,
+        "match_score": 0.729
+      },
+      {
+        "source": "PubMed",
+        "title": "Comparison and Analysis of Clinical Features of Papillary Thyroid Cancer Complicated With Hashimoto's Thyroiditis.",
+        "year": "2024",
+        "doi": "10.1177/11795549241287085",
+        "authors": [
+          "Zheng K",
+          "Mao J"
+        ],
+        "container": "Clinical Medicine Insights. Oncology",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/39429680/",
+        "retracted": false,
+        "match_score": 0.729
+      },
+      {
+        "source": "Crossref",
+        "title": "Surgical Complications in Papillary Thyroid Cancer Patients with Cervical Lymph Node Metastases",
+        "year": "2024",
+        "doi": "10.1177/11795549241233692",
+        "authors": [
+          "Minh-Chien Pham",
+          "Thang Nguyen",
+          "Hong-Phong Nguyen"
+        ],
+        "container": "Clinical Medicine Insights: Oncology",
+        "url": "https://doi.org/10.1177/11795549241233692",
+        "retracted": false,
+        "match_score": 0.356
+      },
+      {
+        "source": "Crossref",
+        "title": "Hashimoto thyroiditis interfered with BRAF V600E mutation in papillary thyroid cancer",
+        "year": "2023",
+        "doi": "10.21203/rs.3.rs-2617337/v1",
+        "authors": [
+          "Yilun Lu",
+          "Yuezhong Ren"
+        ],
+        "container": "",
+        "url": "https://doi.org/10.21203/rs.3.rs-2617337/v1",
+        "retracted": false,
+        "match_score": 0.274
+      },
+      {
+        "source": "Crossref",
+        "title": "Zheng (征) as zheng (正)?",
+        "year": "2015",
+        "doi": "10.4324/9781315740706-13",
+        "authors": [
+          "Ellen Y. Zhang"
+        ],
+        "container": "Chinese Just War Ethics",
+        "url": "https://doi.org/10.4324/9781315740706-13",
+        "retracted": false,
+        "match_score": 0.21
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout",
+      "official_site: HTTPError"
+    ]
+  },
+  "title:2251fdecd45065c9b6d84da3": {
+    "online_status": "verified",
+    "confidence": 1.0,
+    "query": {
+      "doi": "",
+      "title": "A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer [J]",
+      "author": "Liu Hong",
+      "container": "Frontiers in endocrinology,",
+      "year": "2023",
+      "bibliographic": "Liu W C, Li M P, Hong W Y, et al. A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer [J]. Frontiers in endocrinology, 2023, 14: 1142796."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1142796",
+        "authors": [
+          "Wen-Cai Liu",
+          "Meng-Pan Li",
+          "Wen-Yuan Hong",
+          "Yan-Xin Zhong",
+          "Bo-Lin Sun"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1142796",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "A practical dynamic nomogram model for predicting bone metastasis in patients with thyroid cancer",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1142796",
+        "authors": [
+          "Wen-Cai Liu",
+          "Meng-Pan Li",
+          "Wen-Yuan Hong",
+          "Yan-Xin Zhong",
+          "Bo-Lin Sun"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1142796",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Nomogram for predicting central lymph node metastasis in T1-T2 papillary thyroid cancer with no lateral lymph node metastasis",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1112506",
+        "authors": [
+          "Yubo Sun",
+          "Wei Sun",
+          "Jingzhe Xiang",
+          "Hao Zhang"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1112506",
+        "retracted": false,
+        "match_score": 0.55
+      },
+      {
+        "source": "Crossref",
+        "title": "Corrigendum: Nomogram for predicting central lymph node metastasis in T1-T2 papillary thyroid cancer with no lateral lymph node metastasis",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1148920",
+        "authors": [
+          "Yubo Sun",
+          "Wei Sun",
+          "Jingzhe Xiang",
+          "Hao Zhang"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1148920",
+        "retracted": false,
+        "match_score": 0.522
+      },
+      {
+        "source": "Crossref",
+        "title": "Nomogram for predicting skip metastasis in cN0 papillary thyroid cancer patients at increased risk of lymph node metastasis",
+        "year": "2023",
+        "doi": "10.17219/acem/157240",
+        "authors": [
+          "Fang Li",
+          "Fang-jian Zhou",
+          "Tong-wei Zhu",
+          "Hua-li Qiu",
+          "Xiao-ting Zhang"
+        ],
+        "container": "Advances in Clinical and Experimental Medicine",
+        "url": "https://doi.org/10.17219/acem/157240",
+        "retracted": false,
+        "match_score": 0.446
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:9dc054c840bfc1c802ef9a8a": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict central lymph node metastasis [J]",
+      "author": "Zhao Zhu",
+      "container": "",
+      "year": "2021",
+      "bibliographic": "Zhao W, He L, Zhu J, et al. A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict central lymph node metastasis [J]. 2021, 94(2): 310–321."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict central lymph node metastasis",
+        "year": "2021",
+        "doi": "10.1111/cen.14302",
+        "authors": [
+          "Wanjun Zhao",
+          "Linye He",
+          "Jingqiang Zhu",
+          "Anping Su"
+        ],
+        "container": "Clinical Endocrinology",
+        "url": "https://doi.org/10.1111/cen.14302",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Nomogram model based on preoperative serum thyroglobulin and clinical characteristics of papillary thyroid carcinoma to predict cervical lymph node metastasis",
+        "year": "2022",
+        "doi": "10.3389/fendo.2022.937049",
+        "authors": [
+          "Qungang Chang",
+          "Jieming Zhang",
+          "Yaqian Wang",
+          "Hongqiang Li",
+          "Xin Du"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2022.937049",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "A nomogram model based on the preoperative clinical characteristics of papillary thyroid carcinoma with Hashimoto's thyroiditis to predict central lymph node metastasis",
+        "year": "2021",
+        "doi": "10.1111/cen.14302",
+        "authors": [
+          "Wanjun Zhao",
+          "Linye He",
+          "Jingqiang Zhu",
+          "Anping Su"
+        ],
+        "container": "Clinical Endocrinology",
+        "url": "https://doi.org/10.1111/cen.14302",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "A Nomogram Based on Clinical and Ultrasound Characteristics to Predict Central Lymph Node Metastasis of Papillary Thyroid Carcinoma",
+        "year": "2021",
+        "doi": "10.3389/fendo.2021.666315",
+        "authors": [
+          "Jia-Wei Feng",
+          "Li-Zhao Hong",
+          "Fei Wang",
+          "Wan-Xiao Wu",
+          "Jun Hu"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2021.666315",
+        "retracted": false,
+        "match_score": 0.695
+      },
+      {
+        "source": "Crossref",
+        "title": "Review for \"Nomogram Model Based on Iodine Nutrition and Clinical Characteristics of Papillary Thyroid Carcinoma to Predict Lateral Lymph Node Metastasis\"",
+        "year": "2022",
+        "doi": "10.1177/10732748231193248/v1/review2",
+        "authors": [],
+        "container": "",
+        "url": "https://doi.org/10.1177/10732748231193248/v1/review2",
+        "retracted": false,
+        "match_score": 0.545
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:9f1a38985ff7c5f895247f83": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study [J]",
+      "author": "Zhong Zhang Xiao",
+      "container": "",
+      "year": "2022",
+      "bibliographic": "Zhong M, Zhang Z, Xiao Y, et al. The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study [J]. 2022, 2022: 4412725."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study",
+        "year": "2022",
+        "doi": "10.1155/2022/4412725",
+        "authors": [
+          "Minying Zhong",
+          "Zhaoming Zhang",
+          "Yisheng Xiao",
+          "Yanping He",
+          "Yongyu Chen"
+        ],
+        "container": "International Journal of Endocrinology",
+        "url": "https://doi.org/10.1155/2022/4412725",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "The Predictive Value of ACR TI-RADS Classification for Central Lymph Node Metastasis of Papillary Thyroid Carcinoma: A Retrospective Study",
+        "year": "2022",
+        "doi": "10.1155/2022/4412725",
+        "authors": [
+          "Minying Zhong",
+          "Zhaoming Zhang",
+          "Yisheng Xiao",
+          "Yanping He",
+          "Yongyu Chen"
+        ],
+        "container": "International Journal of Endocrinology",
+        "url": "https://doi.org/10.1155/2022/4412725",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "THE VALUE OF THE NOMOGRAM MODEL BASED ON ACR TI-RADS: PREDICTION OF THE CENTRAL CERVICAL LYMPH NODE METASTASIS IN THYROID PAPILLARY CARCINOMA",
+        "year": "2022",
+        "doi": "10.1016/j.ultrasmedbio.2022.04.045",
+        "authors": [
+          "Keyue Chen",
+          "Xiaomei Cheng",
+          "Haolin Shen",
+          "Shuping Yang"
+        ],
+        "container": "Ultrasound in Medicine &amp; Biology",
+        "url": "https://doi.org/10.1016/j.ultrasmedbio.2022.04.045",
+        "retracted": false,
+        "match_score": 0.573
+      },
+      {
+        "source": "Crossref",
+        "title": "THE VALUE OF THE NOMOGRAM MODEL BASED ON ACR TI-RADS: PREDICTION OF THE CENTRAL CERVICAL LYMPH NODE METASTASIS IN THYROID PAPILLARY CARCINOMA",
+        "year": "2022",
+        "doi": "10.1016/j.ultrasmedbio.2022.04.045",
+        "authors": [
+          "Keyue Chen",
+          "Xiaomei Cheng",
+          "Haolin Shen",
+          "Shuping Yang"
+        ],
+        "container": "Ultrasound in Medicine &amp; Biology",
+        "url": "https://doi.org/10.1016/j.ultrasmedbio.2022.04.045",
+        "retracted": false,
+        "match_score": 0.573
+      },
+      {
+        "source": "Crossref",
+        "title": "Application of decision tree algorithms to predict central lymph node metastasis in well-differentiated papillary thyroid carcinoma based on multimodal ultrasound parameters: a retrospective study",
+        "year": "2022",
+        "doi": "10.21203/rs.3.rs-1430736/v1",
+        "authors": [
+          "Fang Wan",
+          "Wen He",
+          "Wei Zhang",
+          "Hongxia Zhang",
+          "Yukang Zhang"
+        ],
+        "container": "",
+        "url": "https://doi.org/10.21203/rs.3.rs-1430736/v1",
+        "retracted": false,
+        "match_score": 0.468
+      }
+    ],
+    "problems": [],
+    "source_errors": []
+  },
+  "title:abf155946b2864c229e1032f": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients [J]",
+      "author": "Liu Xiao Chen",
+      "container": "",
+      "year": "2019",
+      "bibliographic": "Liu C, Xiao C, Chen J, et al. Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients [J]. 2019, 19(1): 622."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients",
+        "year": "2019",
+        "doi": "10.1186/s12885-019-5835-6",
+        "authors": [
+          "Chenxi Liu",
+          "Cheng Xiao",
+          "Jianjia Chen",
+          "Xiangyang Li",
+          "Zijian Feng"
+        ],
+        "container": "BMC Cancer",
+        "url": "https://doi.org/10.1186/s12885-019-5835-6",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Risk factor analysis for predicting cervical lymph node metastasis in papillary thyroid carcinoma: a study of 966 patients",
+        "year": "2019",
+        "doi": "10.1186/s12885-019-5835-6",
+        "authors": [
+          "Chenxi Liu",
+          "Cheng Xiao",
+          "Jianjia Chen",
+          "Xiangyang Li",
+          "Zijian Feng"
+        ],
+        "container": "BMC Cancer",
+        "url": "https://doi.org/10.1186/s12885-019-5835-6",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Related factor analysis for predicting large-volume central cervical lymph node metastasis in papillary thyroid carcinoma",
+        "year": "2022",
+        "doi": "10.3389/fendo.2022.935559",
+        "authors": [
+          "Li Tan",
+          "Jiaqi Ji",
+          "Gaowa Sharen",
+          "Yuewu Liu",
+          "Ke Lv"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2022.935559",
+        "retracted": false,
+        "match_score": 0.412
+      },
+      {
+        "source": "Crossref",
+        "title": "Related factor analysis for predicting large-volume central cervical lymph node metastasis in papillary thyroid carcinoma",
+        "year": "2022",
+        "doi": "10.3389/fendo.2022.935559",
+        "authors": [
+          "Li Tan",
+          "Jiaqi Ji",
+          "Gaowa Sharen",
+          "Yuewu Liu",
+          "Ke Lv"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2022.935559",
+        "retracted": false,
+        "match_score": 0.412
+      },
+      {
+        "source": "Crossref",
+        "title": "A nomogram for enhanced risk stratification for predicting cervical lymph node metastasis in papillary thyroid carcinoma patients",
+        "year": "2024",
+        "doi": "10.1007/s12672-024-01370-w",
+        "authors": [
+          "Lingxin Deng",
+          "Dilidaer Muhanhali",
+          "Zhilong Ai",
+          "Min Zhang",
+          "Yan Ling"
+        ],
+        "container": "Discover Oncology",
+        "url": "https://doi.org/10.1007/s12672-024-01370-w",
+        "retracted": false,
+        "match_score": 0.377
+      }
+    ],
+    "problems": [],
+    "source_errors": []
+  },
+  "title:3ef342ad8ccd784a4ca31792": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "AGK-BRAF is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma [J]",
+      "author": "Sisdelli Cordioli Vaisman",
+      "container": "",
+      "year": "2019",
+      "bibliographic": "Sisdelli L, Cordioli M, Vaisman F, et al. AGK-BRAF is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma [J]. Pediatric blood & cancer, 2019, 66(7): e27707."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "<i>AGK‐BRAF</i> is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma",
+        "year": "2019",
+        "doi": "10.1002/pbc.27707",
+        "authors": [
+          "Luiza Sisdelli",
+          "Maria Isabel Cunha Vieira Cordioli",
+          "Fernanda Vaisman",
+          "Lais Moraes",
+          "Gabriel Avelar Colozza‐Gama"
+        ],
+        "container": "Pediatric Blood &amp; Cancer",
+        "url": "https://doi.org/10.1002/pbc.27707",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "<i>AGK‐BRAF</i> is associated with distant metastasis and younger age in pediatric papillary thyroid carcinoma",
+        "year": "2019",
+        "doi": "10.1002/pbc.27707",
+        "authors": [
+          "Luiza Sisdelli",
+          "Maria Isabel Cunha Vieira Cordioli",
+          "Fernanda Vaisman",
+          "Lais Moraes",
+          "Gabriel Avelar Colozza‐Gama"
+        ],
+        "container": "Pediatric Blood &amp; Cancer",
+        "url": "https://doi.org/10.1002/pbc.27707",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Late distant metastasis from papillary carcinoma of thyroid gland",
+        "year": "2019",
+        "doi": "10.15406/jcpcr.2019.10.00384",
+        "authors": [
+          "Kamran Aryana",
+          "Rasoul Zakavi",
+          "N Mokhtari Amir Majdi"
+        ],
+        "container": "Journal of Cancer Prevention &amp; Current Research",
+        "url": "https://doi.org/10.15406/jcpcr.2019.10.00384",
+        "retracted": false,
+        "match_score": 0.442
+      },
+      {
+        "source": "Crossref",
+        "title": "Genetic Landscape of Papillary Thyroid Carcinoma and Nuclear Architecture: An Overview Comparing Pediatric and Adult Populations",
+        "year": "2020",
+        "doi": "10.3390/cancers12113146",
+        "authors": [
+          "Aline Rangel-Pozzo",
+          "Luiza Sisdelli",
+          "Maria Isabel V. Cordioli",
+          "Fernanda Vaisman",
+          "Paola Caria"
+        ],
+        "container": "Cancers",
+        "url": "https://doi.org/10.3390/cancers12113146",
+        "retracted": false,
+        "match_score": 0.427
+      },
+      {
+        "source": "Crossref",
+        "title": "Abstract 3553: Three-dimensional (3D) telomere signatures of sporadic pediatric papillary thyroid carcinoma (PTC)",
+        "year": "2020",
+        "doi": "10.1158/1538-7445.am2020-3553",
+        "authors": [
+          "Luiza Sisdelli",
+          "Maria Isabel Cordioli",
+          "Fernanda Vaisman",
+          "Osmar Monte",
+          "Carlos Longui"
+        ],
+        "container": "Cancer Research",
+        "url": "https://doi.org/10.1158/1538-7445.am2020-3553",
+        "retracted": false,
+        "match_score": 0.427
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:b77857f43cfaf36a5266d018": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Risk Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis [J]",
+      "author": "Mao Zhang Zhang",
+      "container": "",
+      "year": "2020",
+      "bibliographic": "Mao J, Zhang Q, Zhang H, et al. Risk Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis [J]. 2020, 11."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Risk Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis",
+        "year": "2020",
+        "doi": "10.3389/fendo.2020.00265",
+        "authors": [
+          "Jingxin Mao",
+          "Qinghai Zhang",
+          "Haiyan Zhang",
+          "Ke Zheng",
+          "Rui Wang"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2020.00265",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Risk factors for right paraesophageal lymph node metastasis in papillary thyroid carcinoma: A meta-analysis",
+        "year": "2020",
+        "doi": "10.1016/j.suronc.2019.11.007",
+        "authors": [
+          "Liang Shao",
+          "Wei Sun",
+          "Hao Zhang",
+          "Ping Zhang",
+          "Zhihong Wang"
+        ],
+        "container": "Surgical Oncology",
+        "url": "https://doi.org/10.1016/j.suronc.2019.11.007",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Risk Factors for Central Lymph Node Metastasis in CN0 Papillary Thyroid Carcinoma: A Systematic Review and Meta-Analysis",
+        "year": "2015",
+        "doi": "10.1371/journal.pone.0139021",
+        "authors": [
+          "Wei Sun",
+          "Xiabin Lan",
+          "Hao Zhang",
+          "Wenwu Dong",
+          "Zhihong Wang"
+        ],
+        "container": "PLOS ONE",
+        "url": "https://doi.org/10.1371/journal.pone.0139021",
+        "retracted": false,
+        "match_score": 0.495
+      },
+      {
+        "source": "Crossref",
+        "title": "Risk factors for cervical ipsilateral lymph node metastasis in papillary thyroid carcinoma",
+        "year": "2023",
+        "doi": "10.21203/rs.3.rs-3704486/v1",
+        "authors": [
+          "Qiu-hui Yang",
+          "Hai-guang Ma",
+          "Xiang-jian Zhang",
+          "Xian-bo Zhang"
+        ],
+        "container": "",
+        "url": "https://doi.org/10.21203/rs.3.rs-3704486/v1",
+        "retracted": false,
+        "match_score": 0.421
+      },
+      {
+        "source": "Crossref",
+        "title": "Risk Factors for Cervical Ipsilateral Lymph Node Metastasis in Papillary Thyroid Carcinoma",
+        "year": "2024",
+        "doi": "10.2139/ssrn.4731361",
+        "authors": [
+          "Qiuhui Yang",
+          "Hai-guang Ma",
+          "Xiang-jian Zhang",
+          "xianbo zhang"
+        ],
+        "container": "",
+        "url": "https://doi.org/10.2139/ssrn.4731361",
+        "retracted": false,
+        "match_score": 0.421
+      }
+    ],
+    "problems": [],
+    "source_errors": []
+  },
+  "title:62effb31810c8d921866d7b1": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto's thyroiditis [J]",
+      "author": "Wang Chen Yuan",
+      "container": "",
+      "year": "2022",
+      "bibliographic": "Wang L, Chen J, Yuan X, et al. Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto's thyroiditis [J]. 2022, 22(1)."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto’s thyroiditis",
+        "year": "2022",
+        "doi": "10.1186/s12902-021-00923-2",
+        "authors": [
+          "Lirong Wang",
+          "Jiawen Chen",
+          "Xin Yuan",
+          "Juan Wang",
+          "Lei Sun"
+        ],
+        "container": "BMC Endocrine Disorders",
+        "url": "https://doi.org/10.1186/s12902-021-00923-2",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Lymph node metastasis of papillary thyroid carcinoma in the context of Hashimoto’s thyroiditis",
+        "year": "2022",
+        "doi": "10.1186/s12902-021-00923-2",
+        "authors": [
+          "Lirong Wang",
+          "Jiawen Chen",
+          "Xin Yuan",
+          "Juan Wang",
+          "Lei Sun"
+        ],
+        "container": "BMC Endocrine Disorders",
+        "url": "https://doi.org/10.1186/s12902-021-00923-2",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Influence Factors for Lymph Node Metastasis in Papillary Thyroid Carcinoma: Hashimoto’s Thyroiditis Has a Weak Effect on Central or Lateral Lymph Node Metastasis",
+        "year": "2021",
+        "doi": "10.2147/cmar.s310773",
+        "authors": [
+          "Liguang Zhou",
+          "Gang Chen",
+          "Lei Sheng",
+          "Nan Liu",
+          "Bin Zhang"
+        ],
+        "container": "Cancer Management and Research",
+        "url": "https://doi.org/10.2147/cmar.s310773",
+        "retracted": false,
+        "match_score": 0.457
+      },
+      {
+        "source": "Crossref",
+        "title": "Effect and Interactions of <i>BRAF</i> on Lymph Node Metastasis in Papillary Thyroid Carcinoma With Hashimoto Thyroiditis",
+        "year": "2024",
+        "doi": "10.1210/clinem/dgad667",
+        "authors": [
+          "Pengyu Li",
+          "Yang Liu",
+          "Tao Wei",
+          "Xiaofei Wang",
+          "Jingqiang Zhu"
+        ],
+        "container": "The Journal of Clinical Endocrinology &amp; Metabolism",
+        "url": "https://doi.org/10.1210/clinem/dgad667",
+        "retracted": false,
+        "match_score": 0.398
+      },
+      {
+        "source": "Crossref",
+        "title": "Papillary thyroid carcinoma with thyroiditis: lymph node metastasis, complications",
+        "year": "2013",
+        "doi": "10.4174/jkss.2013.85.1.20",
+        "authors": [
+          "Yon Seon Kim",
+          "Hye-Jeong Choi",
+          "Eun Sook Kim"
+        ],
+        "container": "Journal of the Korean Surgical Society",
+        "url": "https://doi.org/10.4174/jkss.2013.85.1.20",
+        "retracted": false,
+        "match_score": 0.382
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:1163ecfb768fe4c2d8321a66": {
+    "online_status": "not_found",
+    "confidence": 0.21,
+    "query": {
+      "doi": "",
+      "title": "Dioufa N, Baloch Z W",
+      "author": "Dioufa Baloch",
+      "container": "",
+      "year": "2026",
+      "bibliographic": "Dioufa N, Baloch Z W. Encapsulated neoplasms of the thyroid gland [J]. Virchows Arch, 2026, 488(1): 95–111."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Khadim Baloch",
+        "year": "2020",
+        "doi": "10.1136/bmj.m356",
+        "authors": [
+          "Kamaruddin Khan Afghan"
+        ],
+        "container": "BMJ",
+        "url": "https://doi.org/10.1136/bmj.m356",
+        "retracted": false,
+        "match_score": 0.21
+      },
+      {
+        "source": "Crossref",
+        "title": "Baloch Midwives",
+        "year": "2024",
+        "doi": "10.4324/9781003437895",
+        "authors": [
+          "Fouzieyha Towghi"
+        ],
+        "container": "",
+        "url": "https://doi.org/10.4324/9781003437895",
+        "retracted": false,
+        "match_score": 0.21
+      },
+      {
+        "source": "Crossref",
+        "title": "Abdul Ghafoor Baloch",
+        "year": "2005",
+        "doi": "10.1136/bmj.331.7522.968",
+        "authors": [],
+        "container": "BMJ",
+        "url": "https://doi.org/10.1136/bmj.331.7522.968",
+        "retracted": false,
+        "match_score": 0.107
+      },
+      {
+        "source": "Crossref",
+        "title": "OSSETIAN-BALOCH ISOGLOSSES",
+        "year": "2021",
+        "doi": "10.46698/vnc.2021.80.41.005",
+        "authors": [
+          "Э.Б. САТЦАЕВ"
+        ],
+        "container": "Известия СОИГСИ",
+        "url": "https://doi.org/10.46698/vnc.2021.80.41.005",
+        "retracted": false,
+        "match_score": 0.107
+      },
+      {
+        "source": "Crossref",
+        "title": "Gnetum parvifolium: Baloch, E.",
+        "year": "2009",
+        "doi": "10.2305/iucn.uk.2011-1.rlts.t194951a8926758.en",
+        "authors": [],
+        "container": "IUCN Red List of Threatened Species",
+        "url": "https://doi.org/10.2305/iucn.uk.2011-1.rlts.t194951a8926758.en",
+        "retracted": false,
+        "match_score": 0.107
+      }
+    ],
+    "problems": [
+      "partial_source_error",
+      "year_mismatch"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout",
+      "official_site: HTTPError"
+    ]
+  },
+  "title:f2e825f5472fbcf7f649bd07": {
+    "online_status": "verified",
+    "confidence": 1.0,
+    "query": {
+      "doi": "",
+      "title": "Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto's thyroiditis [J]",
+      "author": "Fang Lei Chen",
+      "container": "Frontiers in endocrinology,",
+      "year": "2023",
+      "bibliographic": "Fang M, Lei M, Chen X, et al. Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto's thyroiditis [J]. Frontiers in endocrinology, 2023, 14: 1267886."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto’s thyroiditis",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1267886",
+        "authors": [
+          "Mengyuan Fang",
+          "Mengjie Lei",
+          "Xuexue Chen",
+          "Hong Cao",
+          "Xingxing Duan"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1267886",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Radiomics-based ultrasound models for thyroid nodule differentiation in Hashimoto’s thyroiditis",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1267886",
+        "authors": [
+          "Mengyuan Fang",
+          "Mengjie Lei",
+          "Xuexue Chen",
+          "Hong Cao",
+          "Xingxing Duan"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1267886",
+        "retracted": false,
+        "match_score": 1.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Ultrasonography-based radiomics and computer-aided diagnosis in thyroid nodule management: performance comparison and clinical strategy optimization",
+        "year": "2023",
+        "doi": "10.3389/fendo.2023.1140816",
+        "authors": [
+          "Mengwen Xia",
+          "Fulong Song",
+          "Yongfeng Zhao",
+          "Yongzhi Xie",
+          "Yafei Wen"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2023.1140816",
+        "retracted": false,
+        "match_score": 0.417
+      },
+      {
+        "source": "Crossref",
+        "title": "Ultrasound-based radiomics nomogram combined with clinical features for the prediction of central lymph node metastasis in papillary thyroid carcinoma patients with Hashimoto’s thyroiditis",
+        "year": "2022",
+        "doi": "10.3389/fendo.2022.993564",
+        "authors": [
+          "Peile Jin",
+          "Jifan Chen",
+          "Yiping Dong",
+          "Chengyue Zhang",
+          "Yajun Chen"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2022.993564",
+        "retracted": false,
+        "match_score": 0.413
+      },
+      {
+        "source": "Crossref",
+        "title": "Ultrasound radiomics models improve preoperative diagnosis and reduce unnecessary biopsies in indeterminate thyroid nodules",
+        "year": "2025",
+        "doi": "10.3389/fendo.2025.1615304",
+        "authors": [
+          "Lu Chen",
+          "Yan Wang",
+          "Haoyu Jing",
+          "Rui Bao",
+          "Bin Sun"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2025.1615304",
+        "retracted": false,
+        "match_score": 0.233
+      }
+    ],
+    "problems": [],
+    "source_errors": []
+  },
+  "title:ecd5040a60e1402c27ae36f2": {
+    "online_status": "not_found",
+    "confidence": 0.204,
+    "query": {
+      "doi": "",
+      "title": "巴楚医学, 2025, 8(1): 75–81",
+      "author": "",
+      "container": "",
+      "year": "2025",
+      "bibliographic": "闵楠, 艾空, 杨新宇, 等. 甲状腺乳头状癌合并桥本甲状腺炎患者发生淋巴结转移的风险预测模型构建 [J]. 巴楚医学, 2025, 8(1): 75–81."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "UOEH International Symposium 2025 産業医科大学国際シンポジウム2025",
+        "year": "2026",
+        "doi": "10.7888/juoeh.48.s_1",
+        "authors": [],
+        "container": "Journal of UOEH",
+        "url": "https://doi.org/10.7888/juoeh.48.s_1",
+        "retracted": false,
+        "match_score": 0.204
+      },
+      {
+        "source": "Crossref",
+        "title": "札幌医科大学医学部リハビリテーション医学講座",
+        "year": "2025",
+        "doi": "10.2490/jjrmc.62.960",
+        "authors": [
+          "安則 梅本"
+        ],
+        "container": "The Japanese Journal of Rehabilitation Medicine",
+        "url": "https://doi.org/10.2490/jjrmc.62.960",
+        "retracted": false,
+        "match_score": 0.16
+      },
+      {
+        "source": "Crossref",
+        "title": "单纯甲状腺乳头状癌患者与合并桥本甲状腺炎的甲状腺乳头状癌患者的临床特点分析",
+        "year": "2025",
+        "doi": "10.37155/2661-4766-0703-10",
+        "authors": [
+          "潘志远"
+        ],
+        "container": "临床医学前沿",
+        "url": "https://doi.org/10.37155/2661-4766-0703-10",
+        "retracted": false,
+        "match_score": 0.16
+      },
+      {
+        "source": "Crossref",
+        "title": "甲状腺乳头状癌中央区淋巴结清扫范围探讨",
+        "year": "2026",
+        "doi": "10.69979/3029-2808.26.02.057",
+        "authors": [],
+        "container": "医学研究",
+        "url": "https://doi.org/10.69979/3029-2808.26.02.057",
+        "retracted": false,
+        "match_score": 0.08
+      },
+      {
+        "source": "Crossref",
+        "title": "Analysis of Predictive Factors for Central Lymph Node Metastasis in 103 Cases of Micropapillary Thyroid Carcinoma",
+        "year": "2024",
+        "doi": "10.12677/acm.2024.1482323",
+        "authors": [
+          "淼 张"
+        ],
+        "container": "Advances in Clinical Medicine",
+        "url": "https://doi.org/10.12677/acm.2024.1482323",
+        "retracted": false,
+        "match_score": 0.08
+      }
+    ],
+    "problems": [
+      "partial_source_error",
+      "title_low_similarity",
+      "year_near_mismatch"
+    ],
+    "source_errors": [
+      "openalex: HTTPError"
+    ]
+  },
+  "title:684576411368be791d852210": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "The role of the HIF-1α/ALYREF/PKM2 axis in glycolysis and tumorigenesis of bladder cancer [J]",
+      "author": "Wang Zhu Han",
+      "container": "",
+      "year": "2021",
+      "bibliographic": "Wang J Z, Zhu W, Han J, et al. The role of the HIF-1α/ALYREF/PKM2 axis in glycolysis and tumorigenesis of bladder cancer [J]. 2021, 41(7): 16."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "The role of the HIF‐1α/ALYREF/PKM2 axis in glycolysis and tumorigenesis of bladder cancer",
+        "year": "2021",
+        "doi": "10.1002/cac2.12158",
+        "authors": [
+          "Jing‐Zi Wang",
+          "Wei Zhu",
+          "Jie Han",
+          "Xiao Yang",
+          "Rui Zhou"
+        ],
+        "container": "Cancer Communications",
+        "url": "https://doi.org/10.1002/cac2.12158",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Reviewer #1 (Public review): TIPE drives a cancer stem-like phenotype by promoting glycolysis via PKM2/HIF-1α axis in melanoma",
+        "year": "2024",
+        "doi": "10.7554/elife.92741.3.sa2",
+        "authors": [],
+        "container": "",
+        "url": "https://doi.org/10.7554/elife.92741.3.sa2",
+        "retracted": false,
+        "match_score": 0.094
+      },
+      {
+        "source": "Crossref",
+        "title": "Reviewer #2 (Public Review): TIPE drives a cancer stem-like phenotype by promoting glycolysis via PKM2/HIF-1α axis in melanoma",
+        "year": "2024",
+        "doi": "10.7554/elife.92741.1.sa0",
+        "authors": [],
+        "container": "",
+        "url": "https://doi.org/10.7554/elife.92741.1.sa0",
+        "retracted": false,
+        "match_score": 0.094
+      },
+      {
+        "source": "Crossref",
+        "title": "Reviewer #1 (Public review): TIPE drives a cancer stem-like phenotype by promoting glycolysis via PKM2/HIF-1α axis in melanoma",
+        "year": "2024",
+        "doi": "10.7554/elife.92741.2.sa2",
+        "authors": [],
+        "container": "",
+        "url": "https://doi.org/10.7554/elife.92741.2.sa2",
+        "retracted": false,
+        "match_score": 0.094
+      },
+      {
+        "source": "Crossref",
+        "title": "Reviewer #2 (Public review): TIPE drives a cancer stem-like phenotype by promoting glycolysis via PKM2/HIF-1α axis in melanoma",
+        "year": "2024",
+        "doi": "10.7554/elife.92741.2.sa1",
+        "authors": [],
+        "container": "",
+        "url": "https://doi.org/10.7554/elife.92741.2.sa1",
+        "retracted": false,
+        "match_score": 0.094
+      }
+    ],
+    "problems": [],
+    "source_errors": []
+  },
+  "title:756ece0febee21b5f790e425": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Can Supplementation with Vitamin D Modify Thyroid Autoantibodies (Anti-TPO Ab, Anti-Tg Ab) and Thyroid Profile (T3, T4, TSH) in Hashimoto's Thyroiditis? A Double Blind, Randomized Clinical Trial [J]",
+      "author": "Chahardoli Saboor-Yaraghi Amouzegar",
+      "container": "",
+      "year": "2019",
+      "bibliographic": "Chahardoli R, Saboor-Yaraghi A A, Amouzegar A, et al. Can Supplementation with Vitamin D Modify Thyroid Autoantibodies (Anti-TPO Ab, Anti-Tg Ab) and Thyroid Profile (T3, T4, TSH) in Hashimoto's Thyroiditis? A Double Blind, Randomized Clinical Trial [J]. Hormone and metabolic research = Hormon- und Stoffwechselforschung = Hormones et metabolisme, 2019, 51(5): 296–301."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Can Supplementation with Vitamin D Modify Thyroid Autoantibodies (Anti-TPO Ab, Anti-Tg Ab) and Thyroid Profile (T3, T4, TSH) in Hashimoto’s Thyroiditis? A Double Blind, Randomized Clinical Trial",
+        "year": "2019",
+        "doi": "10.1055/a-0856-1044",
+        "authors": [
+          "Reza Chahardoli",
+          "Ali-Akbar Saboor-Yaraghi",
+          "Atieh Amouzegar",
+          "Davood Khalili",
+          "Azita Vakili"
+        ],
+        "container": "Hormone and Metabolic Research",
+        "url": "https://doi.org/10.1055/a-0856-1044",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Anticuerpos antiperoxidasa (anti-TPO) y antitiroglobulina (anti-TG) en pacientes con sospecha clínica de tiroiditis de Hashimoto Anti-thyroid peroxidase (anti-tpo) and anti-thyroglobulin (anti-tg) antibodies in patients with clinical suspicion of hashimoto's thyroiditis",
+        "year": "2026",
+        "doi": "10.66913/orinoco.v16i1.85",
+        "authors": [
+          "Abimael Esaúl Gómez Sifontes",
+          "Oswers Xadier Pino Flores",
+          "Yoger Daniel Osorio Brito"
+        ],
+        "container": "Revista Arbitrada Orinoco Pensamiento y Praxis",
+        "url": "https://doi.org/10.66913/orinoco.v16i1.85",
+        "retracted": false,
+        "match_score": 0.096
+      },
+      {
+        "source": "Crossref",
+        "title": "T3, T4, TSH, Anti-TPO, and Anti-TG Autoantibodies Distribution in Autoimmune Thyroid Patients with Chlamydia Trachomatis Infection",
+        "year": "2024",
+        "doi": "10.61707/9907zx61",
+        "authors": [
+          "Mohammed Ali Mohammed Al-Badri",
+          "Issam Jumaa Nasser",
+          "Mahdi Ali, A. A"
+        ],
+        "container": "International Journal of Religion",
+        "url": "https://doi.org/10.61707/9907zx61",
+        "retracted": false,
+        "match_score": 0.082
+      },
+      {
+        "source": "Crossref",
+        "title": "Informations réactifs: exploration thyroïdienne — III: thyroglobuline (TG); Ac antithyroglobuline (anti-TG, TG AB); Ac antirécepteurs de TSH (anti-R-TSH, RB AB); Ac antithyroperoxydase (anti-TPO, AB TPO); Ac antimicrosomes (TM AB)",
+        "year": "1997",
+        "doi": "10.1016/s0923-2532(97)86630-6",
+        "authors": [
+          "V Wirquin"
+        ],
+        "container": "Immuno-analyse &amp; Biologie Spécialisée",
+        "url": "https://doi.org/10.1016/s0923-2532(97)86630-6",
+        "retracted": false,
+        "match_score": 0.009
+      },
+      {
+        "source": "Crossref",
+        "title": "THYROID PROFILE CHANGES IN PREGNANCY (T3, T4, TSH)",
+        "year": "2025",
+        "doi": "10.21474/ijar01/22338",
+        "authors": [
+          "Abhishek Mishra",
+          "Tanveer Raza Jafri",
+          "Neha Pant"
+        ],
+        "container": "International Journal of Advanced Research",
+        "url": "https://doi.org/10.21474/ijar01/22338",
+        "retracted": false,
+        "match_score": 0.009
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:2d87165f4c9593285c4da20e": {
+    "online_status": "not_found",
+    "confidence": 0.16,
+    "query": {
+      "doi": "",
+      "title": "柯晓丽, 沈浩霖, 吕国荣,等l",
+      "author": "",
+      "container": "",
+      "year": "2020",
+      "bibliographic": "柯晓丽, 沈浩霖, 吕国荣,等l. 颈部淋巴结超声良恶性风险预测模型的构建及价值 [J]. 中国超声医学杂志, 2020, 36(4): 314–317."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "寺田浩明著『中国法制史』",
+        "year": "2020",
+        "doi": "10.5955/jalha.69.185",
+        "authors": [
+          "成満 森田"
+        ],
+        "container": "Legal History Review",
+        "url": "https://doi.org/10.5955/jalha.69.185",
+        "retracted": false,
+        "match_score": 0.16
+      },
+      {
+        "source": "Crossref",
+        "title": "中国华丽鲎科(新科)的发现",
+        "year": "1981",
+        "doi": "10.1360/csb1981-26-11-675",
+        "authors": [
+          "绍武 牛",
+          "友崇 洪"
+        ],
+        "container": "Chinese Science Bulletin",
+        "url": "https://doi.org/10.1360/csb1981-26-11-675",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Zhongguo Fojiao shilun 中国佛教史论 by Wang Rongguo 王荣国 (review)",
+        "year": "2009",
+        "doi": "10.1353/jcr.2009.0029",
+        "authors": [
+          "Jack Meng-Tat Chia"
+        ],
+        "container": "Journal of Chinese Religions",
+        "url": "https://doi.org/10.1353/jcr.2009.0029",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "东夏国袭扰高丽政权及高丽应对措置探析",
+        "year": "2024",
+        "doi": "10.62989/jss.2024.1.4.31",
+        "authors": [
+          "Yejie MA"
+        ],
+        "container": "Academic Frontiers Publishing Group",
+        "url": "https://doi.org/10.62989/jss.2024.1.4.31",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "李其荣《国际移民政策与治理》",
+        "year": "2018",
+        "doi": "10.1142/s1793724818000226",
+        "authors": [
+          "小明 周"
+        ],
+        "container": "华人研究国际学报",
+        "url": "https://doi.org/10.1142/s1793724818000226",
+        "retracted": false,
+        "match_score": 0.0
+      }
+    ],
+    "problems": [
+      "partial_source_error",
+      "title_low_similarity"
+    ],
+    "source_errors": [
+      "openalex: HTTPError"
+    ]
+  },
+  "title:5d13bf32bc70edca7ba9a066": {
+    "online_status": "weak",
+    "confidence": 0.592,
+    "query": {
+      "doi": "",
+      "title": "Rosario P W, Côrtes M C S, Franco Mourão G",
+      "author": "Rosario Franco",
+      "container": "",
+      "year": "2021",
+      "bibliographic": "Rosario P W, Côrtes M C S, Franco Mourão G. Follow-up of patients with thyroid cancer and antithyroglobulin antibodies: a review for clinicians [J]. Endocr Relat Cancer, 2021, 28(4): R111–r119."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Follow-up of patients with thyroid cancer and antithyroglobulin antibodies: a review for clinicians",
+        "year": "2021",
+        "doi": "10.1530/erc-21-0012",
+        "authors": [
+          "Pedro Weslley Rosario",
+          "Marina Carvalho Souza Côrtes",
+          "Gabriela Franco Mourão"
+        ],
+        "container": "Endocrine-Related Cancer",
+        "url": "https://doi.org/10.1530/erc-21-0012",
+        "retracted": false,
+        "match_score": 0.592
+      },
+      {
+        "source": "Crossref",
+        "title": "Antithyroglobulin Antibody Variation During Follow-Up Has a Good Prognostic Value for Preoperative Antithyroglobulin Antibody-Positive Differentiated Thyroid Cancer Patients: A Retrospective Study in Southwest China",
+        "year": "2021",
+        "doi": "10.3389/fendo.2021.774275",
+        "authors": [
+          "Qianhui Liu",
+          "Mengting Yin",
+          "Guixing Li"
+        ],
+        "container": "Frontiers in Endocrinology",
+        "url": "https://doi.org/10.3389/fendo.2021.774275",
+        "retracted": false,
+        "match_score": 0.332
+      },
+      {
+        "source": "Crossref",
+        "title": "ENTREVISTA COM FLÁVIA CÔRTES",
+        "year": "2022",
+        "doi": "10.12957/seminal.2022.64735",
+        "authors": [
+          "Regina Michelli"
+        ],
+        "container": "Caderno Seminal",
+        "url": "https://doi.org/10.12957/seminal.2022.64735",
+        "retracted": false,
+        "match_score": 0.235
+      },
+      {
+        "source": "Crossref",
+        "title": "María Jesús Fuentes Pérez et Rosario Ruiz Franco, Mujeres Peligrosas",
+        "year": "2022",
+        "doi": "10.4000/anabases.14125",
+        "authors": [
+          "Alejandro Cadenas González"
+        ],
+        "container": "Anabases",
+        "url": "https://doi.org/10.4000/anabases.14125",
+        "retracted": false,
+        "match_score": 0.218
+      },
+      {
+        "source": "Crossref",
+        "title": "Fuente Pérez, Mª Jesús y Ruiz Franco, Rosario (eds.). Mujeres peligrosas",
+        "year": "2020",
+        "doi": "10.20318/femeris..2020.5164",
+        "authors": [
+          "Sofía Rodríguez López"
+        ],
+        "container": "FEMERIS: Revista Multidisciplinar de Estudios de Género",
+        "url": "https://doi.org/10.20318/femeris..2020.5164",
+        "retracted": false,
+        "match_score": 0.218
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: HTTPError",
+      "official_site: HTTPError"
+    ]
+  },
+  "title:d67df5bb35aafacb1f0ee36b": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Thyroglobulin Measurement Through Fine-Needle Aspiration for Optimizing Neck Node Dissection in Papillary Thyroid Cancer [J]",
+      "author": "Jia Wang Liu",
+      "container": "",
+      "year": "2022",
+      "bibliographic": "Jia X, Wang Y, Liu Y, et al. Thyroglobulin Measurement Through Fine-Needle Aspiration for Optimizing Neck Node Dissection in Papillary Thyroid Cancer [J]. Ann Surg Oncol, 2022, 29(1): 88–96."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Thyroglobulin Measurement Through Fine-Needle Aspiration for Optimizing Neck Node Dissection in Papillary Thyroid Cancer",
+        "year": "2022",
+        "doi": "10.1245/s10434-021-10549-2",
+        "authors": [
+          "Xi Jia",
+          "Yuanbo Wang",
+          "Yan Liu",
+          "Xiang Wang",
+          "Xiaobao Yao"
+        ],
+        "container": "Annals of Surgical Oncology",
+        "url": "https://doi.org/10.1245/s10434-021-10549-2",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Measurement of thyroglobulin level in lateral neck lymph node fine needle aspiration washout fluid in papillary thyroid cancer",
+        "year": "2021",
+        "doi": "10.21037/gs-21-366",
+        "authors": [
+          "Kwangsoon Kim",
+          "Ja Seong Bae",
+          "Jeong Soo Kim"
+        ],
+        "container": "Gland Surgery",
+        "url": "https://doi.org/10.21037/gs-21-366",
+        "retracted": false,
+        "match_score": 0.493
+      },
+      {
+        "source": "Crossref",
+        "title": "Thyroglobulin measurement in fine‐needle aspirate washouts: the criteria for neck node dissection for patients with thyroid cancer",
+        "year": "2009",
+        "doi": "10.1111/j.1365-2265.2008.03297.x",
+        "authors": [
+          "Min Jung Kim",
+          "Eun‐Kyung Kim",
+          "Byung Moon Kim",
+          "Jin Young Kwak",
+          "Eun Jig Lee"
+        ],
+        "container": "Clinical Endocrinology",
+        "url": "https://doi.org/10.1111/j.1365-2265.2008.03297.x",
+        "retracted": false,
+        "match_score": 0.329
+      },
+      {
+        "source": "Crossref",
+        "title": "Lymph node fine-needle aspiration washout thyroglobulin in papillary thyroid cancer: Diagnostic value and the effect of thyroglobulin antibodies",
+        "year": "2016",
+        "doi": "10.3109/07435800.2016.1141936",
+        "authors": [
+          "Ceyla Konca Degertekin",
+          "Mehmet Muhittin Yalcin",
+          "Turgay Cerit",
+          "Cigdem Ozkan",
+          "Isilay Kalan"
+        ],
+        "container": "Endocrine Research",
+        "url": "https://doi.org/10.3109/07435800.2016.1141936",
+        "retracted": false,
+        "match_score": 0.254
+      },
+      {
+        "source": "Crossref",
+        "title": "Cervical Lymph Node Fine-Needle Aspiration and Needle-Wash Thyroglobulin Reflex Test for Papillary Thyroid Carcinoma",
+        "year": "2018",
+        "doi": "10.1007/s12022-018-9547-2",
+        "authors": [
+          "Xiaotun Zhang",
+          "Joshua M. Howell",
+          "Yajue Huang"
+        ],
+        "container": "Endocrine Pathology",
+        "url": "https://doi.org/10.1007/s12022-018-9547-2",
+        "retracted": false,
+        "match_score": 0.234
+      }
+    ],
+    "problems": [],
+    "source_errors": []
+  },
+  "title:62a13ab452c15a5a613638e8": {
+    "online_status": "weak",
+    "confidence": 0.586,
+    "query": {
+      "doi": "",
+      "title": "Ahuja A, Ying M",
+      "author": "Ahuja Ying",
+      "container": "",
+      "year": "2003",
+      "bibliographic": "Ahuja A, Ying M. Sonography of neck lymph nodes. Part II: abnormal lymph nodes [J]. Clinical radiology, 2003, 58(5): 359–366."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Sonography of Neck Lymph Nodes. Part II: Abnormal Lymph Nodes",
+        "year": "2003",
+        "doi": "10.1016/s0009-9260(02)00585-8",
+        "authors": [
+          "A Ahuja",
+          "M Ying"
+        ],
+        "container": "Clinical Radiology",
+        "url": "https://doi.org/10.1016/s0009-9260(02)00585-8",
+        "retracted": false,
+        "match_score": 0.586
+      },
+      {
+        "source": "Crossref",
+        "title": "Sonography of Neck Lymph Nodes. Part I: Normal Lymph Nodes",
+        "year": "2003",
+        "doi": "10.1016/s0009-9260(02)00584-6",
+        "authors": [
+          "M Ying",
+          "A Ahuja"
+        ],
+        "container": "Clinical Radiology",
+        "url": "https://doi.org/10.1016/s0009-9260(02)00584-6",
+        "retracted": false,
+        "match_score": 0.538
+      },
+      {
+        "source": "Crossref",
+        "title": "Vishal Ahuja",
+        "year": "2023",
+        "doi": "10.1287/d9565ac3-2fd1-46ce-90e0-d84d5bd920e2",
+        "authors": [
+          "Vishal Ahuja"
+        ],
+        "container": "Authors group",
+        "url": "https://doi.org/10.1287/d9565ac3-2fd1-46ce-90e0-d84d5bd920e2",
+        "retracted": false,
+        "match_score": 0.28
+      },
+      {
+        "source": "Crossref",
+        "title": "Vishal Ahuja",
+        "year": "2019",
+        "doi": "10.1287/f83434ea-5fa8-4ab8-b6eb-adc073a9479e",
+        "authors": [
+          "Vishal Ahuja"
+        ],
+        "container": "Authors group",
+        "url": "https://doi.org/10.1287/f83434ea-5fa8-4ab8-b6eb-adc073a9479e",
+        "retracted": false,
+        "match_score": 0.28
+      },
+      {
+        "source": "Crossref",
+        "title": "Ravindra K. Ahuja",
+        "year": "2020",
+        "doi": "10.1287/f20b949d-047c-4e23-8e6f-7b2d0e95e678",
+        "authors": [
+          "Ravindra Ahuja"
+        ],
+        "container": "Authors group",
+        "url": "https://doi.org/10.1287/f20b949d-047c-4e23-8e6f-7b2d0e95e678",
+        "retracted": false,
+        "match_score": 0.28
+      }
+    ],
+    "problems": [],
+    "source_errors": []
+  },
+  "title:1c312f9af99cdabdc3b54c02": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "The prognostic significance of nodal metastases from papillary thyroid carcinoma can be stratified based on the size and number of metastatic lymph nodes, as well as the presence of extranodal extension [J]",
+      "author": "Randolph Duh Heller",
+      "container": "",
+      "year": "2012",
+      "bibliographic": "Randolph G W, Duh Q Y, Heller K S, et al. The prognostic significance of nodal metastases from papillary thyroid carcinoma can be stratified based on the size and number of metastatic lymph nodes, as well as the presence of extranodal extension [J]. Thyroid : official journal of the American Thyroid Association, 2012, 22(11): 1144–1152."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "The Prognostic Significance of Nodal Metastases from Papillary Thyroid Carcinoma Can Be Stratified Based on the Size and Number of Metastatic Lymph Nodes, as Well as the Presence of Extranodal Extension",
+        "year": "2012",
+        "doi": "10.1089/thy.2012.0043",
+        "authors": [
+          "Gregory W. Randolph",
+          "Quan-Yang Duh",
+          "Keith S. Heller",
+          "Virginia A. LiVolsi",
+          "Susan J. Mandel"
+        ],
+        "container": "Thyroid",
+        "url": "https://doi.org/10.1089/thy.2012.0043",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "The Prognostic Significance of Nodal Metastases from Papillary Thyroid Carcinoma Can Be Stratified Based on the Size and Number of Metastatic Lymph Nodes, as Well as the Presence of Extranodal Extension",
+        "year": "2012",
+        "doi": "10.1089/thy.2012.0043",
+        "authors": [
+          "Gregory W. Randolph",
+          "Quan-Yang Duh",
+          "Keith S. Heller",
+          "Virginia A. LiVolsi",
+          "Susan J. Mandel"
+        ],
+        "container": "Thyroid",
+        "url": "https://doi.org/10.1089/thy.2012.0043",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "The Prognostic Significance of Nodal Metastases from Papillary Thyroid Carcinoma can be Stratified Based on the Size and Number of Metastatic Lymph Nodes, as Well as the Presence of Extranodal Extension ATA Surgical Affairs Committee’s Taskforce on Thyroid Cancer Nodal Surgery",
+        "year": "2012",
+        "doi": "10.1089/thy.2012-0043",
+        "authors": [
+          "Gregory Randolph",
+          "Quan-Yang Duh",
+          "Keith Stuart Heller",
+          "Virginia A LiVolsi",
+          "Susan J Mandel"
+        ],
+        "container": "Thyroid",
+        "url": "https://doi.org/10.1089/thy.2012-0043",
+        "retracted": false,
+        "match_score": 0.753
+      },
+      {
+        "source": "Crossref",
+        "title": "The Prognostic Significance of Nodal Metastases from Papillary Thyroid Carcinoma can be Stratified Based on the Size and Number of Metastatic Lymph Nodes, as Well as the Presence of Extranodal Extension ATA Surgical Affairs Committee’s Taskforce on Thyroid Cancer Nodal Surgery",
+        "year": "2012",
+        "doi": "10.1089/thy.2012-0043",
+        "authors": [
+          "Gregory Randolph",
+          "Quan-Yang Duh",
+          "Keith Stuart Heller",
+          "Virginia A LiVolsi",
+          "Susan J Mandel"
+        ],
+        "container": "Thyroid",
+        "url": "https://doi.org/10.1089/thy.2012-0043",
+        "retracted": false,
+        "match_score": 0.753
+      },
+      {
+        "source": "Crossref",
+        "title": "Papillary Thyroid Carcinomas with Cervical Lymph Node Metastases Can Be Stratified into Clinically Relevant Prognostic Categories Using Oncogenic\n                    <i>BRAF</i>\n                    , the Number of Nodal Metastases, and Extra-Nodal Extension",
+        "year": "2012",
+        "doi": "10.1089/thy.2011.0431",
+        "authors": [
+          "Julio Ricarte-Filho",
+          "Ian Ganly",
+          "Michael Rivera",
+          "Nora Katabi",
+          "Weimin Fu"
+        ],
+        "container": "Thyroid",
+        "url": "https://doi.org/10.1089/thy.2011.0431",
+        "retracted": false,
+        "match_score": 0.486
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  },
+  "title:08e0c7b92241c45531dd247e": {
+    "online_status": "not_found",
+    "confidence": 0.08,
+    "query": {
+      "doi": "",
+      "title": "杨高怡;张文智;徐栋",
+      "author": "",
+      "container": "",
+      "year": "2020",
+      "bibliographic": "杨高怡;张文智;徐栋. 浅表淋巴疾病超声诊断 [M]. 中华医学电子音像出版社, 2019: 22-27. 创新性说明: 目前桥本甲状腺炎合并甲状腺乳头状癌患者颈部淋巴结转移风险的关系存在争议，桥本甲状腺炎常导致多个颈部淋巴结肿大，超声表现可能与转移性淋巴结特征存在重叠，常规超声对颈部淋巴结转移识别的敏感性及诊断效能有限，本研究拟整合临床资料、血清生物标志物及超声影像学特征等多维数据，筛选分析PTC合并HT状态下CLNM的危险因素，通过构建不同分组模型并分析具有最佳诊断效能的模型，旨在为PTC合并HT患者的临床诊断及手术决策提供更为便捷、可靠的依据。 变量 | 淋巴结转移组(n=141) | 非淋巴结转移组(n=120) | P values 临床信息 | | | 性别: | | | 0.295 男 | 24 (17.0) | 14 (11.7) | 女 | 117 (83.0) | 106 (88.3) | 年龄(岁) | 37.1 (9.81) | 42.5 (11.5) | <0.001* BMI: | | | 0.053 ＜24 | 94 (66.7) | 65 (54.2) | ≥24 | 47 (33.3) | 55 (45.8) | 碱性磷酸酶 | 62.0 (29.8) | 80.7 (38.3) | <0.001* FT3 | 4.72 (1.00) | 4.72"
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "张景中、杨路先生简介",
+        "year": "2021",
+        "doi": "10.1360/ssm-2019-0345",
+        "authors": [],
+        "container": "SCIENTIA SINICA Mathematica",
+        "url": "https://doi.org/10.1360/ssm-2019-0345",
+        "retracted": false,
+        "match_score": 0.08
+      },
+      {
+        "source": "Crossref",
+        "title": "Yang Wenguang 杨文广",
+        "year": "2017",
+        "doi": "10.1515/9781438464855-007",
+        "authors": [],
+        "container": "Marionette Plays from Northern China",
+        "url": "https://doi.org/10.1515/9781438464855-007",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "Yang Wenguang 杨文广",
+        "year": "2017",
+        "doi": "10.2307/jj.18254891.10",
+        "authors": [],
+        "container": "Marionette Plays from Northern China",
+        "url": "https://doi.org/10.2307/jj.18254891.10",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "AI赋智—探究人工智能在高中语文文言文教学中的运用",
+        "year": "2025",
+        "doi": "10.64649/yh.jydk.2025090002",
+        "authors": [
+          "雨 燕"
+        ],
+        "container": "教研导刊",
+        "url": "https://doi.org/10.64649/yh.jydk.2025090002",
+        "retracted": false,
+        "match_score": 0.0
+      },
+      {
+        "source": "Crossref",
+        "title": "徐家滙天文台",
+        "year": "1951",
+        "doi": "10.1360/csb1951-0-5-533",
+        "authors": [
+          "宗器 陈"
+        ],
+        "container": "Chinese Science Bulletin",
+        "url": "https://doi.org/10.1360/csb1951-0-5-533",
+        "retracted": false,
+        "match_score": 0.0
+      }
+    ],
+    "problems": [
+      "partial_source_error",
+      "title_low_similarity",
+      "year_near_mismatch"
+    ],
+    "source_errors": [
+      "openalex: HTTPError"
+    ]
+  },
+  "title:b191c83b3de743c1314b7004": {
+    "online_status": "verified",
+    "confidence": 0.93,
+    "query": {
+      "doi": "",
+      "title": "Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for Stratifying the Risk of Malignant Lymph Node [J]",
+      "author": "Chung Baek Rho",
+      "container": "",
+      "year": "2022",
+      "bibliographic": "Chung S R, Baek J H, Rho Y H, et al. Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for Stratifying the Risk of Malignant Lymph Node [J]. Korean J Radiol, 2022, 23(11): 1102–1111."
+    },
+    "matched_sources": [
+      {
+        "source": "Crossref",
+        "title": "Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for Stratifying the Risk of Malignant Lymph Node",
+        "year": "2022",
+        "doi": "10.3348/kjr.2022.0358",
+        "authors": [
+          "Sae Rom Chung",
+          "Jung Hwan Baek",
+          "Yun Hwa Rho",
+          "Young Jun Choi",
+          "Tae-Yon Sung"
+        ],
+        "container": "Korean Journal of Radiology",
+        "url": "https://doi.org/10.3348/kjr.2022.0358",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Sonographic Diagnosis of Cervical Lymph Node Metastasis in Patients with Thyroid Cancer and Comparison of European and Korean Guidelines for Stratifying the Risk of Malignant Lymph Node",
+        "year": "2022",
+        "doi": "10.3348/kjr.2022.0358",
+        "authors": [
+          "Sae Rom Chung",
+          "Jung Hwan Baek",
+          "Yun Hwa Rho",
+          "Young Jun Choi",
+          "Tae-Yon Sung"
+        ],
+        "container": "Korean Journal of Radiology",
+        "url": "https://doi.org/10.3348/kjr.2022.0358",
+        "retracted": false,
+        "match_score": 0.93
+      },
+      {
+        "source": "Crossref",
+        "title": "Validation of CT-Based Risk Stratification System for Lymph Node Metastasis in Patients With Thyroid Cancer",
+        "year": "2023",
+        "doi": "10.3348/kjr.2023.0308",
+        "authors": [
+          "Yun Hwa Roh",
+          "Sae Rom Chung",
+          "Jung Hwan Baek",
+          "Young Jun Choi",
+          "Tae-Yon Sung"
+        ],
+        "container": "Korean Journal of Radiology",
+        "url": "https://doi.org/10.3348/kjr.2023.0308",
+        "retracted": false,
+        "match_score": 0.445
+      },
+      {
+        "source": "Crossref",
+        "title": "Response to: Letter to the Editor Regarding “Validation of CT-Based Risk Stratification System for Lymph Node Metastasis in Patients With Thyroid Cancer”",
+        "year": "2024",
+        "doi": "10.3348/kjr.2023.1159",
+        "authors": [
+          "Yun Hwa Roh",
+          "Sae Rom Chung"
+        ],
+        "container": "Korean Journal of Radiology",
+        "url": "https://doi.org/10.3348/kjr.2023.1159",
+        "retracted": false,
+        "match_score": 0.218
+      },
+      {
+        "source": "Crossref",
+        "title": "Patterns and clinical significance of cervical lymph node metastasis in papillary thyroid cancer patients with Delphian lymph node metastasis",
+        "year": "2017",
+        "doi": "10.18632/oncotarget.19047",
+        "authors": [
+          "Guibin Zheng",
+          "Hua Zhang",
+          "Shaolong Hao",
+          "Chengxin Liu",
+          "Jie Xu"
+        ],
+        "container": "Oncotarget",
+        "url": "https://doi.org/10.18632/oncotarget.19047",
+        "retracted": false,
+        "match_score": 0.171
+      }
+    ],
+    "problems": [
+      "partial_source_error"
+    ],
+    "source_errors": [
+      "openalex: ReadTimeout"
+    ]
+  }
+}

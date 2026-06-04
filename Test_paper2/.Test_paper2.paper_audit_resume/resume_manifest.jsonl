@@ -1,0 +1,18 @@
+{"time": "2026-06-02 16:27:43", "step": "init", "status": "done", "detail": "input=Test_paper2; llm=mimo-v2.5-free; url=https://hub.oaifree.com/v1; max_chars=4096; use_mineru=False"}
+{"time": "2026-06-02 16:27:43", "step": "stage1_extract", "status": "saved", "detail": "chars=100; use_mineru=False", "cache": "Test_paper2/.Test_paper2.paper_audit_resume/stage1_extract.json"}
+{"time": "2026-06-02 16:27:43", "step": "stage1_resource_online", "status": "saved", "detail": "checked=0; cache_entries=0", "cache": "Test_paper2/.Test_paper2.paper_audit_resume/resource_online_cache.json"}
+{"time": "2026-06-02 16:27:43", "step": "stage2_stat", "status": "done", "detail": "numbers=0; benford=N/A"}
+{"time": "2026-06-02 16:27:43", "step": "preflight_text_llm", "status": "failed", "detail": "文本LLM预检请求失败: HTTPSConnectionPool(host='hub.oaifree.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NameResolutionError(\"HTTPSConnection(host='hub.oaifree.com', port=443): Failed to resolve 'hub.oaifree.com' ([Errno -2] Name or service not known)\"))", "error_class": "provider_unavailable"}
+{"time": "2026-06-02 16:41:47", "step": "init", "status": "done", "detail": "input=Test_paper2; llm=mimo-v2.5-free; url=https://hub.oaifree.com/v1; max_chars=4096; use_mineru=False"}
+{"time": "2026-06-02 16:41:47", "step": "stage1_extract", "status": "cache_hit", "detail": "chars=100", "cache": "Test_paper2/.Test_paper2.paper_audit_resume/stage1_extract.json"}
+{"time": "2026-06-02 16:41:47", "step": "stage1_extract", "status": "saved", "detail": "chars=100; use_mineru=False", "cache": "Test_paper2/.Test_paper2.paper_audit_resume/stage1_extract.json"}
+{"time": "2026-06-02 16:41:47", "step": "stage1_resource_online", "status": "saved", "detail": "checked=0; cache_entries=0", "cache": "Test_paper2/.Test_paper2.paper_audit_resume/resource_online_cache.json"}
+{"time": "2026-06-02 16:41:47", "step": "stage2_stat", "status": "done", "detail": "numbers=0; benford=N/A"}
+{"time": "2026-06-02 16:42:03", "step": "preflight_text_llm", "status": "ok", "detail": "ok", "error_class": ""}
+{"time": "2026-06-02 16:42:03", "step": "stage3_llm", "status": "start", "detail": "chunks=1; chunk_size=4096; overlap=512", "cache_dir": "Test_paper2/.Test_paper2.paper_audit_resume/llm_a0c33e2d4d90e546"}
+{"time": "2026-06-02 16:42:28", "step": "stage3_llm_chunk", "status": "saved", "detail": "chunk=1/1", "cache": "Test_paper2/.Test_paper2.paper_audit_resume/llm_a0c33e2d4d90e546/chunk_0000.json"}
+{"time": "2026-06-02 16:42:28", "step": "stage4_image_semantic", "status": "saved", "detail": "semantic_checked=0; cache_entries=0; local_cache=Test_paper2/image_semantic_cache.json", "cache": "Test_paper2/.Test_paper2.paper_audit_resume/image_semantic_cache.json"}
+{"time": "2026-06-02 16:42:28", "step": "stage4_image_detector", "status": "saved", "detail": "detector_checked=0; cache_entries=0", "cache": "Test_paper2/.Test_paper2.paper_audit_resume/image_detector_cache.json"}
+{"time": "2026-06-02 16:42:28", "step": "stage5_report", "status": "markdown_saved", "detail": "Test_paper2/Test_paper2/test_paper2_audit.audit.md"}
+{"time": "2026-06-02 16:42:28", "step": "stage5_report", "status": "html_saved", "detail": "Test_paper2/Test_paper2/test_paper2_audit.audit.html"}
+{"time": "2026-06-02 16:42:28", "step": "all", "status": "done", "detail": "audit completed"}
