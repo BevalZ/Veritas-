@@ -238,3 +238,34 @@ Added deterministic evidence-chain audit with evidence clusters, Methods/Results
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Run Test_paper2 paper audit
+
+**Date**: 2026-06-04
+**Task**: Run Test_paper2 paper audit
+**Branch**: `main`
+
+### Summary
+
+Applied the paper audit CLI to Test_paper2/2026-040896_稿件全文C.docx, installed missing runtime dependencies, completed docx direct audit, and verified final HTML/Markdown/JSON outputs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
