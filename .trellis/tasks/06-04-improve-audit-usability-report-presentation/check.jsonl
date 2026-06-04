@@ -1,0 +1,6 @@
+{"file": "CONTEXT.md", "reason": "Check user-facing wording follows canonical review/evidence terminology."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check complete/limited/failed behavior, failed diagnostics, and extraction errors remain correct."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check deterministic test coverage and required verification commands."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check implementation avoids duplicating path/report rendering logic."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check CLI-to-renderer data flow and report/follow-up contracts remain consistent."}
+{"file": "docs/adr/ADR-0005-explicit-output-paths-relative-to-cwd.md", "reason": "Verify explicit output path behavior follows the accepted CLI semantics."}

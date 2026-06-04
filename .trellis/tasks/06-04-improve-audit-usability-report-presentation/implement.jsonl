@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for this single-repo task."}
+{"file": "CONTEXT.md", "reason": "Canonical product language for 复核概览, 审查相关文件, 复核优先级, and 证据风险分."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Owns failed diagnostics, complete/limited/failed artifact contracts, direct file extraction, and run result behavior."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines deterministic test expectations and required verification commands."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for code reuse and cross-layer concerns."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Report dashboard and output UX should reuse existing rendering/path utilities where possible."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Task spans CLI args, run metadata, artifacts, renderers, and follow-up context."}
+{"file": "docs/adr/ADR-0005-explicit-output-paths-relative-to-cwd.md", "reason": "Records the accepted CLI output path semantics for explicit --output/-o paths."}

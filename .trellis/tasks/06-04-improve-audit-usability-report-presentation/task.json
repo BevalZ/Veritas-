@@ -1,0 +1,47 @@
+{
+  "id": "improve-audit-usability-report-presentation",
+  "name": "improve-audit-usability-report-presentation",
+  "title": "Improve audit usability and report presentation",
+  "description": "Improve the audit tool's user-facing run flow and report presentation around three slices: input/output UX, report overview, and evidence/error navigation.",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": "cli, report-rendering, diagnostics, docs",
+  "package": null,
+  "priority": "P2",
+  "creator": "Hao",
+  "assignee": "Hao",
+  "createdAt": "2026-06-04",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [
+    {
+      "title": "Smooth launch and output UX",
+      "status": "completed",
+      "notes": "Normalize output paths, print a clear run summary, and improve optional dependency diagnostics."
+    },
+    {
+      "title": "复核概览 first screen",
+      "status": "completed",
+      "notes": "Add a compact 复核概览 to Markdown and HTML reports with risk, counts, coverage, and top actions."
+    },
+    {
+      "title": "Evidence navigation and error recovery",
+      "status": "completed",
+      "notes": "Add stable anchors, link top actions to evidence details, and improve failed/limited recovery guidance."
+    }
+  ],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "veritas/legacy.py",
+    "veritas/renderers.py",
+    "tests/test_core.py",
+    "README.md"
+  ],
+  "notes": "MVP should avoid new detection logic. Focus on making existing audit behavior easier to run, easier to understand, and easier to recover from when failures occur.",
+  "meta": {}
+}

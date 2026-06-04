@@ -151,6 +151,10 @@ if not result.ok:
   - `audit_report.failed.md`
   - `audit_report.failed.json`
 - Single-file input maps to the same suffixes, for example `paper.audit.md`, `paper.limited.md`, or `paper.failed.md`.
+- Explicit relative `--output/-o` paths are resolved relative to the current
+  working directory, not the input directory or auto output directory.
+- Explicit output paths strip an existing `.audit`, `.limited`, `.failed`,
+  `.md`, `.html`, or `.json` suffix before applying the final outcome suffix.
 - Report headers must include `完整审查 (complete)`, `范围受限审查 (limited)`, or failed diagnostic language that states no complete audit report was generated.
 
 ### 4. Validation & Error Matrix
@@ -162,6 +166,9 @@ if not result.ok:
 - User enabled LLM cache-only mode -> limited artifact.
 - LLM chunk coverage is partial -> limited artifact.
 - Critical preflight failure -> failed artifact, not limited and not complete.
+- `--output Test_paper2/test_paper2_audit` while the input is `Test_paper2`
+  -> `./Test_paper2/test_paper2_audit.audit.*`, not
+  `./Test_paper2/Test_paper2/test_paper2_audit.audit.*`.
 
 ### 5. Good/Base/Bad Cases
 
@@ -174,6 +181,8 @@ if not result.ok:
 - Unit test complete and limited directory path mapping.
 - Unit test single-file path mapping.
 - Unit test explicit `--output` normalization strips existing `.audit`, `.limited`, or `.failed` suffix before applying the final outcome suffix.
+- Unit test explicit relative `--output` paths are current-working-directory
+  relative for both complete/limited and failed artifacts.
 - Renderer test asserts complete and limited headers are visible in Markdown and HTML.
 - Unit test explicit reference/image limits are recorded as limited reasons.
 
@@ -191,6 +200,100 @@ output_path = input_path / "audit_report.audit.md"
 limited_reasons = audit_limited_reasons(args, meta, has_pdf_input=has_pdf_input)
 apply_audit_artifact_type(meta, limited_reasons)
 output_path, html_output_path, json_path = audit_artifact_paths(input_path, meta["artifact_type"])
+```
+
+## Scenario: Directory Audit-Scope Extraction Failure
+
+### 1. Scope / Trigger
+
+- Trigger: Directory audit selects files as audit-relevant input through
+  `find_project_files`.
+- Audit-relevant files include the main manuscript, supplements, data files, and
+  reference files used by extraction, cross-file consistency, reference/resource
+  audit, image audit, or evidence-chain construction.
+- Incidental unsupported files, generated reports, caches, logs, and hidden temp
+  files should be ignored before they become audit-scope files.
+
+### 2. Signatures
+
+- `find_project_files(root_path) -> (file_categories, all_files)`
+- `extract_text_from_file(file_path, max_chars_per_file=None, use_mineru=False, mineru_lang="ch", output_dir=None) -> str`
+- `optional_dependency_for_extension(ext) -> (dependency, install_command)`
+- `extracted_body_text(file_content, file_name="") -> str`
+- `save_failed_audit_diagnostics(failure, input_path, output_dir=None, output_stem=None, meta=None) -> (Path, Path)`
+
+### 3. Contracts
+
+- Missing optional dependency for an audit-scope `.docx`, `.xlsx`, or `.xlsm`
+  file must produce `report_type: "failed"` diagnostics.
+- Failed diagnostics must use:
+  - `failure.capability: "input_extraction"`
+  - `failure.error_class: "missing_optional_dependency"` or
+    `"no_extractable_text"`
+  - `failure.details.file`
+  - `failure.details.extension`
+  - `failure.details.resume_dir` when available
+  - `failure.details.install_command` for missing dependency cases
+- The fix hints must include the minimal install command, for example
+  `python3 -m pip install python-docx`.
+- Directory mode must not continue to a complete or limited report when an
+  audit-scope file contributes only an empty header or parse-failure marker.
+
+### 4. Validation & Error Matrix
+
+- Selected `.docx` and `python-docx` missing -> failed diagnostics with
+  `missing_optional_dependency`.
+- Selected `.xlsx`/`.xlsm` and `openpyxl` missing -> failed diagnostics with
+  `missing_optional_dependency`.
+- Selected file extracts no body text after the file header is removed ->
+  failed diagnostics with `no_extractable_text`.
+- Incidental generated artifacts filtered by `find_project_files` -> ignored,
+  no failure.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Directory contains `manuscript.docx` without `python-docx`; the run
+  writes `*.failed.md/html/json` and includes
+  `python3 -m pip install python-docx`.
+- Base: Directory contains parseable `main.txt` plus generated
+  `audit_report.audit.md`; the generated report is ignored and the text file
+  can proceed.
+- Bad: Directory contains only a selected `.docx` without `python-docx`; the run
+  audits an empty `=== 文件: manuscript.docx ===` header and writes
+  `*.audit.md`.
+
+### 6. Tests Required
+
+- Regression test that directory `.docx` missing `python-docx` fails before
+  calling `extract_text_from_file`.
+- Regression test that failed JSON includes `input_extraction`,
+  `missing_optional_dependency`, dependency name, and install command.
+- Regression test that single-file `.docx` missing `python-docx` includes the
+  same minimal install command.
+- Existing artifact outcome tests must continue to prove complete/limited/failed
+  suffixes remain distinct.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+file_content = extract_text_from_file(file_path)
+full_text += file_content
+```
+
+#### Correct
+
+```python
+dependency, install_command = optional_dependency_for_extension(file_path.suffix)
+if dependency:
+    failure = AuditFailure(
+        capability="input_extraction",
+        error_class="missing_optional_dependency",
+        details={"file": str(file_path), "install_command": install_command},
+    )
+    save_failed_audit_diagnostics(failure, input_path, meta=meta)
+    return RunResult.failed(...)
 ```
 
 ## Scenario: Full Reference and Image Coverage Defaults
