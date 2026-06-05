@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-06-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~437 | Active |
+| `journal-1.md` | ~470 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-06-05 | Web Runner Dropped Path Fix | `339d3a7` | `main` |
 | 13 | 2026-06-05 | Web Runner Completion Actions | `77a6b40` | `main` |
 | 12 | 2026-06-05 | Web Runner Path Selection | `f2a1da6` | `main` |
 | 11 | 2026-06-05 | Web Runner Drag Drop | `180a188` | `main` |

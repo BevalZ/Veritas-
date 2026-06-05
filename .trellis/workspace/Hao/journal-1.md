@@ -435,3 +435,36 @@ Added current-run output display, completion artifact actions, and retry behavio
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: Web Runner Dropped Path Fix
+
+**Date**: 2026-06-05
+**Task**: Web Runner Dropped Path Fix
+**Branch**: `main`
+
+### Summary
+
+Fixed Web Runner drag-and-drop to prefer full file:// URI paths from DataTransfer before falling back to file names.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `339d3a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
