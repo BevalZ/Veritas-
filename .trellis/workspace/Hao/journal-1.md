@@ -303,3 +303,36 @@ Implemented CWD-relative explicit output paths, early run summaries, audit-scope
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Local Web Runner
+
+**Date**: 2026-06-05
+**Task**: Local Web Runner
+**Branch**: `main`
+
+### Summary
+
+Added localhost Web Runner for starting audits, polling logs, canceling runs, checking config status, and opening allowlisted artifacts.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `893c495` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
