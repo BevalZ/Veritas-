@@ -248,6 +248,9 @@ result = generate_and_save_followup_draft(
   without a separate security review.
 - `POST /api/runs` accepts only `input_path`, optional `output`, and `fresh`.
   The server always adds `--json --no-open`.
+- The workbench may support client-side file/directory drag-and-drop, but it
+  must only populate the existing `input_path` field; do not upload bytes or add
+  a backend filesystem browser for this interaction.
 - Only one audit run may be active. Extra starts return HTTP 409 with
   `error: "busy"`.
 - History is a convenience index at `.veritas_web/runs.json`; audit artifacts
@@ -282,6 +285,8 @@ result = generate_and_save_followup_draft(
 - Service mode loads runtime config and respects `--no-open`.
 - Workbench HTML contains path input, output input, fresh checkbox, start,
   cancel, logs, config, and recent-runs regions.
+- Workbench drag-and-drop tests assert the drop target, path extraction helper,
+  directory-entry support, and `preventDefault()` navigation guard.
 - Config API/status does not serialize secret key values.
 - Starting a run calls `subprocess.Popen` with the existing CLI plus
   `--json --no-open`, optional `-o`, and optional `--fresh`.

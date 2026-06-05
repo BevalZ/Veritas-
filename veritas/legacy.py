@@ -3488,6 +3488,10 @@ section { background:var(--panel); border:1px solid var(--line); border-radius:8
 h2 { font-size:14px; margin:0 0 12px; font-weight:750; }
 label { display:block; color:var(--muted); font-size:12px; margin:10px 0 5px; }
 input[type="text"] { width:100%; min-height:38px; border:1px solid var(--line); border-radius:6px; padding:8px 10px; font:inherit; background:#fff; color:var(--text); }
+.drop-zone { border:1px dashed var(--line); border-radius:8px; padding:10px; background:#fbfbfa; transition:border-color .12s ease, background .12s ease; }
+.drop-zone.dragover { border-color:var(--accent); background:#edf7f8; }
+.drop-zone input[type="text"] { margin-top:5px; }
+.drop-hint { min-height:18px; margin-top:6px; }
 .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .actions { margin-top:12px; display:flex; gap:8px; }
 button, .linkbtn { min-height:36px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--text); padding:7px 12px; font:inherit; font-weight:650; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
@@ -3518,8 +3522,11 @@ button:disabled { opacity:.55; cursor:not-allowed; }
   <div>
     <section>
       <h2>审查任务</h2>
-      <label for="inputPath">输入路径</label>
-      <input id="inputPath" type="text" autocomplete="off" placeholder="/path/to/paper-or-folder">
+      <div id="inputDropZone" class="drop-zone">
+        <label for="inputPath">输入路径 / 拖拽区域</label>
+        <input id="inputPath" type="text" autocomplete="off" placeholder="/path/to/paper-or-folder">
+        <div id="dropHint" class="muted drop-hint">拖拽文件或目录到这里</div>
+      </div>
       <label for="outputPath">输出路径或 stem</label>
       <input id="outputPath" type="text" autocomplete="off" placeholder="">
       <label class="check"><input id="fresh" type="checkbox"> 从头重跑</label>
@@ -3560,6 +3567,32 @@ function setStatus(text, cls='') {
   const el = $('runStatus');
   el.className = 'status ' + cls;
   el.textContent = text;
+}
+function droppedPathFromDataTransfer(dataTransfer) {
+  const items = Array.from((dataTransfer && dataTransfer.items) || []);
+  for (const item of items) {
+    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+    if (entry) {
+      const entryPath = entry.fullPath && entry.fullPath !== '/' ? entry.fullPath.replace(/^\\//, '') : entry.name;
+      if (entryPath) return entryPath;
+    }
+  }
+  const files = Array.from((dataTransfer && dataTransfer.files) || []);
+  if (!files.length) return '';
+  const file = files[0];
+  return file.path || file.webkitRelativePath || file.name || '';
+}
+function applyDroppedPath(dataTransfer) {
+  const path = droppedPathFromDataTransfer(dataTransfer);
+  if (!path) return false;
+  $('inputPath').value = path;
+  $('dropHint').textContent = path;
+  $('inputPath').dispatchEvent(new Event('change', {bubbles: true}));
+  return true;
+}
+function dragHasFiles(event) {
+  const types = Array.from((event.dataTransfer && event.dataTransfer.types) || []);
+  return types.includes('Files');
 }
 function artifactLinks(run) {
   const arts = run.artifacts || {};
@@ -3627,6 +3660,24 @@ $('cancelBtn').addEventListener('click', async () => {
   await api(`/api/runs/${encodeURIComponent(activeRunId)}/cancel`, {method:'POST', body:'{}'});
   pollLogs();
 });
+const dropZone = $('inputDropZone');
+['dragenter', 'dragover'].forEach(name => dropZone.addEventListener(name, (event) => {
+  if (!dragHasFiles(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  dropZone.classList.add('dragover');
+}));
+['dragleave', 'drop'].forEach(name => dropZone.addEventListener(name, (event) => {
+  if (!dragHasFiles(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  dropZone.classList.remove('dragover');
+  if (name === 'drop') applyDroppedPath(event.dataTransfer);
+}));
+['dragover', 'drop'].forEach(name => document.addEventListener(name, (event) => {
+  if (!dragHasFiles(event)) return;
+  event.preventDefault();
+}));
 refreshConfig();
 refreshRuns();
 </script>

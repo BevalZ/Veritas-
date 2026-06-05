@@ -3479,6 +3479,7 @@ def test_web_runner_page_contains_workbench_controls():
     rendered = paper_audit.render_web_runner_page()
 
     assert "Veritas Web Runner" in rendered
+    assert 'id="inputDropZone"' in rendered
     assert 'id="inputPath"' in rendered
     assert 'id="outputPath"' in rendered
     assert 'id="fresh"' in rendered
@@ -3486,6 +3487,10 @@ def test_web_runner_page_contains_workbench_controls():
     assert 'id="cancelBtn"' in rendered
     assert 'id="log"' in rendered
     assert 'id="runs"' in rendered
+    assert "droppedPathFromDataTransfer" in rendered
+    assert "applyDroppedPath" in rendered
+    assert "webkitGetAsEntry" in rendered
+    assert "event.preventDefault()" in rendered
 
 
 def test_web_runner_config_status_does_not_expose_api_keys(monkeypatch):
