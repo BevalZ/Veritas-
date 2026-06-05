@@ -336,3 +336,36 @@ Added localhost Web Runner for starting audits, polling logs, canceling runs, ch
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Web Runner Drag Drop
+
+**Date**: 2026-06-05
+**Task**: Web Runner Drag Drop
+**Branch**: `main`
+
+### Summary
+
+Added a drag-and-drop input zone to the Web Runner so users can drop a file or directory to populate the audit input path without uploading contents.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `180a188` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
