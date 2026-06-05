@@ -255,6 +255,10 @@ result = generate_and_save_followup_draft(
 - The workbench may support client-side file/directory drag-and-drop, but it
   must only populate the existing `input_path` field; do not upload bytes or add
   a backend filesystem browser for this interaction.
+- Drag-and-drop path extraction must prefer full local `file://` values from
+  `text/uri-list` or `text/plain` before falling back to browser `File.name`,
+  because `File.name` is not a usable audit path when the file is outside the
+  repository working directory.
 - The workbench may expose local picker buttons through `POST /api/pick-path`
   modes `input_file`, `input_directory`, and `output_directory`; this endpoint
   opens a native picker when available and returns one selected path, not a
@@ -306,6 +310,7 @@ result = generate_and_save_followup_draft(
   cancel, logs, config, and recent-runs regions.
 - Workbench drag-and-drop tests assert the drop target, path extraction helper,
   directory-entry support, and `preventDefault()` navigation guard.
+- Unit tests assert `file://` URI-list payloads decode to full local paths.
 - Unit tests assert default output stem mapping and picker helper behavior.
 - Workbench tests assert current-run output/actions and retry helpers are
   rendered.

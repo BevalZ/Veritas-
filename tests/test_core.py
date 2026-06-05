@@ -3495,6 +3495,11 @@ def test_web_runner_page_contains_workbench_controls():
     assert 'id="log"' in rendered
     assert 'id="runs"' in rendered
     assert "droppedPathFromDataTransfer" in rendered
+    assert "droppedPathFromTransferText" in rendered
+    assert "droppedPathFromUriText" in rendered
+    assert "localPathFromFileUri" in rendered
+    assert "text/uri-list" in rendered
+    assert "file://" in rendered
     assert "applyDroppedPath" in rendered
     assert "defaultOutputStemForInput" in rendered
     assert "renderCurrentRun" in rendered
@@ -3525,6 +3530,16 @@ def test_pick_local_path_uses_dialog_runner_without_browsing_http(tmp_path):
     assert result == {"ok": True, "mode": "input_file", "path": str(selected)}
     assert unsupported["error"] == "unsupported_picker_mode"
     assert canceled["error"] == "canceled"
+
+
+def test_dropped_local_path_from_uri_text_prefers_file_uri():
+    payload = "# comment\nfile:///home/haozhao/2026-040896_%E7%A8%BF%E4%BB%B6%E5%85%A8%E6%96%87C.docx\nhttps://example.test/file.docx"
+
+    resolved = paper_audit.dropped_local_path_from_uri_text(payload)
+    ignored = paper_audit.dropped_local_path_from_uri_text("https://example.test/file.docx\nplain-name.docx")
+
+    assert resolved == "/home/haozhao/2026-040896_稿件全文C.docx"
+    assert ignored == ""
 
 
 def test_web_runner_config_status_does_not_expose_api_keys(monkeypatch):

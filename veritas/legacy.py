@@ -3231,6 +3231,21 @@ def pick_local_path(mode, dialog_runner=None):
         return {"ok": False, "error": "picker_unavailable", "message": f"{type(e).__name__}: {_brief_text(str(e), 240)}", "mode": mode}
 
 
+def dropped_local_path_from_uri_text(text):
+    """Resolve the first file:// URI from a drag-and-drop text payload."""
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or not line.lower().startswith("file://"):
+            continue
+        parsed = urllib.parse.urlparse(line)
+        if parsed.scheme.lower() != "file":
+            continue
+        path = urllib.request.url2pathname(urllib.parse.unquote(parsed.path or ""))
+        if path:
+            return path
+    return ""
+
+
 class WebRunnerState:
     """State boundary for the local browser runner."""
 
@@ -3686,6 +3701,34 @@ function defaultOutputStemForInput(inputPath, kind = selectedInputKind, date = n
   const project = safeProjectName(kind === 'directory' ? base : stripExtension(base));
   return joinPath(pathParent(cleaned), `${project}_${timestampForOutput(date)}`, 'audit_report');
 }
+function localPathFromFileUri(rawUri) {
+  const uri = String(rawUri || '').trim();
+  if (!uri.toLowerCase().startsWith('file://')) return '';
+  try {
+    const parsed = new URL(uri);
+    if (parsed.protocol !== 'file:') return '';
+    return decodeURIComponent(parsed.pathname || '').replace(/^\\/([A-Za-z]:\\/)/, '$1');
+  } catch (_e) {
+    return decodeURIComponent(uri.replace(/^file:\\/\\//i, ''));
+  }
+}
+function droppedPathFromUriText(text) {
+  const lines = String(text || '').split(/\\r?\\n/).map(line => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (line.startsWith('#')) continue;
+    const path = localPathFromFileUri(line);
+    if (path) return path;
+  }
+  return '';
+}
+function droppedPathFromTransferText(dataTransfer) {
+  if (!dataTransfer || !dataTransfer.getData) return '';
+  for (const type of ['text/uri-list', 'text/plain']) {
+    const path = droppedPathFromUriText(dataTransfer.getData(type));
+    if (path) return path;
+  }
+  return '';
+}
 function setSelectedInputPath(path, kind = '') {
   selectedInputKind = kind;
   $('inputPath').value = path;
@@ -3695,6 +3738,8 @@ function setSelectedInputPath(path, kind = '') {
   $('inputPath').dispatchEvent(new Event('change', {bubbles: true}));
 }
 function droppedPathInfoFromDataTransfer(dataTransfer) {
+  const uriPath = droppedPathFromTransferText(dataTransfer);
+  if (uriPath) return {path: uriPath, kind: 'file'};
   const items = Array.from((dataTransfer && dataTransfer.items) || []);
   for (const item of items) {
     const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
