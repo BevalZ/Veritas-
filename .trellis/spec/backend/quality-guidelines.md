@@ -268,6 +268,11 @@ result = generate_and_save_followup_draft(
 - When `output` is omitted, the Web Runner must derive an output stem in the
   input's parent directory as `<project_name>_<YYYYMMDD-HHMMSS>/audit_report`
   and pass it through `-o`.
+- The UI may show a client-side default output preview, but it must omit
+  `output` from `POST /api/runs` unless the user explicitly selected an output
+  directory. This keeps basename fallback authoritative: the backend resolves
+  the input first, then derives the default output from the resolved input's
+  real parent directory.
 - The workbench may support client-side file/directory drag-and-drop, but it
   must only populate the existing `input_path` field; do not upload bytes or add
   a backend filesystem browser for this interaction.
@@ -283,6 +288,12 @@ result = generate_and_save_followup_draft(
   with buttons or drag-and-drop.
 - The current-run panel should surface the selected/running output path and
   render allowlisted artifact actions after completion.
+- Run records may include a `summary` object derived from the recorded JSON
+  artifact. Complete/limited artifacts read `llm_report.summary`,
+  `llm_report.risk_level`, and `report_type`; failed artifacts read
+  `failure.message`, `failure.capability`, `failure.error_class`, and
+  `complete_report_generated`. Summary extraction must not add any new artifact
+  file reads beyond the recorded complete/limited/failed JSON candidates.
 - Failed and canceled runs may expose a retry action, but retry must call the
   same `POST /api/runs` path with the previous run's `input_path`, `output`,
   and `fresh` values; it must not bypass the single-active-run guard.
@@ -335,6 +346,9 @@ result = generate_and_save_followup_draft(
   directory-entry support, and `preventDefault()` navigation guard.
 - Unit tests assert `file://` URI-list payloads decode to full local paths.
 - Unit tests assert default output stem mapping and picker helper behavior.
+- Workbench tests assert auto-previewed output is not submitted as an explicit
+  output override; only user-selected output directories set the explicit
+  output flag.
 - Unit tests assert basename-only inputs resolve when there is exactly one
   match, reject missing basenames with `input_path_not_found`, reject duplicate
   basenames with `ambiguous_input_path`, preserve explicit paths, and pass the
@@ -343,6 +357,9 @@ result = generate_and_save_followup_draft(
   glob metacharacters are matched literally during fallback search.
 - Workbench tests assert current-run output/actions and retry helpers are
   rendered.
+- Artifact discovery tests assert complete/limited JSON summaries are extracted
+  from the formal `llm_report` payload and failed JSON summaries are extracted
+  from the formal `failure` diagnostic payload.
 - Config API/status does not serialize secret key values.
 - Starting a run calls `subprocess.Popen` with the existing CLI plus
   `--json --no-open`, optional `-o`, and optional `--fresh`.

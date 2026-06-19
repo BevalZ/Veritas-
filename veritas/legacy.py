@@ -3164,6 +3164,31 @@ def _web_runner_safe_run(run):
     return public
 
 
+def _web_runner_report_summary_from_payload(payload, report_type):
+    if not isinstance(payload, dict):
+        return {}
+    report = payload.get("llm_report") if isinstance(payload.get("llm_report"), dict) else {}
+    if not report:
+        report = payload.get("report") if isinstance(payload.get("report"), dict) else {}
+    source = report or payload
+    summary = {
+        "summary": _brief_text(source.get("summary", ""), 500),
+        "risk_level": source.get("risk_level", ""),
+        "report_type": payload.get("report_type") or source.get("report_type") or report_type,
+    }
+    failure = payload.get("failure") if isinstance(payload.get("failure"), dict) else {}
+    if failure or summary["report_type"] == "failed":
+        summary.update({
+            "summary": _brief_text(failure.get("message") or summary.get("summary") or "审查失败，已生成失败诊断。", 500),
+            "risk_level": summary.get("risk_level") or "failed",
+            "report_type": "failed",
+            "failure_capability": failure.get("capability", ""),
+            "failure_error": failure.get("error_class", ""),
+            "complete_report_generated": bool(payload.get("complete_report_generated")),
+        })
+    return summary
+
+
 def _web_runner_capability_status(config, capability_name, errors):
     capability = getattr(config, capability_name)
     missing = [e for e in errors if e.get("capability") == capability.name]
@@ -3578,12 +3603,7 @@ class WebRunnerState:
                 if json_path:
                     try:
                         payload = json.loads(Path(json_path).read_text(encoding="utf-8"))
-                        report = payload.get("report") if isinstance(payload, dict) else {}
-                        summary = {
-                            "summary": _brief_text((report or payload).get("summary", ""), 500),
-                            "risk_level": (report or payload).get("risk_level", ""),
-                            "report_type": payload.get("report_type") or candidate_type,
-                        }
+                        summary = _web_runner_report_summary_from_payload(payload, candidate_type)
                     except Exception:
                         summary = {}
                 break
@@ -3641,7 +3661,7 @@ def render_web_runner_page():
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Veritas Web Runner</title>
 <style>
-:root { color-scheme: light; --bg:#f5f5f3; --panel:#ffffff; --line:#d8d8d3; --text:#191919; --muted:#6a6a64; --accent:#155e75; --danger:#b42318; --ok:#237a4b; }
+:root { color-scheme: light; --bg:#f5f5f3; --panel:#ffffff; --line:#d8d8d3; --text:#191919; --muted:#6a6a64; --accent:#155e75; --danger:#b42318; --ok:#237a4b; --warn:#9a5b00; --soft:#f0f7f8; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif; font-size:14px; letter-spacing:0; }
 header { height:54px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; }
@@ -3667,6 +3687,10 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 .status { display:inline-flex; min-height:26px; align-items:center; padding:3px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); font-size:12px; }
 .status.succeeded { color:var(--ok); border-color:#9bc7ad; }
 .status.failed, .status.canceled { color:var(--danger); border-color:#e3aaa5; }
+.hero-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+.step { border:1px solid var(--line); border-radius:6px; padding:8px; background:#fbfbfa; min-height:58px; }
+.step span { display:block; color:var(--muted); font-size:12px; }
+.step strong { display:block; margin-top:3px; font-size:13px; }
 .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .cell { border:1px solid var(--line); border-radius:6px; padding:8px; min-height:54px; overflow-wrap:anywhere; }
 .cell span { display:block; color:var(--muted); font-size:12px; }
@@ -3683,7 +3707,20 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 .current-card span { display:block; color:var(--muted); font-size:12px; }
 .current-card strong { display:block; margin-top:3px; overflow-wrap:anywhere; }
 .current-actions { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 10px; min-height:36px; }
-@media (max-width:900px) { main { grid-template-columns:1fr; padding:10px; } header { padding:0 12px; } #log { height:320px; } }
+.report-panel { border:1px solid var(--line); border-radius:8px; padding:10px; margin:0 0 10px; background:var(--soft); }
+.report-panel.failed, .report-panel.canceled { background:#fff7f6; }
+.report-panel.succeeded, .report-panel.complete, .report-panel.limited { background:#f3faf6; }
+.report-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.report-head h3 { margin:0; font-size:14px; }
+.report-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.report-cell { border:1px solid rgba(0,0,0,.08); border-radius:6px; padding:8px; background:rgba(255,255,255,.72); overflow-wrap:anywhere; }
+.report-cell span { display:block; color:var(--muted); font-size:12px; }
+.report-cell strong { display:block; margin-top:3px; font-size:13px; }
+.report-summary { margin:8px 0 0; color:#2f2f2c; line-height:1.55; overflow-wrap:anywhere; }
+.feedback { min-height:34px; border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:10px; background:#fbfbfa; color:#2f2f2c; overflow-wrap:anywhere; }
+.feedback.failed { border-color:#e3aaa5; color:var(--danger); background:#fff7f6; }
+.feedback.succeeded { border-color:#9bc7ad; color:var(--ok); background:#f3faf6; }
+@media (max-width:900px) { main { grid-template-columns:1fr; padding:10px; } header { padding:0 12px; } #log { height:320px; } .hero-strip, .report-grid { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -3692,6 +3729,11 @@ button:disabled { opacity:.55; cursor:not-allowed; }
   <div>
     <section>
       <h2>审查任务</h2>
+      <div class="hero-strip" aria-label="workflow">
+        <div class="step"><span>1. 输入</span><strong>选择论文文件或项目目录</strong></div>
+        <div class="step"><span>2. 审查</span><strong>本地启动正式 CLI 流程</strong></div>
+        <div class="step"><span>3. 输出</span><strong>直接打开生成报告</strong></div>
+      </div>
       <div id="inputDropZone" class="drop-zone">
         <label for="inputPath">输入路径 / 拖拽区域</label>
         <div class="path-row">
@@ -3722,7 +3764,17 @@ button:disabled { opacity:.55; cursor:not-allowed; }
       <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">当前运行</h2><span id="runStatus" class="status">idle</span></div>
       <div id="currentRun" class="current-card"><span>输入</span><strong>No active run</strong></div>
       <div id="currentOutput" class="current-card"><span>输出</span><strong></strong></div>
-      <div id="currentActions" class="current-actions"></div>
+      <div id="runFeedback" class="feedback">选择输入后点击 Start，生成的报告会在这里显示。</div>
+      <div id="reportPanel" class="report-panel">
+        <div class="report-head"><h3>报告输出</h3><span id="reportState" class="status">pending</span></div>
+        <div class="report-grid">
+          <div class="report-cell"><span>报告类型</span><strong id="reportType">待生成</strong></div>
+          <div class="report-cell"><span>风险级别</span><strong id="reportRisk">待生成</strong></div>
+          <div class="report-cell"><span>输出目录</span><strong id="reportFolder">待生成</strong></div>
+        </div>
+        <p id="reportSummary" class="report-summary">报告生成后会显示摘要和打开入口。</p>
+        <div id="currentActions" class="current-actions"></div>
+      </div>
       <div id="log" aria-label="live log"></div>
     </section>
     <section style="margin-top:16px">
@@ -3748,6 +3800,12 @@ function setStatus(text, cls='') {
   const el = $('runStatus');
   el.className = 'status ' + cls;
   el.textContent = text;
+}
+function setFeedback(text, cls='') {
+  const el = $('runFeedback');
+  if (!el) return;
+  el.className = 'feedback ' + cls;
+  el.textContent = text || '选择输入后点击 Start，生成的报告会在这里显示。';
 }
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -3872,7 +3930,8 @@ async function chooseLocalPath(mode) {
     }
   } catch (e) {
     setStatus(e.error || 'picker failed', 'failed');
-    $('currentRun').textContent = e.message || e.error || JSON.stringify(e);
+    setFeedback(e.message || e.error || JSON.stringify(e), 'failed');
+    renderReportPanel({status: 'failed', message: e.message || e.error || JSON.stringify(e)});
   }
 }
 function artifactLinks(run) {
@@ -3881,8 +3940,55 @@ function artifactLinks(run) {
 }
 function currentArtifactActions(run) {
   const links = artifactLinks(run);
-  const retry = run && ['failed', 'canceled'].includes(run.status || '') ? '<button id="retryRunBtn" type="button">Retry</button>' : '';
+  const retry = run && run.input_path && ['failed', 'canceled'].includes(run.status || '') ? '<button id="retryRunBtn" type="button">Retry</button>' : '';
   return `${links}${retry}`;
+}
+function reportLabel(reportType, status) {
+  const value = reportType || status || '';
+  const labels = {
+    complete: '完整审查',
+    limited: '范围受限审查',
+    failed: '失败诊断',
+    succeeded: '审查完成',
+    running: '审查中',
+    canceled: '已取消'
+  };
+  return labels[value] || value || '待生成';
+}
+function reportFolderForRun(run) {
+  const arts = (run && run.artifacts) || {};
+  if (arts.folder) return arts.folder;
+  if (run && run.output) return pathParent(run.output);
+  return '待生成';
+}
+function reportSummaryFallback(run) {
+  const status = (run && run.status) || '';
+  if (status === 'running') return '审查正在运行，日志会持续刷新。';
+  if (status === 'succeeded') return '审查完成，报告入口已在下方列出。';
+  if (status === 'failed') return (run && run.message) || '审查失败，请查看日志和失败诊断产物。';
+  if (status === 'canceled') return (run && run.message) || '运行已取消，可在需要时重试。';
+  return '报告生成后会显示摘要和打开入口。';
+}
+function safePanelClass(value) {
+  const allowed = ['complete', 'limited', 'failed', 'succeeded', 'running', 'canceled'];
+  return allowed.includes(value || '') ? value : '';
+}
+function renderReportPanel(run) {
+  const active = run || {};
+  const summary = active.summary || {};
+  const reportType = summary.report_type || active.report_type || '';
+  const status = active.status || '';
+  const panelClass = safePanelClass(reportType) || safePanelClass(status);
+  $('reportPanel').className = `report-panel ${panelClass}`;
+  $('reportState').className = `status ${panelClass}`;
+  $('reportState').textContent = reportLabel(reportType, status);
+  $('reportType').textContent = reportLabel(reportType, status);
+  $('reportRisk').textContent = summary.risk_level || (reportType || status ? '未标注' : '待生成');
+  $('reportFolder').textContent = reportFolderForRun(active);
+  $('reportSummary').textContent = summary.summary || reportSummaryFallback(active);
+  $('currentActions').innerHTML = currentArtifactActions(active);
+  const retry = $('retryRunBtn');
+  if (retry) retry.addEventListener('click', () => retryRun(active));
 }
 function renderCurrentRun(run) {
   lastRun = run || lastRun;
@@ -3891,12 +3997,15 @@ function renderCurrentRun(run) {
   const output = active.output || $('outputPath').value || '';
   $('currentRun').innerHTML = `<span>输入</span><strong>${escapeHtml(input)}</strong>`;
   $('currentOutput').innerHTML = `<span>输出</span><strong>${escapeHtml(output)}</strong>`;
-  $('currentActions').innerHTML = currentArtifactActions(active);
-  const retry = $('retryRunBtn');
-  if (retry) retry.addEventListener('click', () => retryRun(active));
+  renderReportPanel(active);
+  setFeedback(active.message || '', active.status || '');
 }
 function renderRun(run) {
-  return `<div class="run"><div class="run-title"><strong>${escapeHtml(run.status || '')}</strong><span class="status ${escapeHtml(run.status || '')}">${escapeHtml(run.report_type || run.status || '')}</span></div><div class="muted">${escapeHtml(run.input_path || '')}</div><div class="muted">${escapeHtml(run.started_at || '')}</div><div class="links">${artifactLinks(run)}</div></div>`;
+  const summary = run.summary || {};
+  const reportType = summary.report_type || run.report_type || run.status || '';
+  const summaryLine = summary.summary ? `<div class="muted">${escapeHtml(summary.summary)}</div>` : '';
+  const risk = summary.risk_level ? `<span class="status">${escapeHtml(summary.risk_level)}</span>` : '';
+  return `<div class="run"><div class="run-title"><strong>${escapeHtml(reportLabel(reportType, run.status))}</strong><span class="status ${escapeHtml(run.status || '')}">${escapeHtml(run.status || '')}</span></div><div class="muted">${escapeHtml(run.input_path || '')}</div><div class="muted">${escapeHtml(run.started_at || '')}</div>${summaryLine}<div class="links">${risk}${artifactLinks(run)}</div></div>`;
 }
 async function startRunWithPayload(payload) {
   $('log').textContent = '';
@@ -3913,8 +4022,16 @@ async function startRunWithPayload(payload) {
     refreshRuns();
   } catch (e) {
     setStatus(e.error || 'start failed', 'failed');
-    $('currentRun').innerHTML = `<span>输入</span><strong>${escapeHtml(e.message || JSON.stringify(e))}</strong>`;
+    setFeedback(e.message || e.error || JSON.stringify(e), 'failed');
+    renderReportPanel({status: 'failed', message: e.message || e.error || JSON.stringify(e)});
   }
+}
+function startPayloadFromForm() {
+  const payload = {input_path: $('inputPath').value, fresh: $('fresh').checked};
+  if ($('outputPath').dataset.userSelected === 'true' && $('outputPath').value) {
+    payload.output = $('outputPath').value;
+  }
+  return payload;
 }
 function retryRun(run) {
   if (!run || !run.input_path) return;
@@ -3966,7 +4083,7 @@ $('startBtn').addEventListener('click', async () => {
   if (!$('outputPath').value && $('inputPath').value) {
     $('outputPath').value = defaultOutputStemForInput($('inputPath').value);
   }
-  await startRunWithPayload({input_path:$('inputPath').value, output:$('outputPath').value, fresh:$('fresh').checked});
+  await startRunWithPayload(startPayloadFromForm());
 });
 $('pickFileBtn').addEventListener('click', () => chooseLocalPath('input_file'));
 $('pickDirectoryBtn').addEventListener('click', () => chooseLocalPath('input_directory'));

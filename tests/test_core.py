@@ -3491,6 +3491,13 @@ def test_web_runner_page_contains_workbench_controls():
     assert 'id="startBtn"' in rendered
     assert 'id="cancelBtn"' in rendered
     assert 'id="currentOutput"' in rendered
+    assert 'id="runFeedback"' in rendered
+    assert 'id="reportPanel"' in rendered
+    assert 'id="reportState"' in rendered
+    assert 'id="reportType"' in rendered
+    assert 'id="reportRisk"' in rendered
+    assert 'id="reportFolder"' in rendered
+    assert 'id="reportSummary"' in rendered
     assert 'id="currentActions"' in rendered
     assert 'id="log"' in rendered
     assert 'id="runs"' in rendered
@@ -3503,6 +3510,11 @@ def test_web_runner_page_contains_workbench_controls():
     assert "applyDroppedPath" in rendered
     assert "defaultOutputStemForInput" in rendered
     assert "renderCurrentRun" in rendered
+    assert "renderReportPanel" in rendered
+    assert "reportSummaryFallback" in rendered
+    assert "setFeedback" in rendered
+    assert "startPayloadFromForm" in rendered
+    assert "dataset.userSelected === 'true'" in rendered
     assert "currentArtifactActions" in rendered
     assert "retryRun" in rendered
     assert "startRunWithPayload" in rendered
@@ -3879,7 +3891,10 @@ def test_web_runner_artifact_targets_are_recorded_allowlist_only(tmp_path):
     secret_path = tmp_path / "secret.txt"
     html_path.write_text("<html>report</html>", encoding="utf-8")
     md_path.write_text("# report", encoding="utf-8")
-    json_path.write_text(json.dumps({"report": {"summary": "ok", "risk_level": "低"}}), encoding="utf-8")
+    json_path.write_text(
+        json.dumps({"report_type": "complete", "llm_report": {"summary": "ok", "risk_level": "低"}}),
+        encoding="utf-8",
+    )
     secret_path.write_text("secret", encoding="utf-8")
     state = paper_audit.WebRunnerState(history_path=tmp_path / "runs.json")
     state.runs["run-1"] = {
@@ -3897,11 +3912,92 @@ def test_web_runner_artifact_targets_are_recorded_allowlist_only(tmp_path):
     unknown_target, unknown_error = state.artifact_target("run-1", "secret")
 
     assert run["report_type"] == "complete"
+    assert run["summary"]["summary"] == "ok"
+    assert run["summary"]["risk_level"] == "低"
+    assert run["summary"]["report_type"] == "complete"
     assert html_error == ""
     assert html_target == html_path.resolve()
     assert unknown_target is None
     assert unknown_error == "unknown_artifact"
     assert str(secret_path.resolve()) not in json.dumps(run, ensure_ascii=False)
+
+
+def test_web_runner_limited_artifact_summary_is_exposed(tmp_path):
+    input_path = tmp_path / "paper.pdf"
+    input_path.write_text("paper", encoding="utf-8")
+    html_path = tmp_path / "paper.limited.html"
+    md_path = tmp_path / "paper.limited.md"
+    json_path = tmp_path / "paper.limited.json"
+    html_path.write_text("<html>limited</html>", encoding="utf-8")
+    md_path.write_text("# limited", encoding="utf-8")
+    json_path.write_text(
+        json.dumps({"report_type": "limited", "llm_report": {"summary": "scope limited", "risk_level": "中"}}),
+        encoding="utf-8",
+    )
+    state = paper_audit.WebRunnerState(history_path=tmp_path / "runs.json")
+    state.runs["run-1"] = {
+        "id": "run-1",
+        "input_path": str(input_path),
+        "output": "",
+        "status": "succeeded",
+        "started_at": "2026-06-05T00:00:00",
+        "logs": [],
+        "artifacts": {},
+    }
+
+    run = state.discover_artifacts("run-1")
+
+    assert run["report_type"] == "limited"
+    assert run["artifacts"]["html"] == str(html_path.resolve())
+    assert run["artifacts"]["markdown"] == str(md_path.resolve())
+    assert run["summary"]["summary"] == "scope limited"
+    assert run["summary"]["risk_level"] == "中"
+    assert run["summary"]["report_type"] == "limited"
+
+
+def test_web_runner_failed_artifact_summary_is_exposed(tmp_path):
+    input_path = tmp_path / "paper.pdf"
+    input_path.write_text("paper", encoding="utf-8")
+    html_path = tmp_path / "paper.failed.html"
+    md_path = tmp_path / "paper.failed.md"
+    json_path = tmp_path / "paper.failed.json"
+    html_path.write_text("<html>failed</html>", encoding="utf-8")
+    md_path.write_text("# failed", encoding="utf-8")
+    json_path.write_text(
+        json.dumps({
+            "report_type": "failed",
+            "complete_report_generated": False,
+            "failure": {
+                "capability": "text_llm",
+                "error_class": "missing_required_config",
+                "message": "缺少LLM配置",
+                "fix_hints": ["配置API key"],
+                "completed_stages": ["stage1_extract"],
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    state = paper_audit.WebRunnerState(history_path=tmp_path / "runs.json")
+    state.runs["run-1"] = {
+        "id": "run-1",
+        "input_path": str(input_path),
+        "output": "",
+        "status": "failed",
+        "started_at": "2026-06-05T00:00:00",
+        "logs": [],
+        "artifacts": {},
+    }
+
+    run = state.discover_artifacts("run-1")
+
+    assert run["report_type"] == "failed"
+    assert run["artifacts"]["html"] == str(html_path.resolve())
+    assert run["summary"]["report_type"] == "failed"
+    assert run["summary"]["risk_level"] == "failed"
+    assert run["summary"]["failure_capability"] == "text_llm"
+    assert run["summary"]["failure_error"] == "missing_required_config"
+    assert run["summary"]["summary"] == "缺少LLM配置"
+    assert run["summary"]["complete_report_generated"] is False
 
 
 def test_report_action_context_cleans_reference_issue_text():
