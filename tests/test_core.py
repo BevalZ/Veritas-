@@ -698,6 +698,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.failed_diagnostics.failed_audit_payload is paper_audit.failed_audit_payload
     assert veritas.failed_diagnostics.preflight_failure_to_audit_failure is paper_audit.preflight_failure_to_audit_failure
     assert veritas.failed_diagnostics.adapter_failure_to_audit_failure is paper_audit.adapter_failure_to_audit_failure
+    assert veritas.risk_rule_helpers._is_extraction_limited_check is paper_audit._is_extraction_limited_check
+    assert veritas.risk_rule_helpers._downgrade_extraction_red_flags is paper_audit._downgrade_extraction_red_flags
     assert veritas.risk_rules.apply_risk_rules is paper_audit.apply_risk_rules
     assert veritas.risk_rules.RISK_RULE_VERSION == paper_audit.RISK_RULE_VERSION
     assert veritas.adapter_types.AdapterResult is paper_audit.AdapterResult

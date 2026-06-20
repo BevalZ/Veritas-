@@ -28,6 +28,7 @@ veritas/
 ├── models.py           # Stable dataclass/report models and model conversion
 ├── preflight.py        # Critical capability preflight boundary
 ├── renderers.py        # Markdown/HTML renderer boundary
+├── risk_rule_helpers.py # Shared extraction downgrade helpers for risk scoring/rendering
 ├── risk_rules.py       # Versioned final risk scoring boundary
 ├── run.py              # Run request/result and orchestration boundary
 ├── text_utils.py       # Shared text shortening and token similarity helpers
@@ -99,6 +100,8 @@ tests/
 - `veritas/versions.py` owns prompt, schema, adapter, and risk-rule version
   constants; compatibility modules should import these constants rather than
   redefining them.
+- `veritas/risk_rule_helpers.py` owns extraction-limited classification and
+  OCR/table red-flag downgrade helpers shared by risk scoring and renderers.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring
