@@ -668,6 +668,8 @@ def run_stage(request: RunRequest):
   - `recommendation`
   - `confidence`
 - Valid parsed reports contain normalized `checks`.
+- Lightweight audit dataclasses live in `veritas/models.py` and must remain
+  re-exported through `paper_audit` for compatibility.
 - Raw LLM responses are stored separately as `raw_content` in chunk caches.
 - Valid normalized reports do not embed raw response text as finding evidence.
 

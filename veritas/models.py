@@ -1,18 +1,81 @@
 """Stable data models for audit evidence and run outcomes."""
 
-from dataclasses import asdict, is_dataclass
-from typing import Any, Dict
+import time
+from dataclasses import asdict, dataclass, field, is_dataclass
+from typing import Any, Dict, List
 
-from .legacy import (
-    AuditFailure,
-    AuditReportModel,
-    CoverageModel,
-    EvidenceFinding,
-    ImageAuditModel,
-    ReferenceAuditModel,
-    RunMetadataModel,
-)
 from .run_types import RunRequest, RunResult
+
+
+@dataclass
+class AuditFailure:
+    """Structured diagnostic record for a run that cannot produce a complete audit."""
+    capability: str
+    error_class: str
+    message: str
+    fix_hints: List[str] = field(default_factory=list)
+    completed_stages: List[str] = field(default_factory=list)
+    retry_command: str = ""
+    details: Dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
+
+
+@dataclass
+class EvidenceFinding:
+    category: str
+    item: str
+    verdict: str
+    source_text: str
+    evidence: str
+    reason: str
+    recommendation: str
+    confidence: float
+    detail: str = ""
+
+
+@dataclass
+class AuditReportModel:
+    summary: str
+    risk_level: str
+    detection_score: int
+    checks: List[EvidenceFinding]
+    conclusion: str
+
+
+@dataclass
+class ReferenceAuditModel:
+    status: str
+    reference_count: int
+    online_checked: int = 0
+    issues: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class ImageAuditModel:
+    image_count: int
+    semantic_checked: int = 0
+    detector_checked: int = 0
+    items: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class RunMetadataModel:
+    artifact_type: str
+    extraction_method: str
+    total_chars: int = 0
+    limited_reasons: List[str] = field(default_factory=list)
+
+
+@dataclass
+class CoverageModel:
+    capability: str
+    successful: int
+    total: int
+    failed: List[Any] = field(default_factory=list)
+
+    @property
+    def complete(self) -> bool:
+        return self.successful == self.total and not self.failed
 
 
 def _as_str(value: Any) -> str:

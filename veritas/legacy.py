@@ -8,7 +8,6 @@
 用法: python paper_audit.py <paper_path> [--mineru] [--max-chars 8000] [--output report.md]
 """
 import re, json, time, argparse, urllib.request, urllib.parse, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, builtins, hashlib, html, base64, io, concurrent.futures, signal, threading, shlex, datetime
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple, Dict, List, Any, Callable
 
@@ -35,6 +34,15 @@ from .runtime_config import (
     RuntimeConfig,
     default_runtime_config as _build_default_runtime_config,
     load_runtime_config as _build_runtime_config,
+)
+from .models import (
+    AuditFailure,
+    AuditReportModel,
+    CoverageModel,
+    EvidenceFinding,
+    ImageAuditModel,
+    ReferenceAuditModel,
+    RunMetadataModel,
 )
 from .preflight_types import PreflightResult, run_preflight_once
 from .production_adapters import (
@@ -387,19 +395,6 @@ def apply_runtime_config(runtime_config: RuntimeConfig):
     LLM_TIMEOUT = int(runtime_config.llm_timeout)
     LLM_RETRIES = int(runtime_config.llm_retries)
     return runtime_config
-
-
-@dataclass
-class AuditFailure:
-    """Structured diagnostic record for a run that cannot produce a complete audit."""
-    capability: str
-    error_class: str
-    message: str
-    fix_hints: List[str] = field(default_factory=list)
-    completed_stages: List[str] = field(default_factory=list)
-    retry_command: str = ""
-    details: Dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
 
 
 def failed_audit_payload(failure: AuditFailure, input_path: Path, meta: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -1005,63 +1000,6 @@ def run_adapter_e2e_audit(
         "workspace": workspace,
     }
 
-
-@dataclass
-class EvidenceFinding:
-    category: str
-    item: str
-    verdict: str
-    source_text: str
-    evidence: str
-    reason: str
-    recommendation: str
-    confidence: float
-    detail: str = ""
-
-
-@dataclass
-class AuditReportModel:
-    summary: str
-    risk_level: str
-    detection_score: int
-    checks: List[EvidenceFinding]
-    conclusion: str
-
-
-@dataclass
-class ReferenceAuditModel:
-    status: str
-    reference_count: int
-    online_checked: int = 0
-    issues: List[Dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
-class ImageAuditModel:
-    image_count: int
-    semantic_checked: int = 0
-    detector_checked: int = 0
-    items: List[Dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
-class RunMetadataModel:
-    artifact_type: str
-    extraction_method: str
-    total_chars: int = 0
-    limited_reasons: List[str] = field(default_factory=list)
-
-
-@dataclass
-class CoverageModel:
-    capability: str
-    successful: int
-    total: int
-    failed: List[Any] = field(default_factory=list)
-
-    @property
-    def complete(self) -> bool:
-        return self.successful == self.total and not self.failed
 
 # ─── 欺诈模式知识库加载 ───
 FRAUD_PATTERNS_PATH = Path(__file__).resolve().parent.parent / "fraud_patterns.json"

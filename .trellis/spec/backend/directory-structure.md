@@ -60,6 +60,9 @@ tests/
 
 - `paper_audit.py` aliases `veritas.legacy` for historical `import paper_audit`
   compatibility while still running `veritas.legacy.main()` as a script.
+- `veritas/models.py` owns `AuditFailure`, `AuditReportModel`,
+  `EvidenceFinding`, and related lightweight dataclasses; `paper_audit` keeps
+  compatibility by re-exporting the same class objects through `veritas.legacy`.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring
