@@ -21,6 +21,8 @@ shared resume caches, evaluation fixtures, and JSON/Markdown review artifacts.
   patterns over shelling out from Python code.
 - Shared safe-name and JSON read/write helpers live in `veritas/file_utils.py`
   and remain re-exported through `paper_audit` for compatibility.
+- Runtime clock metadata helpers live in `veritas/runtime_metadata.py` and
+  remain re-exported through `paper_audit` for compatibility.
 
 ---
 

@@ -36,6 +36,7 @@ from .runtime_config import (
     default_runtime_config as _build_default_runtime_config,
     load_runtime_config as _build_runtime_config,
 )
+from .runtime_metadata import ensure_runtime_meta, runtime_metadata, runtime_utc_year
 from .models import (
     AuditFailure,
     AuditReportModel,
@@ -160,34 +161,6 @@ def _text_fingerprint(text: str, extra: str = ""):
     h.update((text or "").encode("utf-8", errors="ignore"))
     h.update(str(extra).encode("utf-8", errors="ignore"))
     return h.hexdigest()[:16]
-
-
-def runtime_utc_year() -> int:
-    """Return the runtime UTC year for deterministic date checks."""
-    return datetime.datetime.now(datetime.timezone.utc).year
-
-
-def runtime_metadata() -> Dict[str, Any]:
-    """Return runtime clock metadata used by reports and deterministic date rules."""
-    utc_now = datetime.datetime.now(datetime.timezone.utc)
-    local_now = utc_now.astimezone()
-    return {
-        "local_time": local_now.isoformat(timespec="seconds"),
-        "timezone": local_now.tzname() or str(local_now.tzinfo or ""),
-        "utc_time": utc_now.isoformat(timespec="seconds"),
-        "utc_year": utc_now.year,
-        "future_year_basis": "utc_year",
-    }
-
-
-def ensure_runtime_meta(meta: Dict[str, Any] = None) -> Dict[str, Any]:
-    normalized = dict(meta or {})
-    runtime = dict(normalized.get("runtime") or {})
-    defaults = runtime_metadata()
-    for key, value in defaults.items():
-        runtime.setdefault(key, value)
-    normalized["runtime"] = runtime
-    return normalized
 
 
 # LLM运行参数：由CLI覆盖。默认保守，避免一次请求无限阻塞。

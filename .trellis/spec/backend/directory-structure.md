@@ -31,6 +31,7 @@ veritas/
 └── file_utils.py       # Shared safe-name and JSON file helpers
 └── report_schema.py    # Strict LLM evidence schema parser
 └── retry_commands.py   # Retry command builders for failed diagnostics
+└── runtime_metadata.py # Runtime clock metadata for reports/rules
 tests/
 └── test_core.py        # Core unit and smoke coverage
 ```
@@ -75,6 +76,9 @@ tests/
 - `veritas/retry_commands.py` owns retry command builders used by failed
   diagnostics; `paper_audit` keeps compatibility by re-exporting the same
   function objects through `veritas.legacy`.
+- `veritas/runtime_metadata.py` owns runtime clock metadata helpers used by
+  reports and deterministic date checks; `paper_audit` keeps compatibility by
+  re-exporting the same function objects through `veritas.legacy`.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring
