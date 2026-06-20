@@ -42,6 +42,9 @@ Examples:
 - Formal report suffixes are `.audit.*`, `.limited.*`, and `.failed.*`.
 - JSON fixture directories distinguish cases from replay records:
   `eval/cases/synthetic`, `eval/replay/synthetic`, and `eval/cases/public`.
+- Local paper workbench directories such as `Test_paper/`, `Test_paper2/`,
+  and `.veritas_web/` are runtime/user data and must stay ignored unless a
+  reviewed fixture is intentionally moved into `eval/` or `tests/fixtures/`.
 
 ---
 
@@ -50,3 +53,5 @@ Examples:
 - Do not treat resume caches as formal evidence artifacts.
 - Do not overwrite replay fixtures during default evaluation.
 - Do not write only Markdown when downstream code needs structured JSON.
+- Do not commit user-provided manuscripts, generated reports, hidden resume
+  caches, or local Web Runner state from ad hoc audit runs.

@@ -30,6 +30,8 @@ services. Default tests must not require API keys or network access.
   version, risk rule version, input hash, timestamp, and response.
 - Prompt, schema, or risk-rule changes must run the synthetic replay suite or
   document why evaluation was not run.
+- Default synthetic replay must include both a clean low-risk case and at least
+  one high-risk red-flag case so rule demotion/promotion regressions are visible.
 - Keep optional public-paper evaluation cases separate from default synthetic
   replay cases.
 
