@@ -23,6 +23,7 @@ veritas/
 ├── artifacts.py        # Formal artifact path and outcome helpers
 ├── cli.py              # CLI entry point boundary
 ├── config.py           # Runtime configuration boundary
+├── desktop_gui.py      # Desktop GUI helper boundary
 ├── failed_diagnostics.py # Stable failed-audit payload and conversion helpers
 ├── followups.py       # PubPeer/comment and journal-letter draft workflow helpers
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
@@ -116,6 +117,11 @@ tests/
 - `veritas/config.py` owns runtime configuration loading/application helpers.
   Namespace-aware helpers let `veritas.legacy` preserve historical global
   monkeypatch behavior without making `veritas.config` import legacy.
+- `veritas/desktop_gui.py` owns desktop GUI helper functions that do not require
+  the Tk application class: labels, config snapshots, progress parsing, artifact
+  preview, run summaries, and namespace-aware config/follow-up actions.
+  `veritas.legacy` may keep `DesktopGuiApp` and wrap namespace-aware helpers
+  with its globals while the GUI class is still in the compatibility layer.
 - `veritas/production_adapters.py` may still call legacy provider functions
   that have not been extracted, but those calls should resolve legacy only when
   the provider method is invoked.

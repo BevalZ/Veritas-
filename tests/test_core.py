@@ -790,6 +790,17 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert callable(veritas.followups.save_followup_artifacts_from_namespace)
     assert callable(veritas.followups.generate_followup_draft_from_namespace)
     assert callable(veritas.followups.generate_and_save_followup_draft_from_namespace)
+    assert veritas.desktop_gui.DESKTOP_GUI_ARTIFACT_LABELS is paper_audit.DESKTOP_GUI_ARTIFACT_LABELS
+    assert veritas.desktop_gui.desktop_gui_config_file_path is paper_audit.desktop_gui_config_file_path
+    assert veritas.desktop_gui.desktop_gui_progress_from_log_line is paper_audit.desktop_gui_progress_from_log_line
+    assert veritas.desktop_gui.desktop_gui_config_snapshot is paper_audit.desktop_gui_config_snapshot
+    assert veritas.desktop_gui.desktop_gui_run_summary is paper_audit.desktop_gui_run_summary
+    assert veritas.desktop_gui.desktop_gui_start_run is paper_audit.desktop_gui_start_run
+    assert veritas.desktop_gui.open_desktop_path is paper_audit.open_desktop_path
+    assert veritas.desktop_gui.desktop_gui_artifact_preview is paper_audit.desktop_gui_artifact_preview
+    assert callable(veritas.desktop_gui.desktop_gui_checked_config_snapshot_from_namespace)
+    assert callable(veritas.desktop_gui.desktop_gui_followup_context_from_namespace)
+    assert callable(veritas.desktop_gui.desktop_gui_generate_followup_draft_from_namespace)
     assert veritas.versions.PROMPT_VERSION == paper_audit.PROMPT_VERSION
     assert veritas.versions.SCHEMA_VERSION == paper_audit.SCHEMA_VERSION
     assert veritas.versions.ADAPTER_VERSION == paper_audit.ADAPTER_VERSION
