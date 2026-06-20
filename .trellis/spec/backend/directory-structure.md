@@ -30,6 +30,7 @@ veritas/
 ├── renderers.py        # Markdown/HTML renderer boundary
 ├── risk_rules.py       # Versioned final risk scoring boundary
 ├── run.py              # Run request/result and orchestration boundary
+├── text_utils.py       # Shared text shortening and token similarity helpers
 ├── versions.py         # Prompt/schema/adapter/risk-rule version constants
 └── workspace.py        # Per-run workspace boundary
 └── file_utils.py       # Shared safe-name and JSON file helpers
@@ -93,6 +94,8 @@ tests/
 - `veritas/html_utils.py` owns HTML escaping and script-safe JSON helpers used
   by renderers; these remain re-exported through `paper_audit` for
   compatibility while renderer extraction continues.
+- `veritas/text_utils.py` owns shared text shortening and token similarity
+  helpers used by follow-up generation, risk rules, references, and renderers.
 - `veritas/versions.py` owns prompt, schema, adapter, and risk-rule version
   constants; compatibility modules should import these constants rather than
   redefining them.

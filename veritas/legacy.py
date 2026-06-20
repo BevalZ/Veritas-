@@ -48,6 +48,7 @@ from .runtime_config import (
     load_runtime_config as _build_runtime_config,
 )
 from .runtime_metadata import ensure_runtime_meta, runtime_metadata, runtime_utc_year
+from .text_utils import _brief_text, _normalize_title, _title_tokens, _token_similarity
 from .models import (
     AuditFailure,
     AuditReportModel,
@@ -5165,31 +5166,6 @@ def _normalize_doi(value):
     return value.lower()
 
 
-def _normalize_title(value):
-    value = html.unescape(str(value or "")).lower()
-    value = re.sub(r"\bdoi\s*[:：]\s*10\.\S+", " ", value)
-    value = re.sub(r"https?://\S+", " ", value)
-    value = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def _title_tokens(value):
-    normalized = _normalize_title(value)
-    stop = {
-        "the", "and", "for", "with", "from", "into", "onto", "that", "this", "using",
-        "study", "analysis", "research", "journal", "vol", "volume", "issue", "pages",
-    }
-    return {t for t in normalized.split() if len(t) >= 3 and t not in stop}
-
-
-def _token_similarity(a, b):
-    left = _title_tokens(a)
-    right = _title_tokens(b)
-    if not left or not right:
-        return 0.0
-    return len(left & right) / max(len(left), len(right))
-
-
 REFERENCE_CONTAINER_WORD_RE = re.compile(
     r"\b(?:journal|jclin|proc\.?|proceedings|nature|science|cell|frontiers|plos|bmc|"
     r"lancet|thyroid|oncology|endocrinology|communications?|commun|annals|cancers|"
@@ -6174,14 +6150,6 @@ def _md_escape_cell(text):
     """Markdown表格单元格转义与压缩。"""
     text = re.sub(r"\s+", " ", str(text or "")).strip()
     return text.replace("|", "\\|")
-
-
-def _brief_text(text, limit=180):
-    """压缩长文本，保留报告可读性。"""
-    text = re.sub(r"\s+", " ", str(text or "")).strip()
-    if len(text) > limit:
-        return text[:limit].rstrip() + "…"
-    return text
 
 
 def _cross_file_source_label(category):
