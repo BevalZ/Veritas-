@@ -3,6 +3,7 @@
 import re
 from typing import Any, Dict
 
+from .runtime_metadata import runtime_utc_year
 from .text_utils import _brief_text, _token_similarity
 
 
@@ -91,6 +92,56 @@ def _downgrade_extraction_red_flags(checks):
         note = "自动降级：该项基于MinerU/OCR提取表格，且存在提取错位或需核对原PDF的不确定性；原PDF确认前不作为红旗。"
         detail = _soften_extraction_red_flag_language(check.get("detail") or check.get("reason") or "")
         check["detail"] = f"{note} {detail}".strip()
+    return checks
+
+
+def _check_text_blob(check: Dict[str, Any]) -> str:
+    fields = ("category", "item", "verdict", "source", "source_text", "evidence", "reason", "recommendation", "detail")
+    return " ".join(str(check.get(field) or "") for field in fields)
+
+
+def _extract_years_from_check(check: Dict[str, Any]):
+    years = []
+    for match in re.findall(r"\b((?:19|20)\d{2})\b", _check_text_blob(check)):
+        try:
+            years.append(int(match))
+        except ValueError:
+            pass
+    return years
+
+
+def _is_future_publication_check(check: Dict[str, Any]) -> bool:
+    blob = _check_text_blob(check).lower()
+    future_terms = ("未来", "future", "尚未发表", "未发表", "publication date", "发表时间", "发表年份", "出版时间", "出版年份")
+    return any(term in blob for term in future_terms)
+
+
+def _downgrade_unverified_future_publication_checks(checks, current_year=None):
+    current_year = int(current_year or runtime_utc_year())
+    for check in checks:
+        if not _is_future_publication_check(check):
+            continue
+        future_years = [year for year in _extract_years_from_check(check) if year > current_year]
+        if future_years:
+            check["_runtime_year_check"] = {
+                "current_year": current_year,
+                "future_years": sorted(set(future_years)),
+                "status": "confirmed_future_year_in_evidence",
+            }
+            continue
+        if "红旗" in str(check.get("verdict", "")):
+            check["verdict"] = "⚠️疑点"
+        check["_verdict_adjusted"] = "future_publication_runtime_year_not_confirmed"
+        check["_runtime_year_check"] = {
+            "current_year": current_year,
+            "future_years": [],
+            "status": "not_future_by_runtime_year",
+        }
+        note = f"自动降级：发表时间是否在未来必须以运行时年份({current_year})和在线元数据为准；该项未在证据文本中给出晚于当前年份的年份，不能仅凭LLM知识库判断。"
+        detail = check.get("detail") or check.get("reason") or ""
+        check["detail"] = f"{note} {detail}".strip()
+        if not check.get("recommendation"):
+            check["recommendation"] = "使用参考文献在线核验结果、DOI/Crossref/OpenAlex/PubMed元数据或出版方页面确认发表时间。"
     return checks
 
 
@@ -281,6 +332,10 @@ __all__ = [
     "_soften_extraction_red_flag_language",
     "_soften_nonfinal_red_flag_language",
     "_downgrade_extraction_red_flags",
+    "_check_text_blob",
+    "_extract_years_from_check",
+    "_is_future_publication_check",
+    "_downgrade_unverified_future_publication_checks",
     "_CHECK_STOPWORDS",
     "_normalize_check_terms",
     "_check_similarity",

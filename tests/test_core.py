@@ -703,6 +703,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.risk_rule_helpers._same_or_similar_check is paper_audit._same_or_similar_check
     assert veritas.risk_rule_helpers._merge_check_into is paper_audit._merge_check_into
     assert veritas.risk_rule_helpers._build_merged_conclusion is paper_audit._build_merged_conclusion
+    assert veritas.risk_rule_helpers._downgrade_unverified_future_publication_checks is paper_audit._downgrade_unverified_future_publication_checks
     assert veritas.risk_rules.apply_risk_rules is paper_audit.apply_risk_rules
     assert veritas.risk_rules.RISK_RULE_VERSION == paper_audit.RISK_RULE_VERSION
     assert veritas.adapter_types.AdapterResult is paper_audit.AdapterResult

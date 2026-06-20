@@ -81,8 +81,12 @@ from .risk_rule_helpers import (
     _check_merge_key,
     _check_severity,
     _check_similarity,
+    _check_text_blob,
     _check_text_for_scoring,
     _downgrade_extraction_red_flags,
+    _downgrade_unverified_future_publication_checks,
+    _extract_years_from_check,
+    _is_future_publication_check,
     _is_extraction_limited_check,
     _max_risk,
     _merge_check_into,
@@ -4433,61 +4437,11 @@ def serve_web_runner(host="127.0.0.1", port=8765, open_browser=True, history_pat
     return 0
 
 
-def _check_text_blob(check: Dict[str, Any]) -> str:
-    fields = ("category", "item", "verdict", "source", "source_text", "evidence", "reason", "recommendation", "detail")
-    return " ".join(str(check.get(field) or "") for field in fields)
-
-
-def _extract_years_from_check(check: Dict[str, Any]) -> List[int]:
-    years = []
-    for match in re.findall(r"\b((?:19|20)\d{2})\b", _check_text_blob(check)):
-        try:
-            years.append(int(match))
-        except ValueError:
-            pass
-    return years
-
-
-def _is_future_publication_check(check: Dict[str, Any]) -> bool:
-    blob = _check_text_blob(check).lower()
-    future_terms = ("未来", "future", "尚未发表", "未发表", "publication date", "发表时间", "发表年份", "出版时间", "出版年份")
-    return any(term in blob for term in future_terms)
-
-
-def _downgrade_unverified_future_publication_checks(checks, current_year=None):
-    current_year = int(current_year or runtime_utc_year())
-    for check in checks:
-        if not _is_future_publication_check(check):
-            continue
-        future_years = [year for year in _extract_years_from_check(check) if year > current_year]
-        if future_years:
-            check["_runtime_year_check"] = {
-                "current_year": current_year,
-                "future_years": sorted(set(future_years)),
-                "status": "confirmed_future_year_in_evidence",
-            }
-            continue
-        if "红旗" in str(check.get("verdict", "")):
-            check["verdict"] = "⚠️疑点"
-        check["_verdict_adjusted"] = "future_publication_runtime_year_not_confirmed"
-        check["_runtime_year_check"] = {
-            "current_year": current_year,
-            "future_years": [],
-            "status": "not_future_by_runtime_year",
-        }
-        note = f"自动降级：发表时间是否在未来必须以运行时年份({current_year})和在线元数据为准；该项未在证据文本中给出晚于当前年份的年份，不能仅凭LLM知识库判断。"
-        detail = check.get("detail") or check.get("reason") or ""
-        check["detail"] = f"{note} {detail}".strip()
-        if not check.get("recommendation"):
-            check["recommendation"] = "使用参考文献在线核验结果、DOI/Crossref/OpenAlex/PubMed元数据或出版方页面确认发表时间。"
-    return checks
-
-
 def apply_risk_rules(report: Dict[str, Any], stat_result=None, image_audit=None) -> Dict[str, Any]:
     """Apply versioned deterministic rules for final risk and evidence risk score."""
     report = dict(report or {})
     checks = [dict(c) for c in report.get("checks", []) if isinstance(c, dict)]
-    checks = _downgrade_unverified_future_publication_checks(checks)
+    checks = _downgrade_unverified_future_publication_checks(checks, current_year=runtime_utc_year())
     checks = _downgrade_extraction_red_flags(checks)
     warning_checks = [c for c in checks if "疑点" in str(c.get("verdict", ""))]
     red_flags = sum(1 for c in checks if "红旗" in str(c.get("verdict", "")))
@@ -4568,7 +4522,7 @@ def merge_chunk_reports(reports, stat_result=None):
                 candidate["_source_chunks"] = [i + 1]
                 all_checks.append(candidate)
 
-    all_checks = _downgrade_unverified_future_publication_checks(all_checks)
+    all_checks = _downgrade_unverified_future_publication_checks(all_checks, current_year=runtime_utc_year())
     all_checks = _downgrade_extraction_red_flags(all_checks)
 
     # 2. 统计红旗/疑点数量。OCR/表格提取质量问题单独计数，避免低证据噪声堆叠成高风险。

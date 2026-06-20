@@ -102,7 +102,9 @@ tests/
   redefining them.
 - `veritas/risk_rule_helpers.py` owns extraction-limited classification,
   OCR/table red-flag downgrade, check similarity/merge, and merged
-  summary/conclusion helpers shared by risk scoring and renderers.
+  summary/conclusion helpers shared by risk scoring and renderers. Runtime-year
+  future-publication checks also live there; legacy callers pass the current
+  runtime year explicitly to preserve compatibility with existing monkeypatches.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring
