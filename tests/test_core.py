@@ -656,6 +656,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.preflight_types.PreflightResult is paper_audit.PreflightResult
     assert veritas.preflight.PreflightResult is paper_audit.PreflightResult
     assert veritas.preflight.run_preflight_once is paper_audit.run_preflight_once
+    assert veritas.preflight.preflight_failure_to_audit_failure is paper_audit.preflight_failure_to_audit_failure
     assert veritas.run_types.RunRequest is paper_audit.RunRequest
     assert veritas.run_types.RunResult is paper_audit.RunResult
     assert veritas.run.RunRequest is paper_audit.RunRequest
@@ -685,6 +686,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.artifacts.coverage_blocking_failure is paper_audit.coverage_blocking_failure
     assert veritas.artifacts.apply_audit_artifact_type is paper_audit.apply_audit_artifact_type
     assert veritas.failed_diagnostics.failed_audit_payload is paper_audit.failed_audit_payload
+    assert veritas.failed_diagnostics.preflight_failure_to_audit_failure is paper_audit.preflight_failure_to_audit_failure
+    assert veritas.failed_diagnostics.adapter_failure_to_audit_failure is paper_audit.adapter_failure_to_audit_failure
     assert veritas.risk_rules.apply_risk_rules is paper_audit.apply_risk_rules
     assert veritas.adapter_types.AdapterResult is paper_audit.AdapterResult
     assert veritas.adapters.AdapterResult is paper_audit.AdapterResult

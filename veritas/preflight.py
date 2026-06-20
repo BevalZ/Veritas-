@@ -1,7 +1,7 @@
 """Critical capability preflight boundary."""
 
+from .failed_diagnostics import preflight_failure_to_audit_failure
 from .legacy import (
-    preflight_failure_to_audit_failure,
     preflight_mineru,
     preflight_text_llm,
 )

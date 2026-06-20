@@ -23,7 +23,7 @@ veritas/
 ├── artifacts.py        # Formal artifact path and outcome helpers
 ├── cli.py              # CLI entry point boundary
 ├── config.py           # Runtime configuration boundary
-├── failed_diagnostics.py # Stable failed-audit JSON payload helpers
+├── failed_diagnostics.py # Stable failed-audit payload and conversion helpers
 ├── models.py           # Stable dataclass/report models and model conversion
 ├── preflight.py        # Critical capability preflight boundary
 ├── renderers.py        # Markdown/HTML renderer boundary
@@ -85,9 +85,9 @@ tests/
 - `veritas/artifacts.py` owns formal audit artifact path, limited-outcome, and
   coverage-blocking helpers; `paper_audit` keeps compatibility by re-exporting
   the same function objects through `veritas.legacy`.
-- `veritas/failed_diagnostics.py` owns stable failed-audit JSON payload helpers;
-  Markdown/HTML formatting can remain in `veritas.legacy` until renderer
-  dependencies are untangled.
+- `veritas/failed_diagnostics.py` owns stable failed-audit JSON payload and
+  failure-to-`AuditFailure` conversion helpers; Markdown/HTML formatting can
+  remain in `veritas.legacy` until renderer dependencies are untangled.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring
