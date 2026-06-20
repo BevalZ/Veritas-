@@ -28,6 +28,8 @@ services. Default tests must not require API keys or network access.
 - Use fake adapters or replay fixtures for deterministic tests.
 - Evaluation records must include adapter, model, prompt version, schema
   version, risk rule version, input hash, timestamp, and response.
+- Prompt, schema, adapter, and risk-rule version constants live in
+  `veritas/versions.py`; do not redefine them in compatibility modules.
 - Prompt, schema, or risk-rule changes must run the synthetic replay suite or
   document why evaluation was not run.
 - Default synthetic replay must include both a clean low-risk case and at least

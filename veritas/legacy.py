@@ -69,6 +69,7 @@ from .production_adapters import (
 from .run_types import RunRequest, RunResult
 from .report_schema import LLM_REQUIRED_FINDING_FIELDS, _json_string_unescape, normalize_llm_report_schema, parse_report
 from .retry_commands import _shell_quote, default_retry_command, retry_command_from_args
+from .versions import ADAPTER_VERSION, PROMPT_VERSION, RISK_RULE_VERSION, SCHEMA_VERSION
 from .web_runner_paths import (
     _web_runner_common_search_roots,
     _web_runner_is_basename_only_input,
@@ -4661,12 +4662,6 @@ def _check_member_summary(check: Dict[str, Any], similarity=None) -> Dict[str, A
     if similarity is not None:
         member["merge_similarity"] = similarity
     return {k: v for k, v in member.items() if v not in (None, "")}
-
-
-PROMPT_VERSION = "text_audit_prompt_v1"
-SCHEMA_VERSION = "strict_evidence_schema_v1"
-ADAPTER_VERSION = "audit_adapters_v1"
-RISK_RULE_VERSION = "risk_rules_v1"
 
 
 def _risk_index(level):

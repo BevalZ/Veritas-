@@ -30,6 +30,7 @@ veritas/
 ├── renderers.py        # Markdown/HTML renderer boundary
 ├── risk_rules.py       # Versioned final risk scoring boundary
 ├── run.py              # Run request/result and orchestration boundary
+├── versions.py         # Prompt/schema/adapter/risk-rule version constants
 └── workspace.py        # Per-run workspace boundary
 └── file_utils.py       # Shared safe-name and JSON file helpers
 └── report_schema.py    # Strict LLM evidence schema parser
@@ -92,6 +93,9 @@ tests/
 - `veritas/html_utils.py` owns HTML escaping and script-safe JSON helpers used
   by renderers; these remain re-exported through `paper_audit` for
   compatibility while renderer extraction continues.
+- `veritas/versions.py` owns prompt, schema, adapter, and risk-rule version
+  constants; compatibility modules should import these constants rather than
+  redefining them.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring

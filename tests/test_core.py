@@ -671,6 +671,10 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.file_utils._load_merged_json_dicts is paper_audit._load_merged_json_dicts
     assert veritas.html_utils._html_escape is paper_audit._html_escape
     assert veritas.html_utils._json_for_script_tag is paper_audit._json_for_script_tag
+    assert veritas.versions.PROMPT_VERSION == paper_audit.PROMPT_VERSION
+    assert veritas.versions.SCHEMA_VERSION == paper_audit.SCHEMA_VERSION
+    assert veritas.versions.ADAPTER_VERSION == paper_audit.ADAPTER_VERSION
+    assert veritas.versions.RISK_RULE_VERSION == paper_audit.RISK_RULE_VERSION
     assert veritas.workspace.create_run_workspace is paper_audit.create_run_workspace
     assert veritas.workspace.run_workspace_path is paper_audit.run_workspace_path
     assert veritas.workspace.record_run_workspace_json is paper_audit.record_run_workspace_json
@@ -691,6 +695,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.failed_diagnostics.preflight_failure_to_audit_failure is paper_audit.preflight_failure_to_audit_failure
     assert veritas.failed_diagnostics.adapter_failure_to_audit_failure is paper_audit.adapter_failure_to_audit_failure
     assert veritas.risk_rules.apply_risk_rules is paper_audit.apply_risk_rules
+    assert veritas.risk_rules.RISK_RULE_VERSION == paper_audit.RISK_RULE_VERSION
     assert veritas.adapter_types.AdapterResult is paper_audit.AdapterResult
     assert veritas.adapters.AdapterResult is paper_audit.AdapterResult
     assert veritas.adapter_types.AuditAdapters is paper_audit.AuditAdapters
