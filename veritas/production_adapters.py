@@ -12,6 +12,7 @@ from .adapter_types import (
     ReferenceLookupAdapter,
     TextLLMAdapter,
 )
+from .preflight import preflight_mineru, preflight_text_llm
 
 
 def _legacy_func(name: str) -> Callable:
@@ -32,7 +33,7 @@ def _adapter_result_from_preflight(result) -> AdapterResult:
 
 class ProductionMinerUAdapter(MinerUAdapter):
     def __init__(self, preflight_func: Callable = None, extract_func: Callable = None):
-        self.preflight_func = preflight_func or _legacy_func("preflight_mineru")
+        self.preflight_func = preflight_func or preflight_mineru
         self.extract_func = extract_func or _legacy_func("mineru_extract")
 
     def preflight(self) -> AdapterResult:
@@ -52,7 +53,7 @@ class ProductionMinerUAdapter(MinerUAdapter):
 
 class ProductionTextLLMAdapter(TextLLMAdapter):
     def __init__(self, preflight_func: Callable = None, review_func: Callable = None):
-        self.preflight_func = preflight_func or _legacy_func("preflight_text_llm")
+        self.preflight_func = preflight_func or preflight_text_llm
         self.review_func = review_func or _legacy_func("call_llm")
 
     def preflight(self) -> AdapterResult:

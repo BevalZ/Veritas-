@@ -94,6 +94,8 @@ Questions to answer:
 - Provider-specific preflight functions live in `veritas/preflight.py`.
   `veritas.legacy` may wrap the namespace-aware helpers with its own globals
   so historical `paper_audit` monkeypatch behavior remains compatible.
+  Production adapters should use the `veritas.preflight` functions as their
+  default preflight callables, not the legacy wrappers.
   The result type and per-run cache helper belong in `veritas/preflight_types.py`.
 
 ### 4. Validation & Error Matrix

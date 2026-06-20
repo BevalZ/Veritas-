@@ -415,6 +415,18 @@ def test_production_adapters_wrap_injected_functions_without_monkeypatching_glob
     assert image_detector.detect("tiny.png").status == "skipped"
 
 
+def test_production_adapters_default_preflight_uses_package_boundary():
+    mineru = veritas.production_adapters.ProductionMinerUAdapter(
+        extract_func=lambda file_path, language="ch", output_dir=None: ("text", {})
+    )
+    text_llm = veritas.production_adapters.ProductionTextLLMAdapter(
+        review_func=lambda text, chunk_info=None: "raw llm"
+    )
+
+    assert mineru.preflight_func is veritas.preflight.preflight_mineru
+    assert text_llm.preflight_func is veritas.preflight.preflight_text_llm
+
+
 def _complete_fake_adapters(**overrides):
     values = {
         "text_llm": json.dumps({
