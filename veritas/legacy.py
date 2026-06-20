@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple, Dict, List, Any, Callable
 
-from .run_types import RunRequest
+from .run_types import RunRequest, RunResult
 
 # Windows/重定向控制台默认GBK时，emoji/中文符号可能触发UnicodeEncodeError；统一兜底为UTF-8。
 try:
@@ -1297,38 +1297,6 @@ def run_adapter_e2e_audit(
         "json_path": json_path,
         "workspace": workspace,
     }
-
-
-@dataclass
-class RunResult:
-    """Structured audit run result returned by orchestration boundaries."""
-    outcome: str
-    exit_code: int = 0
-    artifact_type: str = ""
-    artifact_paths: Dict[str, str] = field(default_factory=dict)
-    workspace: Dict[str, Any] = field(default_factory=dict)
-    failure: Dict[str, Any] = field(default_factory=dict)
-    meta: Dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def complete(cls, artifact_paths: Dict[str, str], workspace=None, meta=None):
-        return cls("complete", exit_code=0, artifact_type="complete", artifact_paths=dict(artifact_paths), workspace=dict(workspace or {}), meta=dict(meta or {}))
-
-    @classmethod
-    def limited(cls, artifact_paths: Dict[str, str], workspace=None, meta=None):
-        return cls("limited", exit_code=0, artifact_type="limited", artifact_paths=dict(artifact_paths), workspace=dict(workspace or {}), meta=dict(meta or {}))
-
-    @classmethod
-    def failed(cls, failure: AuditFailure, artifact_paths: Dict[str, str], workspace=None, meta=None):
-        return cls(
-            "failed",
-            exit_code=1,
-            artifact_type="failed",
-            artifact_paths=dict(artifact_paths),
-            workspace=dict(workspace or {}),
-            failure=failed_audit_payload(failure, Path(meta.get("input_path", "")) if isinstance(meta, dict) else Path("")).get("failure", {}),
-            meta=dict(meta or {}),
-        )
 
 
 @dataclass

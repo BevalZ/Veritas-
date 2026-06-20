@@ -1,8 +1,9 @@
 """Stable request types for audit run orchestration."""
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Dict
 
 
 @dataclass
@@ -110,4 +111,54 @@ class RunRequest:
         )
 
 
-__all__ = ["RunRequest"]
+def _failure_field(failure: Any, name: str, default=None):
+    if isinstance(failure, dict):
+        return failure.get(name, default)
+    return getattr(failure, name, default)
+
+
+def _run_failure_payload(failure: Any) -> Dict[str, Any]:
+    return {
+        "capability": _failure_field(failure, "capability", ""),
+        "error_class": _failure_field(failure, "error_class", ""),
+        "message": _failure_field(failure, "message", ""),
+        "fix_hints": list(_failure_field(failure, "fix_hints", []) or []),
+        "completed_stages": list(_failure_field(failure, "completed_stages", []) or []),
+        "retry_command": _failure_field(failure, "retry_command", ""),
+        "details": dict(_failure_field(failure, "details", {}) or {}),
+    }
+
+
+@dataclass
+class RunResult:
+    """Structured audit run result returned by orchestration seams."""
+    outcome: str
+    exit_code: int = 0
+    artifact_type: str = ""
+    artifact_paths: Dict[str, str] = field(default_factory=dict)
+    workspace: Dict[str, Any] = field(default_factory=dict)
+    failure: Dict[str, Any] = field(default_factory=dict)
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def complete(cls, artifact_paths: Dict[str, str], workspace=None, meta=None):
+        return cls("complete", exit_code=0, artifact_type="complete", artifact_paths=dict(artifact_paths), workspace=dict(workspace or {}), meta=dict(meta or {}))
+
+    @classmethod
+    def limited(cls, artifact_paths: Dict[str, str], workspace=None, meta=None):
+        return cls("limited", exit_code=0, artifact_type="limited", artifact_paths=dict(artifact_paths), workspace=dict(workspace or {}), meta=dict(meta or {}))
+
+    @classmethod
+    def failed(cls, failure: Any, artifact_paths: Dict[str, str], workspace=None, meta=None):
+        return cls(
+            "failed",
+            exit_code=1,
+            artifact_type="failed",
+            artifact_paths=dict(artifact_paths),
+            workspace=dict(workspace or {}),
+            failure=_run_failure_payload(failure),
+            meta=dict(meta or {}),
+        )
+
+
+__all__ = ["RunRequest", "RunResult"]

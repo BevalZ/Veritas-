@@ -740,32 +740,38 @@ report = apply_risk_rules(report, stat_result=stat_result, image_audit=meta.get(
 meta["evidence_chain_audit"] = build_evidence_chain_audit(full_text, file_entries, report, meta, stat_result)
 ```
 
-## Scenario: Audit Run Request Seam
+## Scenario: Audit Run Request/Result Seam
 
 ### 1. Scope / Trigger
 
-- Trigger: CLI, Web Runner, or desktop GUI code needs to start a formal audit run.
-- This applies to the stable request object that crosses entry-point seams before
-  entering the legacy audit engine.
+- Trigger: CLI, Web Runner, or desktop GUI code needs to start a formal audit
+  run and interpret the outcome.
+- This applies to the stable request/result objects that cross entry-point seams
+  before and after entering the legacy audit engine.
 
 ### 2. Signatures
 
 - `veritas.run_types.RunRequest`
+- `veritas.run_types.RunResult`
 - `RunRequest.from_args(args) -> RunRequest`
 - `RunRequest.to_args() -> argparse.Namespace`
 - `run_audit(run_request: RunRequest, args=None) -> RunResult`
 
 ### 3. Contracts
 
-- `RunRequest` lives in `veritas/run_types.py`, not inside `veritas/legacy.py`.
+- `RunRequest` and `RunResult` live in `veritas/run_types.py`, not inside
+  `veritas/legacy.py`.
 - `paper_audit.RunRequest`, `veritas.run.RunRequest`, and
-  `veritas.run_types.RunRequest` must remain the same class object for backward
-  compatibility.
+  `veritas.run_types.RunRequest` must remain the same class object.
+- `paper_audit.RunResult`, `veritas.run.RunResult`, and
+  `veritas.run_types.RunResult` must remain the same class object.
 - `RunRequest` must carry every option needed by the current engine, including
   output path, JSON output, resume/fresh flags, all reference/resource/image
   limits, LLM timeout/retry flags, and report action port.
 - `run_audit(request)` must work without callers passing an argparse namespace.
   The temporary legacy namespace is created only inside the run seam.
+- `RunResult.failed(...)` must copy failure fields without importing legacy
+  rendering or failed-artifact helpers, so `run_types.py` stays dependency-light.
 
 ### 4. Validation & Error Matrix
 
@@ -775,11 +781,15 @@ meta["evidence_chain_audit"] = build_evidence_chain_audit(full_text, file_entrie
 - Omitted `args` in `run_audit` -> use `RunRequest.to_args()`.
 - Existing callers passing both `run_request` and `args` -> still supported
   during legacy migration.
+- Failed run result -> `outcome == "failed"`, `exit_code == 1`,
+  `artifact_type == "failed"`, and structured `failure` fields are populated.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: Web Runner resolves a dropped file, builds a `RunRequest`, and starts
   `run_audit(request)` without knowing the legacy namespace shape.
+- Good: GUI/Web code can inspect `RunResult.artifact_paths` and
+  `RunResult.failure` without importing failed-artifact renderers.
 - Base: CLI parses arguments, builds `RunRequest.from_args(args)`, and existing
   behavior is unchanged.
 - Bad: A new GUI option is added only to argparse and not to `RunRequest`, so
@@ -792,7 +802,7 @@ meta["evidence_chain_audit"] = build_evidence_chain_audit(full_text, file_entrie
 - Integration-style unit test calls `run_audit(RunRequest.from_args(args))`
   without passing `args`.
 - Package-boundary test asserts all compatibility exports refer to the same
-  `RunRequest` class object.
+  `RunRequest` and `RunResult` class objects.
 
 ### 7. Wrong vs Correct
 
