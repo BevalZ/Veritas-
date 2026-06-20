@@ -12,6 +12,7 @@ openpyxl>=3.1.0        # 读取Excel表格(.xlsx/.xlsm)
 lxml>=4.9.0            # python-docx的XML解析依赖
 pymupdf>=1.24.0        # PDF图片提取（用于--image-detect功能）
 pillow>=10.0.0         # 图像尺寸/噪声/空白合理性检测
+tkinterdnd2>=0.5.0     # 桌面GUI文件/目录拖拽
 
 # === 开发/测试依赖 ===
 # pytest>=8.0.0        # 运行测试

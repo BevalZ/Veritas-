@@ -88,6 +88,25 @@ IMAGE_SEMANTIC_MODEL = "your-multimodal-model"
 ```
 
 ### 3. 运行检测
+#### 图形界面（推荐给桌面用户）
+```bash
+# 从源码目录启动本机 GUI
+python paper_audit.py --gui
+
+# 如果已通过 pip 安装，也可以直接启动
+veritas-gui
+```
+
+GUI 使用方式：
+- 点击“选择文件”审查单个 PDF/Word/表格/文本文件，或点击“选择目录”审查整篇论文项目目录。
+- 点击“选择输出目录”后，报告会写入该目录下的 `audit_report.audit.html`、`audit_report.audit.md`、`audit_report.audit.json`；范围受限或失败时分别写入 `.limited.*` 或 `.failed.*`。
+- GUI 会显示配置状态、运行日志、报告类型、风险级别和摘要。
+- 如果 LLM 未配置，可在左侧能力栏点击“LLM 设置”填写 API Key、API URL 和模型名；设置会写入本地 `config.py`，下次打开 GUI 会自动加载。
+- 审查成功后默认自动打开 HTML 报告；也可以取消“完成后自动打开 HTML 报告”，完成后手动点击“打开 HTML / Markdown / JSON / 输出目录”。
+- 审查成功后可直接点击“写 PubPeer”或“写 Letter”，GUI 会复用报告 JSON 中的审查证据生成草稿，并保存到输出目录的 `followups/`。
+- “取消”只终止当前运行；下次重跑仍可复用断点续作缓存。“从头重跑”会清空断点缓存后重新执行。
+
+#### 命令行
 ```bash
 # 🆕 新功能：审查整个论文项目目录（自动识别主论文/补充材料/原始数据/表格，跨文件交叉验证）
 python paper_audit.py ./my_paper_project/

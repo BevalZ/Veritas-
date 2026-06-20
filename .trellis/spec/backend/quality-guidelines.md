@@ -404,6 +404,8 @@ command = [sys.executable, "paper_audit.py", resolved["path"], "--json", "--no-o
   - `run_desktop_gui(history_path=None) -> int`
   - `desktop_gui_start_run(state, input_path, output="", fresh=False)`
   - `desktop_gui_run_summary(run) -> dict`
+  - `desktop_gui_followup_context(run) -> dict`
+  - `desktop_gui_generate_followup_draft(kind, run, language="zh", tone="conservative", timeout=None) -> dict`
 
 ### 3. Contracts
 
@@ -414,12 +416,56 @@ command = [sys.executable, "paper_audit.py", resolved["path"], "--json", "--no-o
 - The GUI may use `tkinter` because it is already a stdlib dependency used by
   path pickers; do not add Qt/Electron/Tauri/PyWebView without a separate
   dependency and packaging review.
+- The GUI may use `tkinterdnd2` only for native file/directory drag-and-drop.
+  If drag-and-drop registration fails, click-to-select controls must continue
+  to work normally.
+- Input and output path controls should be compact picker buttons, not editable
+  text entry fields. Internal `StringVar` values still hold the exact paths for
+  `WebRunnerState`.
 - Empty output means "let `WebRunnerState` derive the output stem"; user-selected
   output directories should pass an explicit `<directory>/audit_report` stem.
+- Dropping an input path sets the audit input. Dropping an output directory
+  sets `<dropped-directory>/audit_report`; dropping an output file uses the
+  file parent as the output directory.
 - GUI config status may show readiness booleans and missing field names, but
   must not show raw API keys or secret values.
+- Desktop GUI config status should be rendered as compact readonly status rows,
+  not an editable log-style text box. If the row list grows, render it as
+  compact chips so every capability remains visible in the sidebar.
+- Desktop GUI may provide a local LLM settings dialog for `LLM_API_KEY`,
+  `LLM_API_URL`, and `LLM_MODEL`. Saving must write those values to the
+  existing local `config.py` format while preserving unrelated settings, apply
+  them to the current GUI process, and rely on the normal runtime config loader
+  so reopening the GUI loads the saved values by default.
+- Desktop GUI chrome and dashboard labels should use short, consistent Chinese
+  product labels such as `审计工作台`, `需处理`, `诊断报告`, and `暂无评分`;
+  do not translate the primary GUI into English merely to match a visual
+  reference. Raw logs and generated report content may keep their original
+  audit language.
+- Desktop GUI sidebar should avoid redundant section labels when the picker
+  buttons are self-explanatory. Boolean run options should sit inline when
+  space permits, and their checked indicator should use the app accent color
+  rather than the platform default gray.
 - Report actions exposed by the GUI are limited to recorded `html`,
-  `markdown`, `json`, and `folder` artifact paths.
+  `markdown`, `json`, and `folder` artifact paths. In the desktop GUI these
+  actions should sit with the report summary card, not as a separate verbose
+  instruction area.
+- Desktop GUI follow-up actions may generate PubPeer comments and journal
+  letters directly from a completed report. They must read the recorded JSON
+  artifact, build the same formal report action context used by HTML reports,
+  call `generate_and_save_followup_draft(...)`, and persist drafts under the
+  normal `followups/` directory. Do not add a second prompt/save path.
+- Desktop GUI follow-up actions must be enabled only for successful complete or
+  limited reports with a recorded JSON artifact. Failed diagnostic reports must
+  remain blocked by `failed_report_followup_blocked`.
+- Successful runs may auto-open the recorded HTML artifact by default. This
+  must be user-disableable, must happen at most once per run id, and must use
+  only the allowlisted artifact path discovered through `WebRunnerState`.
+- The run log text widget must be read-only to the user; code may temporarily
+  enable it only while appending log lines, then must restore disabled state.
+- The desktop dashboard should parse existing `progress_bar(...)` log lines
+  into a visible progress bar and current-stage label. This is presentation
+  state only; it must not alter audit orchestration or subprocess output.
 
 ### 4. Validation & Error Matrix
 
@@ -429,18 +475,37 @@ command = [sys.executable, "paper_audit.py", resolved["path"], "--json", "--no-o
   a concise GUI startup failure.
 - Empty input path from GUI -> show an in-window error and do not call
   `start_run`.
+- Drag-and-drop dependency unavailable -> no startup failure; picker buttons
+  remain the fallback.
 - `WebRunnerState.start_run` returns validation or busy errors -> surface the
   backend message in the GUI.
+- Successful run with recorded HTML artifact and auto-open enabled -> open the
+  HTML artifact once after terminal artifact discovery.
+- Failed or canceled run -> do not auto-open HTML automatically; leave the
+  recorded artifact buttons available when artifacts exist.
+- Successful complete/limited run with recorded JSON artifact -> enable
+  `写 PubPeer` and `写 Letter`.
+- Failed diagnostic report -> keep `写 PubPeer` and `写 Letter` disabled; direct
+  helper calls must still raise `failed_report_followup_blocked`.
 - Artifact open failure -> show an in-window error.
+- Malformed or unrelated log line -> do not update progress state.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: User runs `python paper_audit.py --gui`, selects a PDF, starts an
-  audit, watches logs, then clicks `打开 HTML`.
+  audit, watches logs, and the successful HTML report opens automatically.
 - Base: User runs the command on a headless machine; it exits cleanly with a
   display-related message instead of crashing.
+- Base: User disables auto-open, then opens `HTML`, `Markdown`, `JSON`, or the
+  output folder manually through allowlisted artifact buttons.
+- Base: User clicks `写 PubPeer` after a successful report; the draft is saved
+  to `followups/pubpeer_comment.zh.md` and previewed in the GUI log pane.
+- Base: User drags a paper file onto the input picker and drags a folder onto
+  the output picker; the GUI updates paths without exposing editable text boxes.
 - Bad: GUI creates a second subprocess orchestration path or exposes arbitrary
   filesystem paths unrelated to recorded artifacts.
+- Bad: GUI sends a separate ad hoc prompt for PubPeer/Letter or only displays a
+  draft in memory without writing formal `followups/` artifacts.
 
 ### 6. Tests Required
 
@@ -448,10 +513,25 @@ command = [sys.executable, "paper_audit.py", resolved["path"], "--json", "--no-o
 - `--gui` loads runtime config and routes through `gui_main` /
   `run_desktop_gui` without requiring a real window in tests.
 - `pyproject.toml` declares `veritas-gui = "veritas.legacy:gui_main"`.
+- `pyproject.toml` and `requirements.txt` include `tkinterdnd2`.
 - Desktop helper tests assert blank output becomes `None` before calling
   `WebRunnerState.start_run`.
+- Desktop helper tests assert path picker buttons update compact display text
+  and drag-drop handlers update input/output paths.
+- Desktop helper tests assert run logs return to read-only state after append.
+- Desktop helper tests assert config status is compacted without leaking
+  capability secrets and can render readonly status rows.
+- Desktop helper tests assert local LLM settings persistence creates/updates
+  `config.py` without deleting unrelated capability settings.
+- Desktop helper tests assert progress log lines update the progress bar and
+  stage label while unrelated log lines are ignored.
 - Desktop helper tests assert only `html`, `markdown`, `json`, and `folder`
   artifacts are surfaced from run summaries.
+- Desktop helper tests assert successful HTML auto-open happens once, can be
+  disabled, and does not trigger for failed runs.
+- Desktop helper tests assert follow-up context is built from recorded JSON
+  artifacts, follow-up generation reuses `generate_and_save_followup_draft`,
+  and PubPeer/Letter buttons enable only for successful JSON-backed reports.
 - Full `tests/test_core.py` must still pass without opening a real window.
 
 ### 7. Wrong vs Correct

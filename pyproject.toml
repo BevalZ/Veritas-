@@ -13,6 +13,7 @@ dependencies = [
   "lxml>=4.9.0",
   "pymupdf>=1.24.0",
   "pillow>=10.0.0",
+  "tkinterdnd2>=0.5.0",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +27,7 @@ veritas-gui = "veritas.legacy:gui_main"
 
 [tool.setuptools]
 py-modules = ["paper_audit"]
+packages = ["veritas"]
 
 [tool.ruff]
 line-length = 120

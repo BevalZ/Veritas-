@@ -364,7 +364,10 @@ def load_runtime_config(config_module_name: str = "config", env=os.environ, verb
     """Load config.py and environment variables explicitly for a CLI run."""
     cfg = None
     try:
+        importlib.invalidate_caches()
         cfg = importlib.import_module(config_module_name)
+        if getattr(cfg, "__spec__", None) is not None:
+            cfg = importlib.reload(cfg)
         if verbose:
             print(f"✅ 从 {config_module_name}.py 加载配置")
     except ImportError:
@@ -3654,23 +3657,224 @@ class WebRunnerState:
 
 
 DESKTOP_GUI_ARTIFACT_LABELS = {
-    "html": "打开 HTML",
-    "markdown": "打开 Markdown",
-    "json": "打开 JSON",
-    "folder": "打开输出目录",
+    "html": "HTML",
+    "markdown": "Markdown",
+    "json": "JSON",
+    "folder": "目录",
 }
+
+DESKTOP_GUI_FOLLOWUP_LABELS = {
+    "pubpeer_comment": "写 PubPeer",
+    "journal_letter": "写 Letter",
+}
+
+DESKTOP_GUI_CONFIG_CAPABILITIES = (
+    ("text_llm", "LLM"),
+    ("mineru", "MinerU"),
+    ("image_semantic", "图像语义"),
+    ("reference_lookup", "参考核验"),
+    ("image_detector", "图像检测"),
+)
+
+DESKTOP_GUI_CONFIG_DEPENDENCIES = (
+    ("python_docx", "DOCX"),
+    ("openpyxl", "Excel"),
+)
+
+DESKTOP_GUI_LLM_CONFIG_FIELDS = ("LLM_API_KEY", "LLM_API_URL", "LLM_MODEL")
+
+DESKTOP_GUI_STAGE_LABELS = {
+    "初始化完成": "初始化完成",
+    "文本提取完成": "文本提取完成",
+    "单文件文本提取完成": "文本提取完成",
+    "MinerU文本提取完成": "MinerU 提取完成",
+    "PDF文本提取完成": "PDF 提取完成",
+    "开始本地统计检测": "本地统计",
+    "本地统计检测完成": "本地统计完成",
+    "开始合并审查结果": "合并结果",
+    "审查结果合并完成": "结果合并完成",
+    "开始生成报告": "生成报告",
+    "全部完成": "已完成",
+}
+
+
+def desktop_gui_config_file_path(config_path=None):
+    return Path(config_path or "config.py")
+
+
+def desktop_gui_write_llm_config(api_key, api_url, model, config_path=None):
+    """Persist text LLM settings to config.py while preserving unrelated settings."""
+    path = desktop_gui_config_file_path(config_path)
+    values = {
+        "LLM_API_KEY": str(api_key or "").strip(),
+        "LLM_API_URL": str(api_url or "").strip() or LLM_API_URL,
+        "LLM_MODEL": str(model or "").strip() or LLM_MODEL,
+    }
+    existing_lines = []
+    if path.exists():
+        existing_lines = path.read_text(encoding="utf-8").splitlines()
+    else:
+        existing_lines = [
+            "# Local Veritas configuration.",
+            "# This file is read by the desktop GUI and CLI. Do not commit secrets.",
+            "",
+        ]
+    updated = set()
+    output_lines = []
+    assignment_re = re.compile(r"^\s*(LLM_API_KEY|LLM_API_URL|LLM_MODEL)\s*=")
+    for line in existing_lines:
+        match = assignment_re.match(line)
+        if match:
+            name = match.group(1)
+            output_lines.append(f"{name} = {json.dumps(values[name], ensure_ascii=False)}")
+            updated.add(name)
+        else:
+            output_lines.append(line)
+    if updated != set(DESKTOP_GUI_LLM_CONFIG_FIELDS):
+        if output_lines and output_lines[-1].strip():
+            output_lines.append("")
+        output_lines.append("# Text LLM settings saved by Veritas desktop GUI.")
+        for name in DESKTOP_GUI_LLM_CONFIG_FIELDS:
+            if name not in updated:
+                output_lines.append(f"{name} = {json.dumps(values[name], ensure_ascii=False)}")
+    path.write_text("\n".join(output_lines).rstrip() + "\n", encoding="utf-8")
+    return path
+
+
+def _desktop_gui_status_label(status):
+    return {
+        "idle": "待命",
+        "running": "处理中",
+        "succeeded": "已完成",
+        "failed": "需处理",
+        "canceled": "已停止",
+    }.get(str(status or "").lower(), str(status or "未知"))
+
+
+def _desktop_gui_report_type_label(report_type):
+    return {
+        "complete": "完整报告",
+        "limited": "受限报告",
+        "failed": "诊断报告",
+        "succeeded": "完整报告",
+        "running": "生成中",
+        "canceled": "已停止",
+        "idle": "待生成",
+    }.get(str(report_type or "").lower(), str(report_type or "待生成"))
+
+
+def _desktop_gui_risk_label(risk_level, status=None):
+    risk_text = str(risk_level or "").strip()
+    if risk_text.lower() == "failed":
+        return "暂无评分"
+    risk_map = {
+        "低": "低",
+        "中": "中",
+        "高": "高",
+        "严重证据冲突": "严重",
+    }
+    if risk_text:
+        return risk_map.get(risk_text, risk_text)
+    if str(status or "").lower() == "failed":
+        return "暂无评分"
+    return "待评估"
+
+
+def _desktop_gui_stage_label(current, total, raw_label):
+    label = str(raw_label or "").strip()
+    label = re.sub(r"^阶段\s*\d+\s*/\s*\d+\s*", "", label).strip()
+    if "开始LLM审查" in label:
+        label = "LLM 审查"
+    elif "LLM审查完成" in label:
+        label = "LLM 审查完成"
+    else:
+        label = DESKTOP_GUI_STAGE_LABELS.get(label, label)
+    return f"阶段 {current}/{total} · {label}" if label else f"阶段 {current}/{total}"
+
+
+def desktop_gui_progress_from_log_line(line):
+    text = str(line or "")
+    match = re.search(r"(\d+)\s*/\s*(\d+)\s+([0-9]+(?:\.[0-9]+)?)%\s*(.*)$", text)
+    if not match:
+        return None
+    current = int(match.group(1))
+    total = max(int(match.group(2)), 1)
+    percent = max(0.0, min(float(match.group(3)), 100.0))
+    label = _desktop_gui_stage_label(current, total, match.group(4))
+    return {"current": current, "total": total, "percent": percent, "label": label}
+
+
+def _desktop_gui_preflight_status_label(result):
+    error_class = str(getattr(result, "error_class", "") or (result.get("error_class") if isinstance(result, dict) else "") or "")
+    ok = bool(getattr(result, "ok", False) if not isinstance(result, dict) else result.get("ok"))
+    explicit_status = result.get("status") if isinstance(result, dict) else ""
+    if explicit_status:
+        return str(explicit_status), ok
+    if ok:
+        return "可达", True
+    if error_class == "missing_required_config":
+        return "配置", False
+    if error_class == "provider_auth_failed":
+        return "认证", False
+    if error_class == "provider_unavailable":
+        return "不可达", False
+    return "失败", False
+
+
+def desktop_gui_config_snapshot(config, preflight_results=None):
+    """Return compact, secret-free config rows for the desktop sidebar."""
+    config = config or {}
+    preflight_results = preflight_results or {}
+    rows = []
+    capabilities = config.get("capabilities") or {}
+    for key, label in DESKTOP_GUI_CONFIG_CAPABILITIES:
+        capability = capabilities.get(key) or {}
+        ok = bool(capability.get("ok"))
+        status = "正常" if ok else "配置"
+        if key in preflight_results:
+            status, ok = _desktop_gui_preflight_status_label(preflight_results[key])
+        rows.append({"label": label, "status": status, "ok": ok})
+    dependencies = config.get("optional_dependencies") or {}
+    for key, label in DESKTOP_GUI_CONFIG_DEPENDENCIES:
+        ok = bool(dependencies.get(key))
+        rows.append({"label": label, "status": "正常" if ok else "缺失", "ok": ok})
+    ready_count = sum(1 for row in rows if row["ok"])
+    if not rows:
+        return {"summary": "不可用", "rows": []}
+    suffix = " · 待配置" if not config.get("ok", True) else ""
+    return {"summary": f"{ready_count}/{len(rows)} 正常{suffix}", "rows": rows}
+
+
+def desktop_gui_checked_config_snapshot(llm_preflight_runner=None, mineru_preflight_runner=None, timeout=6):
+    """Run real desktop capability checks and return a secret-free sidebar snapshot."""
+    runtime_config = load_runtime_config(verbose=False)
+    apply_runtime_config(runtime_config)
+    config = web_runner_config_status()
+    preflight_results = {}
+    runners = {
+        "text_llm": llm_preflight_runner or (lambda: preflight_text_llm(timeout=timeout)),
+        "mineru": mineru_preflight_runner or (lambda: preflight_mineru(timeout=timeout)),
+    }
+    for capability, runner in runners.items():
+        preflight_results[capability] = runner()
+    return desktop_gui_config_snapshot(config, preflight_results=preflight_results)
 
 
 def desktop_gui_run_summary(run):
     run = run or {}
     summary = run.get("summary") if isinstance(run.get("summary"), dict) else {}
     report_type = summary.get("report_type") or run.get("report_type") or run.get("status") or ""
+    status = run.get("status") or "idle"
+    risk_level = summary.get("risk_level") or ""
     return {
-        "status": run.get("status") or "idle",
+        "status": status,
+        "status_label": _desktop_gui_status_label(status),
         "input_path": run.get("input_path") or "",
         "output": run.get("output") or "",
         "report_type": report_type,
-        "risk_level": summary.get("risk_level") or "",
+        "report_type_label": _desktop_gui_report_type_label(report_type),
+        "risk_level": risk_level,
+        "risk_label": _desktop_gui_risk_label(risk_level, status=status),
         "summary": summary.get("summary") or run.get("message") or "",
         "artifacts": {k: v for k, v in (run.get("artifacts") or {}).items() if k in DESKTOP_GUI_ARTIFACT_LABELS and v},
     }
@@ -3684,6 +3888,82 @@ def desktop_gui_start_run(state, input_path, output="", fresh=False):
 def open_desktop_path(path):
     target = Path(path).expanduser().resolve()
     webbrowser.open(target.as_uri())
+
+
+def desktop_gui_artifact_preview(path, kind, max_chars=500000):
+    """Return a read-only text preview for a desktop report artifact."""
+    artifact_path = Path(path).expanduser()
+    if kind == "json":
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+        text = json.dumps(payload, ensure_ascii=False, indent=2)
+    else:
+        text = artifact_path.read_text(encoding="utf-8", errors="replace")
+    if kind == "html":
+        text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", "\n", text)
+        text = re.sub(r"(?i)</?(?:p|div|section|article|header|footer|main|h[1-6]|li|tr|table|br)[^>]*>", "\n", text)
+        text = re.sub(r"(?s)<[^>]+>", " ", text)
+        text = html.unescape(text)
+        text = text.replace("\xa0", " ")
+        text = re.sub(r"[ \t\r\f\v]+", " ", text)
+        text = re.sub(r"\n\s+", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip() + f"\n\n[预览已截断，完整文件: {artifact_path}]"
+    return text
+
+
+def desktop_gui_followup_context(run):
+    """Build the formal follow-up context from a recorded desktop GUI run."""
+    run = run if isinstance(run, dict) else {}
+    artifacts = run.get("artifacts") if isinstance(run.get("artifacts"), dict) else {}
+    json_path = artifacts.get("json")
+    if not json_path:
+        raise ValueError("followup_json_artifact_required")
+    payload = json.loads(Path(json_path).expanduser().read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("followup_json_artifact_invalid")
+    report_type = payload.get("report_type") or (payload.get("meta") or {}).get("artifact_type") or "complete"
+    if report_type == "failed":
+        raise ValueError("failed_report_followup_blocked")
+    report = payload.get("llm_report") if isinstance(payload.get("llm_report"), dict) else {}
+    meta = dict(payload.get("meta") if isinstance(payload.get("meta"), dict) else {})
+    stat_result = payload.get("stat_result") if isinstance(payload.get("stat_result"), dict) else {}
+    artifact_paths = dict(meta.get("artifact_paths") if isinstance(meta.get("artifact_paths"), dict) else {})
+    for kind in ("html", "markdown", "json"):
+        if artifacts.get(kind):
+            artifact_paths[kind] = artifacts[kind]
+    meta["artifact_type"] = report_type
+    meta["report_type"] = report_type
+    meta["artifact_paths"] = artifact_paths
+    if not meta.get("followups_dir"):
+        anchor = artifact_paths.get("html") or artifact_paths.get("markdown") or json_path
+        meta["followups_dir"] = str(Path(anchor).expanduser().parent / "followups")
+    input_path = run.get("input_path") or payload.get("paper") or json_path
+    return _report_action_context(report, input_path, meta, stat_result)
+
+
+def desktop_gui_generate_followup_draft(kind, run, language="zh", tone="conservative", timeout=None):
+    context = desktop_gui_followup_context(run)
+    return generate_and_save_followup_draft(
+        kind,
+        context,
+        language=language,
+        identity=context.get("paper_identity"),
+        selected_issues=context.get("top_issues"),
+        custom_concerns=None,
+        tone=tone,
+        disclaimer_confirmed=True,
+        timeout=timeout,
+    )
+
+
+def create_desktop_root(tk_module):
+    try:
+        from tkinterdnd2 import TkinterDnD
+
+        return TkinterDnD.Tk()
+    except Exception:
+        return tk_module.Tk()
 
 
 class DesktopGuiApp:
@@ -3700,7 +3980,10 @@ class DesktopGuiApp:
         self.active_run_id = None
         self.last_run = None
         self.log_offset = 0
+        self._config_refresh_serial = 0
         self.artifact_paths = {}
+        self.auto_opened_run_ids = set()
+        self.config_path = desktop_gui_config_file_path()
         self._build()
         self.refresh_config()
         self.refresh_runs()
@@ -3708,121 +3991,513 @@ class DesktopGuiApp:
     def _build(self):
         tk = self.tk
         ttk = self.ttk
-        self.root.title("Veritas 审查报告 GUI")
-        self.root.geometry("1080x720")
-        self.root.minsize(860, 600)
+        self.root.title("Veritas Report Studio")
+        self.root.geometry("1220x760")
+        self.root.minsize(1040, 640)
+        self._configure_style()
 
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar()
+        self.input_display_var = tk.StringVar(value="拖入论文或项目目录")
+        self.output_display_var = tk.StringVar(value="选择报告目录")
         self.fresh_var = tk.BooleanVar(value=False)
-        self.status_var = tk.StringVar(value="idle")
+        self.auto_open_var = tk.BooleanVar(value=True)
+        self.status_var = tk.StringVar(value="待命")
         self.report_type_var = tk.StringVar(value="待生成")
-        self.risk_var = tk.StringVar(value="待生成")
-        self.summary_var = tk.StringVar(value="选择输入后点击开始审查。")
+        self.risk_var = tk.StringVar(value="待评估")
+        self.summary_var = tk.StringVar(value="选择材料后开始分析。")
+        self.stage_var = tk.StringVar(value="待命")
+        self.progress_var = tk.DoubleVar(value=0.0)
+        self.log_title_var = tk.StringVar(value="运行日志")
+        self.config_summary_var = tk.StringVar(value="状态")
+        self.config_row_vars = []
 
-        main = ttk.Frame(self.root, padding=12)
+        main = ttk.Frame(self.root, padding=14, style="App.TFrame")
         main.pack(fill=tk.BOTH, expand=True)
         main.columnconfigure(0, weight=0)
         main.columnconfigure(1, weight=1)
         main.rowconfigure(0, weight=1)
 
-        left = ttk.Frame(main)
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-        right = ttk.Frame(main)
+        left = ttk.Frame(main, width=330, padding=(16, 14), style="Sidebar.TFrame")
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+        left.grid_propagate(False)
+        right = ttk.Frame(main, style="App.TFrame")
         right.grid(row=0, column=1, sticky="nsew")
-        right.rowconfigure(4, weight=1)
+        right.rowconfigure(1, weight=1)
         right.columnconfigure(0, weight=1)
 
-        ttk.Label(left, text="Veritas 桌面审查", font=("", 16, "bold")).pack(anchor=tk.W, pady=(0, 10))
-        ttk.Label(left, text="输入路径").pack(anchor=tk.W)
-        ttk.Entry(left, textvariable=self.input_var, width=48).pack(fill=tk.X, pady=(2, 6))
-        input_buttons = ttk.Frame(left)
-        input_buttons.pack(fill=tk.X, pady=(0, 10))
-        ttk.Button(input_buttons, text="选择文件", command=self.choose_file).pack(side=tk.LEFT)
-        ttk.Button(input_buttons, text="选择目录", command=self.choose_directory).pack(side=tk.LEFT, padx=(8, 0))
+        self.drag_drop_available = self._enable_drag_drop_package()
 
-        ttk.Label(left, text="输出目录（可选）").pack(anchor=tk.W)
-        ttk.Entry(left, textvariable=self.output_var, width=48).pack(fill=tk.X, pady=(2, 6))
-        output_buttons = ttk.Frame(left)
-        output_buttons.pack(fill=tk.X, pady=(0, 10))
-        ttk.Button(output_buttons, text="选择输出目录", command=self.choose_output_directory).pack(side=tk.LEFT)
-        ttk.Button(output_buttons, text="清空输出", command=lambda: self.output_var.set("")).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(left, text="Veritas", style="Brand.TLabel").pack(anchor=tk.W, pady=(0, 16))
 
-        ttk.Checkbutton(left, text="从头重跑（清空断点续作缓存）", variable=self.fresh_var).pack(anchor=tk.W, pady=(0, 10))
-        action_buttons = ttk.Frame(left)
+        input_card = ttk.Frame(left, padding=12, style="SidebarCard.TFrame")
+        input_card.pack(fill=tk.X, pady=(0, 10))
+        input_pick = ttk.Button(input_card, textvariable=self.input_display_var, command=self.choose_file, style="Picker.TButton")
+        input_pick.pack(fill=tk.X)
+        self._register_drop_target(input_card, self._handle_input_drop)
+        self._register_drop_target(input_pick, self._handle_input_drop)
+
+        output_card = ttk.Frame(left, padding=12, style="SidebarCard.TFrame")
+        output_card.pack(fill=tk.X, pady=(0, 10))
+        output_pick = ttk.Button(output_card, textvariable=self.output_display_var, command=self.choose_output_directory, style="Picker.TButton")
+        output_pick.pack(fill=tk.X, pady=(0, 8))
+        output_buttons = ttk.Frame(output_card, style="SidebarCard.TFrame")
+        output_buttons.pack(fill=tk.X)
+        ttk.Button(output_buttons, text="更改", command=self.choose_output_directory, style="Secondary.TButton").pack(side=tk.LEFT)
+        ttk.Button(output_buttons, text="清空", command=self.clear_output, style="Ghost.TButton").pack(side=tk.LEFT, padx=(8, 0))
+        self._register_drop_target(output_card, self._handle_output_drop)
+        self._register_drop_target(output_pick, self._handle_output_drop)
+
+        options_card = ttk.Frame(left, padding=12, style="SidebarCard.TFrame")
+        options_card.pack(fill=tk.X, pady=(0, 12))
+        self._sidebar_checkbutton(options_card, "重新开始", self.fresh_var).pack(side=tk.LEFT)
+        self._sidebar_checkbutton(options_card, "完成后打开报告", self.auto_open_var).pack(side=tk.LEFT, padx=(12, 0))
+
+        action_buttons = ttk.Frame(left, style="Sidebar.TFrame")
         action_buttons.pack(fill=tk.X, pady=(0, 12))
-        self.start_button = ttk.Button(action_buttons, text="开始审查", command=self.start_run)
-        self.start_button.pack(side=tk.LEFT)
-        self.cancel_button = ttk.Button(action_buttons, text="取消", command=self.cancel_run, state=tk.DISABLED)
-        self.cancel_button.pack(side=tk.LEFT, padx=(8, 0))
-        self.retry_button = ttk.Button(action_buttons, text="重试", command=self.retry_run, state=tk.DISABLED)
-        self.retry_button.pack(side=tk.LEFT, padx=(8, 0))
+        self.start_button = ttk.Button(action_buttons, text="开始分析", command=self.start_run, style="Primary.TButton")
+        self.start_button.pack(fill=tk.X, pady=(0, 6))
+        self.cancel_button = ttk.Button(action_buttons, text="停止任务", command=self.cancel_run, state=tk.DISABLED, style="Danger.TButton")
+        self.cancel_button.pack(fill=tk.X, pady=(0, 6))
+        self.retry_button = ttk.Button(action_buttons, text="重新运行", command=self.retry_run, state=tk.DISABLED, style="Secondary.TButton")
+        self.retry_button.pack(fill=tk.X)
 
-        ttk.Separator(left).pack(fill=tk.X, pady=10)
-        ttk.Label(left, text="配置状态", font=("", 11, "bold")).pack(anchor=tk.W)
-        self.config_text = tk.Text(left, height=10, width=48, wrap=tk.WORD)
-        self.config_text.pack(fill=tk.BOTH, expand=False, pady=(4, 6))
-        self.config_text.configure(state=tk.DISABLED)
-        ttk.Button(left, text="刷新配置", command=self.refresh_config).pack(anchor=tk.W)
+        config_card = ttk.Frame(left, padding=10, style="Config.TFrame")
+        config_card.pack(fill=tk.BOTH, expand=True)
+        config_head = ttk.Frame(config_card, style="Config.TFrame")
+        config_head.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(config_head, text="能力", style="ConfigSection.TLabel").pack(side=tk.LEFT)
+        ttk.Label(config_head, textvariable=self.config_summary_var, style="ConfigSummary.TLabel").pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(config_head, text="刷新", command=self.refresh_config, style="Tiny.TButton").pack(side=tk.RIGHT)
+        ttk.Button(config_head, text="LLM 设置", command=self.open_llm_settings, style="Tiny.TButton").pack(side=tk.RIGHT, padx=(0, 6))
+        self.config_rows_frame = ttk.Frame(config_card, style="Config.TFrame")
+        self.config_rows_frame.pack(fill=tk.X)
+        for index in range(len(DESKTOP_GUI_CONFIG_CAPABILITIES) + len(DESKTOP_GUI_CONFIG_DEPENDENCIES)):
+            row = ttk.Frame(self.config_rows_frame, padding=(6, 4), style="ConfigChip.TFrame")
+            row.grid(row=index // 2, column=index % 2, sticky="ew", padx=(0, 6 if index % 2 == 0 else 0), pady=(0, 4))
+            self.config_rows_frame.columnconfigure(index % 2, weight=1)
+            name_var = tk.StringVar()
+            status_var = tk.StringVar()
+            ttk.Label(row, textvariable=name_var, style="ConfigName.TLabel").pack(side=tk.LEFT)
+            status_label = ttk.Label(row, textvariable=status_var, style="ConfigOk.TLabel")
+            status_label.pack(side=tk.RIGHT)
+            self.config_row_vars.append((name_var, status_var, status_label))
 
-        ttk.Label(right, textvariable=self.status_var, font=("", 13, "bold")).grid(row=0, column=0, sticky=tk.W)
-        report = ttk.LabelFrame(right, text="报告输出", padding=8)
-        report.grid(row=1, column=0, sticky="ew", pady=(10, 8))
-        report.columnconfigure(1, weight=1)
-        ttk.Label(report, text="报告类型").grid(row=0, column=0, sticky=tk.W)
-        ttk.Label(report, textvariable=self.report_type_var).grid(row=0, column=1, sticky=tk.W, padx=(8, 0))
-        ttk.Label(report, text="风险级别").grid(row=1, column=0, sticky=tk.W)
-        ttk.Label(report, textvariable=self.risk_var).grid(row=1, column=1, sticky=tk.W, padx=(8, 0))
-        ttk.Label(report, text="摘要").grid(row=2, column=0, sticky=tk.NW)
-        ttk.Label(report, textvariable=self.summary_var, wraplength=620).grid(row=2, column=1, sticky=tk.W, padx=(8, 0))
+        report = ttk.Frame(right, padding=14, style="ReportCard.TFrame")
+        report.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        report.columnconfigure(0, weight=1)
+        metrics = ttk.Frame(report, style="ReportCard.TFrame")
+        metrics.grid(row=0, column=0, sticky="ew")
+        metrics.columnconfigure(0, weight=1)
+        metrics.columnconfigure(1, weight=1)
+        metrics.columnconfigure(2, weight=1)
+        status_card = ttk.Frame(metrics, padding=10, style="Metric.TFrame")
+        status_card.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        type_card = ttk.Frame(metrics, padding=10, style="Metric.TFrame")
+        type_card.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        risk_card = ttk.Frame(metrics, padding=10, style="Metric.TFrame")
+        risk_card.grid(row=0, column=2, sticky="ew")
+        ttk.Label(status_card, text="状态", style="MetricLabel.TLabel").pack(side=tk.LEFT)
+        ttk.Label(status_card, textvariable=self.status_var, style="MetricValue.TLabel").pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(type_card, text="产物", style="MetricLabel.TLabel").pack(side=tk.LEFT)
+        ttk.Label(type_card, textvariable=self.report_type_var, style="MetricValue.TLabel").pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(risk_card, text="信号", style="MetricLabel.TLabel").pack(side=tk.LEFT)
+        ttk.Label(risk_card, textvariable=self.risk_var, style="MetricValue.TLabel").pack(side=tk.LEFT, padx=(8, 0))
 
-        artifact_frame = ttk.Frame(right)
-        artifact_frame.grid(row=2, column=0, sticky=tk.W, pady=(0, 8))
+        summary_row = ttk.Frame(report, style="ReportCard.TFrame")
+        summary_row.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        summary_row.columnconfigure(1, weight=1)
+        ttk.Label(summary_row, text="摘要", style="CardTitle.TLabel").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        ttk.Label(summary_row, textvariable=self.summary_var, wraplength=760, style="Summary.TLabel").grid(row=0, column=1, sticky="ew")
+        progress_row = ttk.Frame(report, style="ReportCard.TFrame")
+        progress_row.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        progress_row.columnconfigure(0, weight=1)
+        self.progress_bar = ttk.Progressbar(progress_row, variable=self.progress_var, maximum=100, mode="determinate", style="Audit.Horizontal.TProgressbar")
+        self.progress_bar.grid(row=0, column=0, sticky="ew")
+        ttk.Label(progress_row, textvariable=self.stage_var, style="Stage.TLabel").grid(row=0, column=1, sticky=tk.E, padx=(12, 0))
+
+        artifact_frame = ttk.Frame(report, style="ReportCard.TFrame")
+        artifact_frame.grid(row=3, column=0, sticky=tk.W, pady=(12, 0))
         self.artifact_buttons = {}
         for kind, label in DESKTOP_GUI_ARTIFACT_LABELS.items():
-            button = ttk.Button(artifact_frame, text=label, command=lambda k=kind: self.open_artifact(k), state=tk.DISABLED)
+            button = ttk.Button(artifact_frame, text=label, command=lambda k=kind: self.open_artifact(k), state=tk.DISABLED, style="Artifact.TButton")
             button.pack(side=tk.LEFT, padx=(0, 8))
             self.artifact_buttons[kind] = button
+        self.followup_buttons = {}
+        for kind, label in DESKTOP_GUI_FOLLOWUP_LABELS.items():
+            button = ttk.Button(artifact_frame, text=label, command=lambda k=kind: self.generate_followup(k), state=tk.DISABLED, style="Artifact.TButton")
+            button.pack(side=tk.LEFT, padx=(0, 8))
+            self.followup_buttons[kind] = button
 
-        ttk.Label(right, text="运行日志").grid(row=3, column=0, sticky=tk.W)
-        self.log_text = tk.Text(right, height=24, wrap=tk.WORD)
-        self.log_text.grid(row=4, column=0, sticky="nsew")
+        log_frame = ttk.Frame(right, padding=12, style="LogCard.TFrame")
+        log_frame.grid(row=1, column=0, sticky="nsew")
+        log_frame.rowconfigure(1, weight=1)
+        log_frame.columnconfigure(0, weight=1)
+        ttk.Label(log_frame, textvariable=self.log_title_var, style="LogTitle.TLabel").grid(row=0, column=0, sticky=tk.W, pady=(0, 8))
+        self.log_text = tk.Text(log_frame, height=28, wrap=tk.WORD, bd=0, relief=tk.FLAT)
+        self.log_text.grid(row=1, column=0, sticky="nsew")
+        self.log_text.configure(
+            bg="#101317",
+            fg="#d9e0ea",
+            insertbackground="#d9e0ea",
+            selectbackground="#30445f",
+            font=("SF Mono", 10),
+            padx=12,
+            pady=12,
+        )
+        self._set_log_editable(False)
 
-    def _set_text(self, widget, text):
-        widget.configure(state=self.tk.NORMAL)
-        widget.delete("1.0", self.tk.END)
-        widget.insert(self.tk.END, text)
-        widget.configure(state=self.tk.DISABLED)
+    def _configure_style(self):
+        ttk = self.ttk
+        try:
+            ttk.Style().theme_use("clam")
+        except Exception:
+            pass
+        style = ttk.Style()
+        colors = {
+            "app": "#f0f2f6",
+            "sidebar": "#f8f9fb",
+            "sidebar_card": "#ffffff",
+            "config": "#ffffff",
+            "text": "#111827",
+            "muted": "#7b8190",
+            "card": "#ffffff",
+            "metric": "#f7f8fc",
+            "accent": "#0071e3",
+            "accent_dark": "#005bb5",
+            "danger": "#ff453a",
+            "danger_dark": "#d92d25",
+            "log": "#101317",
+        }
+        self.root.configure(bg=colors["app"])
+        style.configure("App.TFrame", background=colors["app"])
+        style.configure("Sidebar.TFrame", background=colors["sidebar"])
+        style.configure("SidebarCard.TFrame", background=colors["sidebar_card"], relief="flat", borderwidth=0)
+        style.configure("Config.TFrame", background=colors["config"], relief="flat", borderwidth=0)
+        style.configure("ConfigChip.TFrame", background="#f8f9fc", relief="flat", borderwidth=0)
+        style.configure("ReportCard.TFrame", background=colors["card"], relief="flat", borderwidth=0)
+        style.configure("Metric.TFrame", background=colors["metric"], relief="flat")
+        style.configure("LogCard.TFrame", background=colors["log"], relief="flat")
+        style.configure("CloseDot.TLabel", background=colors["sidebar"], foreground="#ff5f57", font=("Avenir Next", 12, "bold"))
+        style.configure("MinDot.TLabel", background=colors["sidebar"], foreground="#ffbd2e", font=("Avenir Next", 12, "bold"))
+        style.configure("ZoomDot.TLabel", background=colors["sidebar"], foreground="#28c840", font=("Avenir Next", 12, "bold"))
+        style.configure("Brand.TLabel", background=colors["sidebar"], foreground=colors["text"], font=("Avenir Next", 23, "bold"))
+        style.configure("BrandSub.TLabel", background=colors["sidebar"], foreground=colors["accent"], font=("Avenir Next", 13, "bold"))
+        style.configure("SidebarHint.TLabel", background=colors["sidebar"], foreground=colors["muted"], font=("Avenir Next", 10))
+        style.configure("SidebarSection.TLabel", background=colors["sidebar_card"], foreground=colors["muted"], font=("Avenir Next", 8, "bold"))
+        style.configure("ConfigSection.TLabel", background=colors["config"], foreground=colors["muted"], font=("Avenir Next", 8, "bold"))
+        style.configure("ConfigSummary.TLabel", background=colors["config"], foreground=colors["text"], font=("Avenir Next", 8, "bold"))
+        style.configure("ConfigName.TLabel", background="#f8f9fc", foreground=colors["text"], font=("Avenir Next", 8))
+        style.configure("ConfigOk.TLabel", background="#f8f9fc", foreground="#2e7d32", font=("Avenir Next", 8, "bold"))
+        style.configure("ConfigWarn.TLabel", background="#f8f9fc", foreground="#b45309", font=("Avenir Next", 8, "bold"))
+        style.configure("PageTitle.TLabel", background=colors["app"], foreground=colors["text"], font=("Avenir Next", 25, "bold"))
+        style.configure("PageSub.TLabel", background=colors["app"], foreground=colors["muted"], font=("Avenir Next", 10))
+        style.configure("StatusPill.TLabel", background="#eaf2ff", foreground="#0f5fb8", font=("Avenir Next", 10, "bold"), padding=(12, 6))
+        style.configure("CardTitle.TLabel", background=colors["card"], foreground=colors["text"], font=("Avenir Next", 12, "bold"))
+        style.configure("Summary.TLabel", background=colors["card"], foreground="#33363d", font=("Avenir Next", 11))
+        style.configure("MetricLabel.TLabel", background=colors["metric"], foreground=colors["muted"], font=("Avenir Next", 8, "bold"))
+        style.configure("MetricValue.TLabel", background=colors["metric"], foreground=colors["text"], font=("Avenir Next", 14, "bold"))
+        style.configure("Stage.TLabel", background=colors["card"], foreground=colors["muted"], font=("Avenir Next", 10, "bold"))
+        style.configure("Audit.Horizontal.TProgressbar", troughcolor="#e6e8ed", background=colors["accent"], bordercolor="#e6e8ed", lightcolor=colors["accent"], darkcolor=colors["accent"], thickness=9)
+        style.configure("LogTitle.TLabel", background=colors["log"], foreground="#f5f5f7", font=("Avenir Next", 12, "bold"))
+        style.configure("Sidebar.TCheckbutton", background=colors["sidebar_card"], foreground=colors["text"], font=("Avenir Next", 9))
+        style.map("Sidebar.TCheckbutton", background=[("active", colors["sidebar_card"])], foreground=[("active", colors["text"])])
+        style.configure("Path.TEntry", fieldbackground="#ffffff", foreground=colors["text"], padding=6)
+        style.configure("Picker.TButton", background="#f8f9fc", foreground="#252b36", font=("Avenir Next", 10, "bold"), padding=(10, 16), borderwidth=0)
+        style.map("Picker.TButton", background=[("active", "#eef6ff"), ("disabled", "#e4e5e8")], foreground=[("disabled", "#8c8c91")])
+        style.configure("Primary.TButton", background=colors["accent"], foreground="#ffffff", font=("Avenir Next", 11, "bold"), padding=(12, 9), borderwidth=0)
+        style.map("Primary.TButton", background=[("active", colors["accent_dark"]), ("disabled", "#8a9a93")])
+        style.configure("Secondary.TButton", background="#f8f9fc", foreground=colors["text"], font=("Avenir Next", 9, "bold"), padding=(10, 7), borderwidth=0)
+        style.map("Secondary.TButton", background=[("active", "#e9eef7"), ("disabled", "#d6d7d9")], foreground=[("disabled", "#8c8c91")])
+        style.configure("Ghost.TButton", background=colors["sidebar_card"], foreground=colors["accent"], font=("Avenir Next", 9, "bold"), padding=(9, 7), borderwidth=0)
+        style.map("Ghost.TButton", background=[("active", "#edf4ff"), ("disabled", "#d6d7d9")])
+        style.configure("Tiny.TButton", background="#f8f9fc", foreground=colors["accent"], font=("Avenir Next", 8, "bold"), padding=(6, 3), borderwidth=0)
+        style.map("Tiny.TButton", background=[("active", "#edf4ff"), ("disabled", "#d6d7d9")])
+        style.configure("Danger.TButton", background=colors["danger"], foreground="#ffffff", font=("Avenir Next", 9, "bold"), padding=(10, 7), borderwidth=0)
+        style.map("Danger.TButton", background=[("active", colors["danger_dark"]), ("disabled", "#d6d7d9")])
+        style.configure("Artifact.TButton", background="#eef6ff", foreground="#1f4f7a", font=("Avenir Next", 9, "bold"), padding=(10, 7), borderwidth=0)
+        style.map("Artifact.TButton", background=[("active", "#e6f0ff"), ("disabled", "#e4e5e8")], foreground=[("disabled", "#8c8c91")])
+
+    def _sidebar_checkbutton(self, parent, text, variable):
+        tk = self.tk
+        button = tk.Checkbutton(
+            parent,
+            text=text,
+            variable=variable,
+            indicatoron=False,
+            onvalue=True,
+            offvalue=False,
+            bg="#f3f6fb",
+            activebackground="#eaf2ff",
+            fg="#111827",
+            activeforeground="#111827",
+            selectcolor="#0071e3",
+            font=("Avenir Next", 9, "bold"),
+            bd=0,
+            highlightthickness=0,
+            relief=tk.FLAT,
+            overrelief=tk.FLAT,
+            padx=12,
+            pady=7,
+        )
+
+        def sync(*_args):
+            selected = bool(variable.get())
+            button.configure(
+                bg="#0071e3" if selected else "#f3f6fb",
+                activebackground="#005bb5" if selected else "#eaf2ff",
+                fg="#ffffff" if selected else "#111827",
+                activeforeground="#ffffff" if selected else "#111827",
+            )
+
+        try:
+            trace_id = variable.trace_add("write", sync)
+            button._veritas_trace_id = trace_id
+        except Exception:
+            pass
+        sync()
+        return button
+
+    def _render_config_snapshot(self, snapshot):
+        if hasattr(self, "config_summary_var"):
+            self.config_summary_var.set(snapshot.get("summary") or "不可用")
+        rows = snapshot.get("rows") or []
+        for index, row_vars in enumerate(getattr(self, "config_row_vars", [])):
+            name_var, status_var, status_label = row_vars
+            row = rows[index] if index < len(rows) else None
+            if not row:
+                name_var.set("")
+                status_var.set("")
+                status_label.configure(style="ConfigOk.TLabel")
+                continue
+            name_var.set(row["label"])
+            status_var.set(row["status"])
+            status_label.configure(style="ConfigOk.TLabel" if row.get("ok") else "ConfigWarn.TLabel")
+
+    def _current_llm_config(self):
+        return load_runtime_config(verbose=False).text_llm
+
+    def _save_llm_settings(self, window, api_key_var, api_url_var, model_var):
+        api_key = api_key_var.get().strip()
+        api_url = api_url_var.get().strip()
+        model = model_var.get().strip()
+        if not api_key or not api_url or not model:
+            self.messagebox.showerror("配置不完整", "请填写 API Key、API URL 和模型名称。")
+            return
+        try:
+            path = desktop_gui_write_llm_config(api_key, api_url, model, config_path=getattr(self, "config_path", None))
+            runtime_config = load_runtime_config(verbose=False)
+            apply_runtime_config(runtime_config)
+            self.refresh_config()
+            window.destroy()
+            self.messagebox.showinfo("已保存", f"LLM 设置已保存到 {path}。")
+        except Exception as e:
+            self.messagebox.showerror("保存失败", f"{type(e).__name__}: {_brief_text(str(e), 240)}")
+
+    def open_llm_settings(self):
+        tk = self.tk
+        ttk = self.ttk
+        try:
+            llm = self._current_llm_config()
+        except Exception:
+            llm = CapabilityConfig("text_llm", api_url=LLM_API_URL, model=LLM_MODEL)
+        window = tk.Toplevel(self.root)
+        window.title("LLM 设置")
+        window.transient(self.root)
+        try:
+            window.resizable(False, False)
+        except Exception:
+            pass
+        frame = ttk.Frame(window, padding=18, style="App.TFrame")
+        frame.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(frame, text="文本 LLM", style="CardTitle.TLabel").grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+
+        api_key_var = tk.StringVar(value=llm.api_key or "")
+        api_url_var = tk.StringVar(value=llm.api_url or LLM_API_URL)
+        model_var = tk.StringVar(value=llm.model or LLM_MODEL)
+
+        fields = [
+            ("API Key", api_key_var, "*"),
+            ("API URL", api_url_var, ""),
+            ("模型", model_var, ""),
+        ]
+        for row_index, (label, variable, show) in enumerate(fields, start=1):
+            ttk.Label(frame, text=label, style="MetricLabel.TLabel").grid(row=row_index, column=0, sticky=tk.W, pady=(0, 8), padx=(0, 10))
+            entry = ttk.Entry(frame, textvariable=variable, width=46, show=show)
+            entry.grid(row=row_index, column=1, sticky="ew", pady=(0, 8))
+            if row_index == 1:
+                entry.focus_set()
+        buttons = ttk.Frame(frame, style="App.TFrame")
+        buttons.grid(row=4, column=0, columnspan=2, sticky=tk.E, pady=(8, 0))
+        ttk.Button(buttons, text="取消", command=window.destroy, style="Secondary.TButton").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(
+            buttons,
+            text="保存",
+            command=lambda: self._save_llm_settings(window, api_key_var, api_url_var, model_var),
+            style="Primary.TButton",
+        ).pack(side=tk.LEFT)
+
+    def _set_log_editable(self, editable):
+        try:
+            self.log_text.configure(state=self.tk.NORMAL if editable else self.tk.DISABLED)
+        except Exception:
+            pass
+
+    def _reset_progress(self, label="待命"):
+        if hasattr(self, "progress_var"):
+            self.progress_var.set(0.0)
+        if hasattr(self, "stage_var"):
+            self.stage_var.set(label)
+
+    def _update_progress_from_line(self, line):
+        progress = desktop_gui_progress_from_log_line(line)
+        if not progress:
+            return False
+        if hasattr(self, "progress_var"):
+            self.progress_var.set(progress["percent"])
+        if hasattr(self, "stage_var"):
+            self.stage_var.set(progress["label"])
+        return True
+
+    def _clear_log_text(self):
+        if hasattr(self, "log_title_var"):
+            self.log_title_var.set("运行日志")
+        self._set_log_editable(True)
+        self.log_text.delete("1.0", self.tk.END)
+        self._set_log_editable(False)
+
+    def _replace_log_text(self, title, content):
+        if hasattr(self, "log_title_var"):
+            self.log_title_var.set(title)
+        self._set_log_editable(True)
+        try:
+            self.log_text.delete("1.0", self.tk.END)
+            self.log_text.insert(self.tk.END, str(content or ""))
+            self.log_text.see("1.0")
+        finally:
+            self._set_log_editable(False)
+
+    def _render_artifact_in_log(self, kind, path):
+        label = DESKTOP_GUI_ARTIFACT_LABELS.get(kind, kind)
+        content = desktop_gui_artifact_preview(path, kind)
+        self._replace_log_text(f"报告预览 · {label}", content)
+
+    def _display_path_text(self, raw_path, placeholder):
+        text = str(raw_path or "").strip()
+        if not text:
+            return placeholder
+        try:
+            path = Path(text).expanduser()
+            if path.name == "audit_report":
+                path = path.parent
+            label = str(path)
+        except Exception:
+            label = text
+        if len(label) <= 36:
+            return label
+        return "..." + label[-33:]
+
+    def _set_input_path(self, path):
+        path_text = str(Path(path).expanduser())
+        self.input_var.set(path_text)
+        if hasattr(self, "input_display_var"):
+            self.input_display_var.set(self._display_path_text(path_text, "拖入论文或项目目录"))
+
+    def _set_output_path(self, output_stem):
+        output_text = str(output_stem or "").strip()
+        self.output_var.set(output_text)
+        if hasattr(self, "output_display_var"):
+            self.output_display_var.set(self._display_path_text(output_text, "选择报告目录"))
+
+    def clear_output(self):
+        self._set_output_path("")
+
+    def _enable_drag_drop_package(self):
+        try:
+            self.root.tk.call("package", "require", "tkdnd")
+            return True
+        except Exception:
+            return False
+
+    def _register_drop_target(self, widget, handler):
+        if not getattr(self, "drag_drop_available", False):
+            return
+        try:
+            self.root.tk.call("tkdnd::drop_target", "register", widget._w, "DND_Files")
+            callback = widget.register(lambda data: handler(data))
+            self.root.tk.call("bind", widget._w, "<<Drop>>", f"{callback} %D")
+        except Exception:
+            pass
+
+    def _path_from_drop_data(self, data):
+        raw = str(data or "").strip()
+        if not raw:
+            return ""
+        try:
+            items = self.root.tk.splitlist(raw)
+        except Exception:
+            items = [raw]
+        if not items:
+            return ""
+        item = str(items[0]).strip().strip("{}")
+        if item.lower().startswith("file://"):
+            return dropped_local_path_from_uri_text(item)
+        return item
+
+    def _handle_input_drop(self, data):
+        path = self._path_from_drop_data(data)
+        if path:
+            self._set_input_path(path)
+
+    def _handle_output_drop(self, data):
+        path = self._path_from_drop_data(data)
+        if not path:
+            return
+        dropped = Path(path).expanduser()
+        output_dir = dropped.parent if dropped.is_file() else dropped
+        self._set_output_path(output_dir / "audit_report")
 
     def choose_file(self):
-        selected = self.filedialog.askopenfilename(title="选择审查文件")
+        selected = self.filedialog.askopenfilename(title="选择材料文件")
         if selected:
-            self.input_var.set(str(Path(selected).expanduser()))
+            self._set_input_path(selected)
 
     def choose_directory(self):
-        selected = self.filedialog.askdirectory(title="选择审查目录", mustexist=True)
+        selected = self.filedialog.askdirectory(title="选择材料目录", mustexist=True)
         if selected:
-            self.input_var.set(str(Path(selected).expanduser()))
+            self._set_input_path(selected)
 
     def choose_output_directory(self):
-        selected = self.filedialog.askdirectory(title="选择输出目录", mustexist=False)
+        selected = self.filedialog.askdirectory(title="选择报告目录", mustexist=False)
         if selected:
-            self.output_var.set(str(Path(selected).expanduser() / "audit_report"))
+            self._set_output_path(Path(selected).expanduser() / "audit_report")
 
     def refresh_config(self):
+        self._config_refresh_serial = getattr(self, "_config_refresh_serial", 0) + 1
+        serial = self._config_refresh_serial
         try:
             config = web_runner_config_status()
-            lines = []
-            for name, capability in (config.get("capabilities") or {}).items():
-                status = "ready" if capability.get("ok") else "needs config"
-                missing = ", ".join(str(item) for item in capability.get("missing") or [])
-                lines.append(f"{name}: {status}" + (f" ({missing})" if missing else ""))
-            deps = config.get("optional_dependencies") or {}
-            for name, ok in deps.items():
-                lines.append(f"{name}: {'available' if ok else 'missing'}")
-            self._set_text(self.config_text, "\n".join(lines) or "配置状态不可用")
+            self._render_config_snapshot(desktop_gui_config_snapshot(config, preflight_results={"text_llm": {"status": "检测中", "ok": False}}))
         except Exception as e:
-            self._set_text(self.config_text, f"{type(e).__name__}: {_brief_text(str(e), 240)}")
+            self._render_config_snapshot({"summary": f"{type(e).__name__}: {_brief_text(str(e), 120)}", "rows": []})
+            return
+
+        def worker():
+            try:
+                snapshot = desktop_gui_checked_config_snapshot()
+            except Exception as e:
+                snapshot = {"summary": f"{type(e).__name__}: {_brief_text(str(e), 120)}", "rows": []}
+
+            def apply_snapshot():
+                if serial == getattr(self, "_config_refresh_serial", 0):
+                    self._render_config_snapshot(snapshot)
+
+            try:
+                self.root.after(0, apply_snapshot)
+            except Exception:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def refresh_runs(self):
         runs = self.state.list_runs()
@@ -3830,12 +4505,23 @@ class DesktopGuiApp:
         if running and not self.active_run_id:
             self.active_run_id = running.get("id")
             self.log_offset = 0
+            self._clear_log_text()
             self.poll_run()
+            return
+        if runs and not self.active_run_id:
+            latest = runs[0]
+            self.last_run = latest
+            self.log_offset = 0
+            self._clear_log_text()
+            self._reset_progress()
+            self.render_run(latest)
+            self._append_logs_since(latest.get("id"))
+            self.retry_button.configure(state=self.tk.NORMAL if latest.get("input_path") else self.tk.DISABLED)
 
     def start_run(self):
         input_path = self.input_var.get().strip()
         if not input_path:
-            self.messagebox.showerror("缺少输入", "请选择审查文件或目录。")
+            self.messagebox.showerror("缺少材料", "请选择文件或项目目录。")
             return
         result, status = desktop_gui_start_run(self.state, input_path, self.output_var.get(), self.fresh_var.get())
         run = result.get("run") if isinstance(result, dict) else None
@@ -3850,7 +4536,8 @@ class DesktopGuiApp:
         self.start_button.configure(state=self.tk.DISABLED)
         self.cancel_button.configure(state=self.tk.NORMAL)
         self.retry_button.configure(state=self.tk.DISABLED)
-        self.log_text.delete("1.0", self.tk.END)
+        self._clear_log_text()
+        self._reset_progress("启动中")
         self.render_run(run)
         self.poll_run()
 
@@ -3866,23 +4553,26 @@ class DesktopGuiApp:
         if not input_path:
             return
         self.input_var.set(input_path)
-        self.output_var.set(run.get("output") or self.output_var.get())
+        if hasattr(self, "input_display_var"):
+            self.input_display_var.set(self._display_path_text(input_path, "拖入论文或项目目录"))
+        self._set_output_path(run.get("output") or self.output_var.get())
         self.fresh_var.set(bool(run.get("fresh")))
         self.start_run()
 
     def poll_run(self):
         if not self.active_run_id:
             return
-        logs = self.state.logs_since(self.active_run_id, self.log_offset)
-        if logs:
-            self.log_offset = logs.get("offset", self.log_offset)
-            for line in logs.get("lines") or []:
-                self.log_text.insert(self.tk.END, str(line) + "\n")
-            self.log_text.see(self.tk.END)
+        self._append_logs_since(self.active_run_id)
         run = self.state.get_run(self.active_run_id)
         if run:
             self.render_run(run)
             if run.get("status") != "running":
+                refreshed = self.state.discover_artifacts(self.active_run_id) if self.active_run_id else None
+                if refreshed:
+                    run = refreshed
+                    self.render_run(run)
+                self._append_logs_since(run.get("id"))
+                self._maybe_auto_open_completed_report(run)
                 self.active_run_id = None
                 self.start_button.configure(state=self.tk.NORMAL)
                 self.cancel_button.configure(state=self.tk.DISABLED)
@@ -3890,23 +4580,119 @@ class DesktopGuiApp:
                 return
         self.root.after(1000, self.poll_run)
 
+    def _append_logs_since(self, run_id):
+        if not run_id:
+            return
+        logs = self.state.logs_since(run_id, self.log_offset)
+        if not logs:
+            return
+        self.log_offset = logs.get("offset", self.log_offset)
+        lines = logs.get("lines") or []
+        if not lines:
+            return
+        self._set_log_editable(True)
+        try:
+            for line in lines:
+                self._update_progress_from_line(line)
+                self.log_text.insert(self.tk.END, str(line) + "\n")
+            self.log_text.see(self.tk.END)
+        finally:
+            self._set_log_editable(False)
+
     def render_run(self, run):
         self.last_run = run or self.last_run
         view = desktop_gui_run_summary(run)
-        self.status_var.set(f"状态: {view['status']}")
-        self.report_type_var.set(view["report_type"] or "待生成")
-        self.risk_var.set(view["risk_level"] or "未标注")
-        self.summary_var.set(view["summary"] or "报告生成后会显示摘要。")
+        self.status_var.set(view["status_label"])
+        self.report_type_var.set(view["report_type_label"])
+        self.risk_var.set(view["risk_label"])
+        self.summary_var.set(view["summary"] or "完成后显示摘要。")
+        if run and run.get("status") == "succeeded" and hasattr(self, "progress_var"):
+            self.progress_var.set(100.0)
+            self.stage_var.set("已完成")
+        elif run and run.get("status") in {"failed", "canceled"} and hasattr(self, "stage_var"):
+            if not self.stage_var.get() or self.stage_var.get() == "待命":
+                self.stage_var.set(view["status_label"])
         self.artifact_paths = view["artifacts"]
         for kind, button in self.artifact_buttons.items():
             button.configure(state=self.tk.NORMAL if kind in self.artifact_paths else self.tk.DISABLED)
+        followup_enabled = bool(run and run.get("status") == "succeeded" and self.artifact_paths.get("json"))
+        for button in getattr(self, "followup_buttons", {}).values():
+            button.configure(state=self.tk.NORMAL if followup_enabled else self.tk.DISABLED)
 
     def open_artifact(self, kind):
         path = self.artifact_paths.get(kind)
         if not path:
             return
         try:
-            self.opener(path)
+            if kind in {"html", "markdown", "json"}:
+                self._render_artifact_in_log(kind, path)
+            else:
+                self.opener(path)
+        except Exception as e:
+            self.messagebox.showerror("打开失败", f"{type(e).__name__}: {_brief_text(str(e), 240)}")
+
+    def _current_followup_run(self):
+        run = dict(self.last_run or {})
+        artifacts = dict(run.get("artifacts") or {})
+        artifacts.update(getattr(self, "artifact_paths", {}) or {})
+        run["artifacts"] = artifacts
+        return run
+
+    def _set_followup_buttons_state(self, state):
+        for button in getattr(self, "followup_buttons", {}).values():
+            button.configure(state=state)
+
+    def generate_followup(self, kind):
+        label = DESKTOP_GUI_FOLLOWUP_LABELS.get(kind, kind)
+        run = self._current_followup_run()
+        try:
+            desktop_gui_followup_context(run)
+        except Exception as e:
+            self.messagebox.showerror("无法生成草稿", f"{type(e).__name__}: {_brief_text(str(e), 240)}")
+            return
+        self._set_followup_buttons_state(self.tk.DISABLED)
+        if hasattr(self, "stage_var"):
+            self.stage_var.set(f"{label} 生成中")
+
+        def worker():
+            try:
+                result = desktop_gui_generate_followup_draft(kind, run)
+                error = None
+            except Exception as e:
+                result = None
+                error = e
+
+            def apply_result():
+                self._set_followup_buttons_state(self.tk.NORMAL)
+                if error is not None:
+                    if hasattr(self, "stage_var"):
+                        self.stage_var.set("草稿生成失败")
+                    self.messagebox.showerror("生成失败", f"{type(error).__name__}: {_brief_text(str(error), 240)}")
+                    return
+                self._replace_log_text(f"草稿 · {label}", result.get("text") or "")
+                if hasattr(self, "stage_var"):
+                    self.stage_var.set("草稿已生成")
+                draft_path = (result.get("paths") or {}).get("draft_path")
+                if self.messagebox:
+                    self.messagebox.showinfo("已生成", f"草稿已保存: {draft_path}")
+
+            try:
+                self.root.after(0, apply_result)
+            except Exception:
+                apply_result()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _maybe_auto_open_completed_report(self, run):
+        if not run or run.get("status") != "succeeded" or not self.auto_open_var.get():
+            return
+        run_id = str(run.get("id") or "")
+        html_path = (run.get("artifacts") or {}).get("html")
+        if not run_id or not html_path or run_id in self.auto_opened_run_ids:
+            return
+        self.auto_opened_run_ids.add(run_id)
+        try:
+            self._render_artifact_in_log("html", html_path)
         except Exception as e:
             self.messagebox.showerror("打开失败", f"{type(e).__name__}: {_brief_text(str(e), 240)}")
 
@@ -3919,7 +4705,7 @@ def run_desktop_gui(history_path=None):
         print(f"无法启动桌面 GUI：tkinter 不可用: {type(e).__name__}: {_brief_text(str(e), 240)}")
         return 1
     try:
-        root = tk.Tk()
+        root = create_desktop_root(tk)
         DesktopGuiApp(root, state=WebRunnerState(history_path=history_path), tk_module=tk, ttk_module=ttk, filedialog_module=filedialog, messagebox_module=messagebox)
         root.mainloop()
         return 0

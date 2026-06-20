@@ -160,8 +160,12 @@ def test_desktop_gui_mode_loads_runtime_config(monkeypatch):
 
 def test_desktop_gui_console_script_is_declared():
     pyproject = (paper_audit.Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    requirements = (paper_audit.Path(__file__).resolve().parents[1] / "requirements.txt").read_text(encoding="utf-8")
 
     assert 'veritas-gui = "veritas.legacy:gui_main"' in pyproject
+    assert 'packages = ["veritas"]' in pyproject
+    assert '"tkinterdnd2>=0.5.0"' in pyproject
+    assert "tkinterdnd2>=0.5.0" in requirements
 
 
 def test_chat_completions_endpoint_accepts_base_or_full_url():
@@ -4077,8 +4081,11 @@ def test_desktop_gui_run_summary_exposes_report_outputs_without_extra_keys():
     summary = paper_audit.desktop_gui_run_summary(run)
 
     assert summary["status"] == "succeeded"
+    assert summary["status_label"] == "已完成"
     assert summary["report_type"] == "complete"
+    assert summary["report_type_label"] == "完整报告"
     assert summary["risk_level"] == "低"
+    assert summary["risk_label"] == "低"
     assert summary["summary"] == "ok"
     assert summary["artifacts"] == {
         "html": "/tmp/out/audit_report.audit.html",
@@ -4086,6 +4093,884 @@ def test_desktop_gui_run_summary_exposes_report_outputs_without_extra_keys():
         "json": "/tmp/out/audit_report.audit.json",
         "folder": "/tmp/out",
     }
+
+
+def test_desktop_gui_run_summary_translates_failed_state_for_display():
+    summary = paper_audit.desktop_gui_run_summary({
+        "status": "failed",
+        "message": "审查失败",
+        "summary": {
+            "report_type": "failed",
+            "risk_level": "failed",
+            "summary": "文本LLM认证失败，请检查LLM_API_KEY。",
+        },
+    })
+
+    assert summary["status_label"] == "需处理"
+    assert summary["report_type_label"] == "诊断报告"
+    assert summary["risk_label"] == "暂无评分"
+    assert summary["summary"] == "文本LLM认证失败，请检查LLM_API_KEY。"
+
+
+def test_desktop_gui_progress_from_log_line_parses_stage_progress():
+    progress = paper_audit.desktop_gui_progress_from_log_line("📊 [████░░] 2/5  40.0% 阶段2/5 本地统计检测完成")
+
+    assert progress == {
+        "current": 2,
+        "total": 5,
+        "percent": 40.0,
+        "label": "阶段 2/5 · 本地统计完成",
+    }
+    assert paper_audit.desktop_gui_progress_from_log_line("普通日志") is None
+
+
+def test_desktop_gui_config_snapshot_compacts_status_without_secrets():
+    snapshot = paper_audit.desktop_gui_config_snapshot({
+        "ok": False,
+        "capabilities": {
+            "text_llm": {"ok": True, "api_key_configured": True, "model": "private-model"},
+            "mineru": {"ok": False, "missing": ["api_key"]},
+            "image_semantic": {"ok": True},
+            "reference_lookup": {"ok": True},
+            "image_detector": {"ok": False, "missing": ["base_url"]},
+        },
+        "optional_dependencies": {"python_docx": True, "openpyxl": False},
+    })
+
+    assert snapshot["summary"] == "4/7 正常 · 待配置"
+    assert snapshot["rows"] == [
+        {"label": "LLM", "status": "正常", "ok": True},
+        {"label": "MinerU", "status": "配置", "ok": False},
+        {"label": "图像语义", "status": "正常", "ok": True},
+        {"label": "参考核验", "status": "正常", "ok": True},
+        {"label": "图像检测", "status": "配置", "ok": False},
+        {"label": "DOCX", "status": "正常", "ok": True},
+        {"label": "Excel", "status": "缺失", "ok": False},
+    ]
+    assert "private-model" not in repr(snapshot)
+    assert "api_key" not in repr(snapshot)
+
+
+def test_desktop_gui_config_snapshot_uses_real_llm_preflight_status():
+    config = {
+        "ok": True,
+        "capabilities": {
+            "text_llm": {"ok": True, "api_key_configured": True, "model": "private-model"},
+            "mineru": {"ok": True},
+            "image_semantic": {"ok": True},
+            "reference_lookup": {"ok": True},
+            "image_detector": {"ok": True},
+        },
+        "optional_dependencies": {"python_docx": True, "openpyxl": True},
+    }
+
+    success = paper_audit.desktop_gui_config_snapshot(
+        config,
+        preflight_results={"text_llm": paper_audit.PreflightResult("text_llm", True, details={"model": "private-model"})},
+    )
+    failure = paper_audit.desktop_gui_config_snapshot(
+        config,
+        preflight_results={"text_llm": paper_audit.PreflightResult("text_llm", False, "provider_unavailable", "down")},
+    )
+
+    assert success["rows"][0] == {"label": "LLM", "status": "可达", "ok": True}
+    assert failure["rows"][0] == {"label": "LLM", "status": "不可达", "ok": False}
+    assert "private-model" not in repr(success)
+
+
+def test_desktop_gui_checked_config_snapshot_runs_injected_llm_preflight(monkeypatch):
+    cfg = paper_audit.default_runtime_config()
+    cfg.text_llm.api_key = "secret-llm-key"
+    cfg.text_llm.api_url = "https://llm.example.test/v1/chat/completions"
+    cfg.text_llm.model = "model-x"
+    cfg.mineru.api_key = "mineru-token"
+    cfg.image_semantic.api_key = "vision-key"
+    calls = []
+
+    monkeypatch.setattr(paper_audit, "load_runtime_config", lambda verbose=False: cfg)
+    monkeypatch.setattr(paper_audit, "apply_runtime_config", lambda runtime_config: calls.append(runtime_config))
+
+    snapshot = paper_audit.desktop_gui_checked_config_snapshot(
+        llm_preflight_runner=lambda: paper_audit.PreflightResult("text_llm", True, details={"model": "model-x"}),
+        mineru_preflight_runner=lambda: paper_audit.PreflightResult("mineru", True),
+    )
+
+    assert calls == [cfg]
+    assert snapshot["rows"][0] == {"label": "LLM", "status": "可达", "ok": True}
+    assert snapshot["rows"][1] == {"label": "MinerU", "status": "可达", "ok": True}
+    assert "secret-llm-key" not in repr(snapshot)
+
+
+def test_desktop_gui_write_llm_config_creates_persistent_config(tmp_path):
+    config_path = tmp_path / "config.py"
+
+    written = paper_audit.desktop_gui_write_llm_config(
+        "sk-test",
+        "https://llm.example.test/v1/chat/completions",
+        "model-x",
+        config_path=config_path,
+    )
+
+    text = written.read_text(encoding="utf-8")
+    assert 'LLM_API_KEY = "sk-test"' in text
+    assert 'LLM_API_URL = "https://llm.example.test/v1/chat/completions"' in text
+    assert 'LLM_MODEL = "model-x"' in text
+
+
+def test_desktop_gui_write_llm_config_preserves_unrelated_config(tmp_path):
+    config_path = tmp_path / "config.py"
+    config_path.write_text(
+        "\n".join([
+            'MINERU_TOKEN = "mineru-token"',
+            'LLM_API_KEY = "old-key"',
+            'LLM_API_URL = "https://old.example.test"',
+            'LLM_MODEL = "old-model"',
+            'IMAGE_SEMANTIC_API_KEY = "vision-key"',
+        ]),
+        encoding="utf-8",
+    )
+
+    paper_audit.desktop_gui_write_llm_config("new-key", "https://new.example.test", "new-model", config_path=config_path)
+
+    text = config_path.read_text(encoding="utf-8")
+    assert 'MINERU_TOKEN = "mineru-token"' in text
+    assert 'IMAGE_SEMANTIC_API_KEY = "vision-key"' in text
+    assert 'LLM_API_KEY = "new-key"' in text
+    assert 'LLM_API_URL = "https://new.example.test"' in text
+    assert 'LLM_MODEL = "new-model"' in text
+    assert "old-key" not in text
+
+
+def test_desktop_gui_render_config_snapshot_updates_read_only_rows():
+    class FakeVar:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    class FakeLabel:
+        def __init__(self):
+            self.style = ""
+
+        def configure(self, **kwargs):
+            self.style = kwargs.get("style", self.style)
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.config_summary_var = FakeVar()
+    app.config_row_vars = [(FakeVar(), FakeVar(), FakeLabel()), (FakeVar(), FakeVar(), FakeLabel())]
+
+    app._render_config_snapshot({
+        "summary": "1/2 正常",
+        "rows": [
+            {"label": "LLM", "status": "正常", "ok": True},
+            {"label": "MinerU", "status": "配置", "ok": False},
+        ],
+    })
+
+    assert app.config_summary_var.value == "1/2 正常"
+    assert app.config_row_vars[0][0].value == "LLM"
+    assert app.config_row_vars[0][1].value == "正常"
+    assert app.config_row_vars[0][2].style == "ConfigOk.TLabel"
+    assert app.config_row_vars[1][0].value == "MinerU"
+    assert app.config_row_vars[1][1].value == "配置"
+    assert app.config_row_vars[1][2].style == "ConfigWarn.TLabel"
+
+
+def test_desktop_gui_path_pickers_set_input_and_output_stem(tmp_path):
+    selected_file = tmp_path / "paper.pdf"
+    selected_file.write_text("paper", encoding="utf-8")
+    selected_input_dir = tmp_path / "paper_project"
+    selected_input_dir.mkdir()
+    selected_output_dir = tmp_path / "reports"
+
+    class FakeVar:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    class FakeDialog:
+        def __init__(self):
+            self.directory_calls = []
+
+        def askopenfilename(self, title=""):
+            assert title == "选择材料文件"
+            return str(selected_file)
+
+        def askdirectory(self, title="", mustexist=False):
+            self.directory_calls.append({"title": title, "mustexist": mustexist})
+            if title == "选择材料目录":
+                return str(selected_input_dir)
+            if title == "选择报告目录":
+                return str(selected_output_dir)
+            raise AssertionError(f"unexpected directory picker title: {title}")
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.input_var = FakeVar()
+    app.output_var = FakeVar()
+    app.filedialog = FakeDialog()
+
+    app.choose_file()
+    assert app.input_var.value == str(selected_file)
+
+    app.choose_directory()
+    assert app.input_var.value == str(selected_input_dir)
+
+    app.choose_output_directory()
+    assert app.output_var.value == str(selected_output_dir / "audit_report")
+    assert app.filedialog.directory_calls == [
+        {"title": "选择材料目录", "mustexist": True},
+        {"title": "选择报告目录", "mustexist": False},
+    ]
+
+
+def test_desktop_gui_path_buttons_show_compact_selected_paths(tmp_path):
+    selected_file = tmp_path / "paper.pdf"
+    selected_output = tmp_path / "reports" / "audit_report"
+
+    class FakeVar:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.input_var = FakeVar()
+    app.output_var = FakeVar()
+    app.input_display_var = FakeVar()
+    app.output_display_var = FakeVar()
+
+    app._set_input_path(selected_file)
+    app._set_output_path(selected_output)
+    app.clear_output()
+
+    assert app.input_var.value == str(selected_file)
+    assert app.input_display_var.value.endswith("paper.pdf")
+    assert app.output_var.value == ""
+    assert app.output_display_var.value == "选择报告目录"
+
+
+def test_desktop_gui_drop_handlers_update_input_and_output_paths(tmp_path):
+    input_path = tmp_path / "paper.docx"
+    output_dir = tmp_path / "reports"
+    input_path.write_text("paper", encoding="utf-8")
+    output_dir.mkdir()
+
+    class FakeVar:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    class FakeTk:
+        def splitlist(self, raw):
+            return [raw]
+
+    class FakeRoot:
+        tk = FakeTk()
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.root = FakeRoot()
+    app.input_var = FakeVar()
+    app.output_var = FakeVar()
+    app.input_display_var = FakeVar()
+    app.output_display_var = FakeVar()
+
+    app._handle_input_drop(str(input_path))
+    app._handle_output_drop(str(output_dir))
+
+    assert app.input_var.value == str(input_path)
+    assert app.output_var.value == str(output_dir / "audit_report")
+    assert app.input_display_var.value.endswith("paper.docx")
+    assert app.output_display_var.value.endswith("reports")
+
+
+def test_desktop_gui_log_text_returns_to_read_only_after_append():
+    class FakeState:
+        def logs_since(self, run_id, offset):
+            return {"offset": 1, "lines": ["📊 [████░░] 2/5  40.0% 阶段2/5 本地统计检测完成"]}
+
+    class FakeText:
+        def __init__(self):
+            self.states = []
+            self.contents = []
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.states.append(kwargs["state"])
+
+        def insert(self, *args):
+            self.contents.append(args[1])
+
+        def see(self, *args):
+            pass
+
+    class FakeTk:
+        END = "end"
+        NORMAL = "normal"
+        DISABLED = "disabled"
+
+    class FakeVar:
+        def __init__(self):
+            self.value = None
+
+        def set(self, value):
+            self.value = value
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.state = FakeState()
+    app.log_offset = 0
+    app.log_text = FakeText()
+    app.tk = FakeTk()
+    app.progress_var = FakeVar()
+    app.stage_var = FakeVar()
+
+    app._append_logs_since("run-1")
+
+    assert app.log_text.contents == ["📊 [████░░] 2/5  40.0% 阶段2/5 本地统计检测完成\n"]
+    assert app.log_text.states == [FakeTk.NORMAL, FakeTk.DISABLED]
+    assert app.progress_var.value == 40.0
+    assert app.stage_var.value == "阶段 2/5 · 本地统计完成"
+
+
+def test_desktop_gui_artifact_preview_formats_supported_report_files(tmp_path):
+    html_path = tmp_path / "report.html"
+    markdown_path = tmp_path / "report.md"
+    json_path = tmp_path / "report.json"
+    html_path.write_text("<html><style>.x{}</style><body><h1>标题</h1><p>内容&nbsp;A</p><script>x()</script></body></html>", encoding="utf-8")
+    markdown_path.write_text("# 标题\n\n正文", encoding="utf-8")
+    json_path.write_text('{"risk": "低", "items": [1]}', encoding="utf-8")
+
+    assert "标题\n内容 A" in paper_audit.desktop_gui_artifact_preview(html_path, "html")
+    assert paper_audit.desktop_gui_artifact_preview(markdown_path, "markdown") == "# 标题\n\n正文"
+    assert paper_audit.desktop_gui_artifact_preview(json_path, "json") == '{\n  "risk": "低",\n  "items": [\n    1\n  ]\n}'
+
+
+def test_desktop_gui_open_artifact_renders_reports_in_log_and_opens_folder(tmp_path):
+    report_path = tmp_path / "report.audit.md"
+    report_path.write_text("# 报告", encoding="utf-8")
+    opened = []
+
+    class FakeText:
+        def __init__(self):
+            self.states = []
+            self.deleted = []
+            self.inserted = []
+            self.seen = []
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.states.append(kwargs["state"])
+
+        def delete(self, *args):
+            self.deleted.append(args)
+
+        def insert(self, *args):
+            self.inserted.append(args)
+
+        def see(self, *args):
+            self.seen.append(args)
+
+    class FakeTk:
+        END = "end"
+        NORMAL = "normal"
+        DISABLED = "disabled"
+
+    class FakeVar:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.tk = FakeTk()
+    app.log_text = FakeText()
+    app.log_title_var = FakeVar()
+    app.artifact_paths = {"markdown": str(report_path), "folder": str(tmp_path)}
+    app.opener = opened.append
+
+    app.open_artifact("markdown")
+    app.open_artifact("folder")
+
+    assert app.log_title_var.value == "报告预览 · Markdown"
+    assert app.log_text.inserted == [(FakeTk.END, "# 报告")]
+    assert app.log_text.states == [FakeTk.NORMAL, FakeTk.DISABLED]
+    assert opened == [str(tmp_path)]
+
+
+def test_desktop_gui_followup_context_uses_recorded_json_artifact(tmp_path):
+    json_path = tmp_path / "audit_report.audit.json"
+    html_path = tmp_path / "audit_report.audit.html"
+    json_path.write_text(
+        json.dumps({
+            "report_type": "complete",
+            "llm_report": {
+                "summary": "需要人工复核",
+                "risk_level": "中",
+                "checks": [{
+                    "category": "图像",
+                    "item": "Figure 1",
+                    "verdict": "🚩红旗",
+                    "evidence": "Figure 1 has duplicated regions.",
+                    "reason": "图像区域高度相似。",
+                    "confidence": 0.9,
+                }],
+            },
+            "stat_result": {"number_count": 3},
+            "meta": {
+                "paper_identity": {"title": "Paper title", "journal": "Journal", "authors": ["Alice"]},
+                "artifact_paths": {"html": str(html_path), "json": str(json_path)},
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    run = {
+        "status": "succeeded",
+        "input_path": str(tmp_path / "paper.pdf"),
+        "artifacts": {"json": str(json_path), "html": str(html_path), "folder": str(tmp_path)},
+    }
+
+    context = paper_audit.desktop_gui_followup_context(run)
+
+    assert context["artifact_type"] == "complete"
+    assert context["paper_identity"]["title"] == "Paper title"
+    assert context["artifact_paths"]["html"] == str(html_path)
+    assert context["followups_dir"] == str(tmp_path / "followups")
+    assert context["top_issues"][0]["item"] == "Figure 1"
+
+
+def test_desktop_gui_generate_followup_draft_reuses_formal_followup_writer(monkeypatch, tmp_path):
+    captured = {}
+    json_path = tmp_path / "audit_report.audit.json"
+    json_path.write_text(
+        json.dumps({
+            "report_type": "complete",
+            "llm_report": {
+                "summary": "ok",
+                "risk_level": "中",
+                "checks": [{"category": "数据", "item": "Table 1", "verdict": "🚩红旗", "reason": "异常"}],
+            },
+            "meta": {"paper_identity": {"title": "Confirmed title"}},
+            "stat_result": {},
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    def fake_generate(kind, context, language="zh", tone=None, timeout=None):
+        captured["kind"] = kind
+        captured["context"] = context
+        captured["language"] = language
+        captured["tone"] = tone
+        return "这是 PubPeer 草稿。"
+
+    monkeypatch.setattr(paper_audit, "generate_followup_draft", fake_generate)
+
+    result = paper_audit.desktop_gui_generate_followup_draft(
+        "pubpeer_comment",
+        {"status": "succeeded", "input_path": str(tmp_path / "paper.pdf"), "artifacts": {"json": str(json_path)}},
+    )
+
+    assert result["ok"] is True
+    assert result["text"] == "这是 PubPeer 草稿。"
+    assert captured["kind"] == "pubpeer_comment"
+    assert captured["language"] == "zh"
+    assert captured["context"]["paper_identity"]["title"] == "Confirmed title"
+    assert Path(result["paths"]["draft_path"]).name == "pubpeer_comment.zh.md"
+
+
+def test_desktop_gui_followup_context_blocks_failed_json_artifact(tmp_path):
+    json_path = tmp_path / "audit_report.failed.json"
+    json_path.write_text(json.dumps({"report_type": "failed", "failure": {"message": "缺少配置"}}, ensure_ascii=False), encoding="utf-8")
+
+    try:
+        paper_audit.desktop_gui_followup_context({"status": "failed", "artifacts": {"json": str(json_path)}})
+    except ValueError as exc:
+        assert "failed_report_followup_blocked" in str(exc)
+    else:
+        raise AssertionError("failed GUI reports must not generate follow-up drafts")
+
+
+def test_desktop_gui_render_run_enables_followup_buttons_for_success_json():
+    class FakeVar:
+        def __init__(self):
+            self.value = None
+
+        def set(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class FakeButton:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            self.state = kwargs.get("state", self.state)
+
+    class FakeTk:
+        NORMAL = "normal"
+        DISABLED = "disabled"
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.tk = FakeTk()
+    app.status_var = FakeVar()
+    app.report_type_var = FakeVar()
+    app.risk_var = FakeVar()
+    app.summary_var = FakeVar()
+    app.stage_var = FakeVar()
+    app.progress_var = FakeVar()
+    app.artifact_buttons = {"json": FakeButton()}
+    app.followup_buttons = {"pubpeer_comment": FakeButton(), "journal_letter": FakeButton()}
+
+    app.render_run({"status": "succeeded", "artifacts": {"json": "/tmp/report.audit.json"}, "summary": {"report_type": "complete"}})
+
+    assert app.followup_buttons["pubpeer_comment"].state == FakeTk.NORMAL
+    assert app.followup_buttons["journal_letter"].state == FakeTk.NORMAL
+
+    app.render_run({"status": "failed", "artifacts": {"json": "/tmp/report.failed.json"}, "summary": {"report_type": "failed"}})
+
+    assert app.followup_buttons["pubpeer_comment"].state == FakeTk.DISABLED
+    assert app.followup_buttons["journal_letter"].state == FakeTk.DISABLED
+
+
+def test_desktop_gui_auto_previews_successful_html_report_once(tmp_path):
+    report_path = tmp_path / "report.audit.html"
+    report_path.write_text("<h1>完整报告</h1>", encoding="utf-8")
+
+    class FakeVar:
+        def get(self):
+            return True
+
+        def set(self, value):
+            self.value = value
+
+    class FakeText:
+        def __init__(self):
+            self.inserted = []
+
+        def configure(self, **kwargs):
+            pass
+
+        def delete(self, *args):
+            pass
+
+        def insert(self, *args):
+            self.inserted.append(args)
+
+        def see(self, *args):
+            pass
+
+    class FakeTk:
+        END = "end"
+        NORMAL = "normal"
+        DISABLED = "disabled"
+
+    class FakeMessageBox:
+        def showerror(self, *args, **kwargs):
+            raise AssertionError("auto-preview success should not show an error")
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.tk = FakeTk()
+    app.log_text = FakeText()
+    app.log_title_var = FakeVar()
+    app.auto_open_var = FakeVar()
+    app.auto_opened_run_ids = set()
+    app.messagebox = FakeMessageBox()
+    run = {"id": "run-1", "status": "succeeded", "artifacts": {"html": str(report_path)}}
+
+    app._maybe_auto_open_completed_report(run)
+    app._maybe_auto_open_completed_report(run)
+
+    assert app.log_title_var.value == "报告预览 · HTML"
+    assert app.log_text.inserted == [(FakeTk.END, "完整报告")]
+
+
+def test_desktop_gui_auto_open_can_be_disabled():
+    opened = []
+
+    class FakeVar:
+        def get(self):
+            return False
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.auto_open_var = FakeVar()
+    app.auto_opened_run_ids = set()
+    app.opener = opened.append
+    app.messagebox = None
+
+    app._maybe_auto_open_completed_report({"id": "run-1", "status": "succeeded", "artifacts": {"html": "/tmp/report.audit.html"}})
+
+    assert opened == []
+
+
+def test_desktop_gui_does_not_auto_open_failed_report():
+    opened = []
+
+    class FakeVar:
+        def get(self):
+            return True
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.auto_open_var = FakeVar()
+    app.auto_opened_run_ids = set()
+    app.opener = opened.append
+    app.messagebox = None
+
+    app._maybe_auto_open_completed_report({"id": "run-1", "status": "failed", "artifacts": {"html": "/tmp/report.failed.html"}})
+
+    assert opened == []
+
+
+def test_desktop_gui_poll_success_discovers_artifacts_and_auto_opens_html(tmp_path):
+    class FakeState:
+        def __init__(self):
+            self.discover_calls = []
+            self.report_path = None
+            self.run = {
+                "id": "run-1",
+                "status": "succeeded",
+                "input_path": "/tmp/paper.pdf",
+                "artifacts": {},
+                "summary": {},
+            }
+
+        def logs_since(self, run_id, offset):
+            return {"offset": 0, "lines": []}
+
+        def get_run(self, run_id):
+            return dict(self.run)
+
+        def discover_artifacts(self, run_id):
+            self.discover_calls.append(run_id)
+            self.run = {
+                **self.run,
+                "artifacts": {"html": self.report_path, "folder": "/tmp"},
+                "summary": {"report_type": "complete", "risk_level": "低", "summary": "ok"},
+            }
+            return dict(self.run)
+
+    class FakeVar:
+        def __init__(self, value=None):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    class FakeButton:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            self.state = kwargs.get("state", self.state)
+
+    class FakeText:
+        def __init__(self):
+            self.lines = []
+            self.seen = []
+            self.deleted = []
+            self.states = []
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.states.append(kwargs["state"])
+
+        def delete(self, *args, **kwargs):
+            self.deleted.append(args)
+
+        def insert(self, *args, **kwargs):
+            self.lines.append(args)
+
+        def see(self, *args, **kwargs):
+            self.seen.append(args)
+
+    class FakeTk:
+        END = "end"
+        NORMAL = "normal"
+        DISABLED = "disabled"
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    report_path = tmp_path / "report.audit.html"
+    report_path.write_text("<h1>完整报告</h1>", encoding="utf-8")
+    app.active_run_id = "run-1"
+    app.log_offset = 0
+    app.state = FakeState()
+    app.state.report_path = str(report_path)
+    app.tk = FakeTk()
+    app.log_text = FakeText()
+    app.log_title_var = FakeVar()
+    app.status_var = FakeVar()
+    app.report_type_var = FakeVar()
+    app.risk_var = FakeVar()
+    app.summary_var = FakeVar()
+    app.auto_open_var = FakeVar(True)
+    app.auto_opened_run_ids = set()
+    app.artifact_paths = {}
+    app.artifact_buttons = {"html": FakeButton(), "markdown": FakeButton(), "json": FakeButton(), "folder": FakeButton()}
+    app.start_button = FakeButton()
+    app.cancel_button = FakeButton()
+    app.retry_button = FakeButton()
+    app.messagebox = None
+
+    app.poll_run()
+
+    assert app.state.discover_calls == ["run-1"]
+    assert app.log_title_var.value == "报告预览 · HTML"
+    assert (FakeTk.END, "完整报告") in app.log_text.lines
+    assert app.active_run_id is None
+    assert app.status_var.value == "已完成"
+    assert app.report_type_var.value == "完整报告"
+    assert app.risk_var.value == "低"
+    assert app.summary_var.value == "ok"
+    assert app.artifact_buttons["html"].state == FakeTk.NORMAL
+    assert app.artifact_buttons["folder"].state == FakeTk.NORMAL
+
+
+def test_desktop_gui_poll_drains_terminal_logs_before_stopping():
+    class FakeState:
+        def __init__(self):
+            self.calls = 0
+
+        def logs_since(self, run_id, offset):
+            self.calls += 1
+            if self.calls == 1:
+                return {"offset": 1, "lines": ["first"]}
+            return {"offset": 3, "lines": ["second", "third"]}
+
+        def get_run(self, run_id):
+            return {"id": run_id, "status": "failed", "input_path": "/tmp/paper.pdf", "artifacts": {}, "summary": {}}
+
+        def discover_artifacts(self, run_id):
+            return {"id": run_id, "status": "failed", "input_path": "/tmp/paper.pdf", "artifacts": {}, "summary": {}}
+
+    class FakeVar:
+        def __init__(self, value=None):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    class FakeButton:
+        def configure(self, **kwargs):
+            pass
+
+    class FakeText:
+        def __init__(self):
+            self.contents = []
+
+        def insert(self, *args):
+            self.contents.append(args[1])
+
+        def see(self, *args):
+            pass
+
+    class FakeTk:
+        END = "end"
+        NORMAL = "normal"
+        DISABLED = "disabled"
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.active_run_id = "run-1"
+    app.log_offset = 0
+    app.state = FakeState()
+    app.tk = FakeTk()
+    app.log_text = FakeText()
+    app.status_var = FakeVar()
+    app.report_type_var = FakeVar()
+    app.risk_var = FakeVar()
+    app.summary_var = FakeVar()
+    app.auto_open_var = FakeVar(True)
+    app.auto_opened_run_ids = set()
+    app.artifact_paths = {}
+    app.artifact_buttons = {"html": FakeButton(), "markdown": FakeButton(), "json": FakeButton(), "folder": FakeButton()}
+    app.start_button = FakeButton()
+    app.cancel_button = FakeButton()
+    app.retry_button = FakeButton()
+    app.opener = lambda path: None
+    app.messagebox = None
+
+    app.poll_run()
+
+    assert app.log_text.contents == ["first\n", "second\n", "third\n"]
+    assert app.log_offset == 3
+    assert app.active_run_id is None
+
+
+def test_desktop_gui_refresh_runs_shows_latest_completed_run_logs():
+    class FakeState:
+        def list_runs(self):
+            return [{"id": "run-1", "status": "failed", "input_path": "/tmp/paper.pdf", "artifacts": {}, "summary": {}}]
+
+        def logs_since(self, run_id, offset):
+            return {"offset": 2, "lines": ["line one", "line two"]}
+
+    class FakeVar:
+        def __init__(self):
+            self.value = None
+
+        def set(self, value):
+            self.value = value
+
+    class FakeButton:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            self.state = kwargs.get("state", self.state)
+
+    class FakeText:
+        def __init__(self):
+            self.contents = []
+            self.deleted = False
+
+        def delete(self, *args):
+            self.deleted = True
+
+        def insert(self, *args):
+            self.contents.append(args[1])
+
+        def see(self, *args):
+            pass
+
+    class FakeTk:
+        END = "end"
+        NORMAL = "normal"
+        DISABLED = "disabled"
+
+    app = paper_audit.DesktopGuiApp.__new__(paper_audit.DesktopGuiApp)
+    app.active_run_id = None
+    app.log_offset = 99
+    app.state = FakeState()
+    app.tk = FakeTk()
+    app.log_text = FakeText()
+    app.status_var = FakeVar()
+    app.report_type_var = FakeVar()
+    app.risk_var = FakeVar()
+    app.summary_var = FakeVar()
+    app.artifact_buttons = {"html": FakeButton(), "markdown": FakeButton(), "json": FakeButton(), "folder": FakeButton()}
+    app.retry_button = FakeButton()
+
+    app.refresh_runs()
+
+    assert app.log_text.deleted is True
+    assert app.log_text.contents == ["line one\n", "line two\n"]
+    assert app.log_offset == 2
+    assert app.status_var.value == "需处理"
+    assert app.retry_button.state == FakeTk.NORMAL
 
 
 def test_report_action_context_cleans_reference_issue_text():
