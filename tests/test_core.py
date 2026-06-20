@@ -427,6 +427,27 @@ def test_production_adapters_default_preflight_uses_package_boundary():
     assert text_llm.preflight_func is veritas.preflight.preflight_text_llm
 
 
+def test_default_production_adapters_do_not_import_legacy_until_provider_call():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from veritas.production_adapters import default_audit_adapters; "
+                "default_audit_adapters(); "
+                "print('veritas.legacy' in sys.modules)"
+            ),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.stdout.strip() == "False"
+
+
 def _complete_fake_adapters(**overrides):
     values = {
         "text_llm": json.dumps({

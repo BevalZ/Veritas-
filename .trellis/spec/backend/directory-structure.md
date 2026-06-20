@@ -55,6 +55,9 @@ tests/
 - Thin boundary modules that still delegate to `veritas.legacy` should import
   legacy inside the delegating function, not at module import time, unless a
   tested compatibility contract requires object identity.
+- Production adapters for provider functions that have not moved out of legacy
+  should use call-time legacy proxies so constructing `default_audit_adapters()`
+  does not import `veritas.legacy`.
 - Renderer-facing code should accept stable dataclass models or dictionaries and
   normalize at the renderer boundary.
 - Avoid adding new orchestration logic directly to `paper_audit.py`.
@@ -106,6 +109,9 @@ tests/
 - `veritas/config.py` owns runtime configuration loading/application helpers.
   Namespace-aware helpers let `veritas.legacy` preserve historical global
   monkeypatch behavior without making `veritas.config` import legacy.
+- `veritas/production_adapters.py` may still call legacy provider functions
+  that have not been extracted, but those calls should resolve legacy only when
+  the provider method is invoked.
 - `veritas/risk_rule_helpers.py` owns extraction-limited classification,
   OCR/table red-flag downgrade, check similarity/merge, and merged
   summary/conclusion helpers shared by risk scoring and renderers. Runtime-year

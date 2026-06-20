@@ -16,9 +16,13 @@ from .preflight import preflight_mineru, preflight_text_llm
 
 
 def _legacy_func(name: str) -> Callable:
-    from . import legacy
+    def call(*args, **kwargs):
+        from . import legacy
 
-    return getattr(legacy, name)
+        return getattr(legacy, name)(*args, **kwargs)
+
+    call.__name__ = name
+    return call
 
 
 def _adapter_result_from_preflight(result) -> AdapterResult:
