@@ -40,6 +40,7 @@ from .fake_adapters import (
     fake_audit_adapters,
 )
 from .file_utils import _json_load, _json_save, _load_merged_json_dicts, _safe_name
+from .html_utils import _html_escape, _json_for_script_tag
 from .runtime_config import (
     CapabilityConfig,
     RuntimeConfig,
@@ -9592,29 +9593,6 @@ def format_html_report(report, pdf_path, meta, stat_result):
 </html>"""
     return html
 
-
-def _html_escape(text):
-    """HTML特殊字符转义"""
-    if not text:
-        return ""
-    return (str(text)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("\n", "<br>"))
-
-
-def _json_for_script_tag(value):
-    """JSON that remains parseable inside a <script type="application/json"> block."""
-    return (
-        json.dumps(value, ensure_ascii=False)
-        .replace("&", "\\u0026")
-        .replace("<", "\\u003c")
-        .replace(">", "\\u003e")
-        .replace("\u2028", "\\u2028")
-        .replace("\u2029", "\\u2029")
-    )
 
 def update_patterns(comments_file):
     """从PubPeer评论文本中用LLM提取新的欺诈模式，更新知识库

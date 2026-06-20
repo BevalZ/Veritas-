@@ -669,6 +669,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.file_utils._json_save is paper_audit._json_save
     assert veritas.file_utils._json_load is paper_audit._json_load
     assert veritas.file_utils._load_merged_json_dicts is paper_audit._load_merged_json_dicts
+    assert veritas.html_utils._html_escape is paper_audit._html_escape
+    assert veritas.html_utils._json_for_script_tag is paper_audit._json_for_script_tag
     assert veritas.workspace.create_run_workspace is paper_audit.create_run_workspace
     assert veritas.workspace.run_workspace_path is paper_audit.run_workspace_path
     assert veritas.workspace.record_run_workspace_json is paper_audit.record_run_workspace_json

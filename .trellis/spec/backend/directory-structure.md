@@ -24,6 +24,7 @@ veritas/
 ├── cli.py              # CLI entry point boundary
 ├── config.py           # Runtime configuration boundary
 ├── failed_diagnostics.py # Stable failed-audit payload and conversion helpers
+├── html_utils.py       # HTML escaping and script-safe JSON helpers
 ├── models.py           # Stable dataclass/report models and model conversion
 ├── preflight.py        # Critical capability preflight boundary
 ├── renderers.py        # Markdown/HTML renderer boundary
@@ -88,6 +89,9 @@ tests/
 - `veritas/failed_diagnostics.py` owns stable failed-audit JSON payload and
   failure-to-`AuditFailure` conversion helpers; Markdown/HTML formatting can
   remain in `veritas.legacy` until renderer dependencies are untangled.
+- `veritas/html_utils.py` owns HTML escaping and script-safe JSON helpers used
+  by renderers; these remain re-exported through `paper_audit` for
+  compatibility while renderer extraction continues.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring
