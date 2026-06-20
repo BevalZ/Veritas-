@@ -29,6 +29,7 @@ veritas/
 ├── followups.py       # PubPeer/comment and journal-letter draft workflow helpers
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
 ├── local_analysis.py   # Local statistics and text chunking helpers
+├── mineru_text.py      # MinerU structured content-list text formatting helpers
 ├── models.py           # Stable dataclass/report models and model conversion
 ├── paper_identity.py   # Best-effort article identity extraction helpers
 ├── preflight.py        # Critical capability preflight boundary
@@ -119,6 +120,10 @@ tests/
   Benford/numeric extraction, local statistical checks, and structure-aware text
   chunking. These helpers must remain deterministic and must not call LLMs or
   network providers.
+- `veritas/mineru_text.py` owns deterministic formatting of MinerU
+  `content_list` JSON into audit-oriented text blocks, including nested content
+  flattening and table markdown normalization. MinerU API upload, polling, and
+  ZIP download logic remain outside this boundary.
 - `veritas/project_files.py` owns supported text-file extension constants,
   project directory file discovery/classification, main-paper scoring, missing
   metadata detection, and run metadata normalization. Keep this boundary

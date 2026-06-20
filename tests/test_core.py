@@ -782,6 +782,9 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.evidence_rendering._parse_html_table_rows is paper_audit._parse_html_table_rows
     assert veritas.evidence_rendering.render_evidence_html is paper_audit.render_evidence_html
     assert veritas.evidence_rendering.render_evidence_summary_html is paper_audit.render_evidence_summary_html
+    assert veritas.mineru_text._extract_mineru_structured_text is paper_audit._extract_mineru_structured_text
+    assert veritas.mineru_text._format_mineru_content_list is paper_audit._format_mineru_content_list
+    assert veritas.mineru_text._normalize_mineru_table_text is paper_audit._normalize_mineru_table_text
     assert veritas.paper_identity.extract_paper_identity is paper_audit.extract_paper_identity
     assert veritas.text_utils._brief_text is paper_audit._brief_text
     assert veritas.text_utils._normalize_title is paper_audit._normalize_title
