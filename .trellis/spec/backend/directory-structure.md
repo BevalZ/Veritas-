@@ -27,6 +27,7 @@ veritas/
 ├── failed_diagnostics.py # Stable failed-audit payload and conversion helpers
 ├── followups.py       # PubPeer/comment and journal-letter draft workflow helpers
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
+├── local_analysis.py   # Local statistics and text chunking helpers
 ├── models.py           # Stable dataclass/report models and model conversion
 ├── preflight.py        # Critical capability preflight boundary
 ├── renderers.py        # Markdown/HTML renderer boundary
@@ -106,6 +107,10 @@ tests/
   compatibility while renderer extraction continues.
 - `veritas/text_utils.py` owns shared text shortening and token similarity
   helpers used by follow-up generation, risk rules, references, and renderers.
+- `veritas/local_analysis.py` owns local non-provider analysis helpers:
+  Benford/numeric extraction, local statistical checks, and structure-aware text
+  chunking. These helpers must remain deterministic and must not call LLMs or
+  network providers.
 - `veritas/followups.py` owns PubPeer/comment and journal-letter language,
   tone, article-identity, issue-normalization, context-building, prompt
   construction, draft artifact load/save, and namespace-aware generation

@@ -781,6 +781,10 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.text_utils._normalize_title is paper_audit._normalize_title
     assert veritas.text_utils._title_tokens is paper_audit._title_tokens
     assert veritas.text_utils._token_similarity is paper_audit._token_similarity
+    assert veritas.local_analysis.benford_analysis is paper_audit.benford_analysis
+    assert veritas.local_analysis.extract_all_numbers is paper_audit.extract_all_numbers
+    assert veritas.local_analysis.local_stat_check is paper_audit.local_stat_check
+    assert veritas.local_analysis.smart_chunk_text is paper_audit.smart_chunk_text
     assert veritas.followups.normalize_followup_language is paper_audit.normalize_followup_language
     assert veritas.followups.normalize_followup_tone is paper_audit.normalize_followup_tone
     assert veritas.followups.normalize_article_identity is paper_audit.normalize_article_identity
