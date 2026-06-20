@@ -28,6 +28,7 @@ veritas/
 ├── risk_rules.py       # Versioned final risk scoring boundary
 ├── run.py              # Run request/result and orchestration boundary
 └── workspace.py        # Per-run workspace boundary
+└── file_utils.py       # Shared safe-name and JSON file helpers
 tests/
 └── test_core.py        # Core unit and smoke coverage
 ```
@@ -63,6 +64,9 @@ tests/
 - `veritas/models.py` owns `AuditFailure`, `AuditReportModel`,
   `EvidenceFinding`, and related lightweight dataclasses; `paper_audit` keeps
   compatibility by re-exporting the same class objects through `veritas.legacy`.
+- `veritas/file_utils.py` owns `_safe_name`, `_json_load`, `_json_save`, and
+  `_load_merged_json_dicts`; these remain re-exported through `paper_audit` for
+  compatibility with existing tests and local scripts.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring

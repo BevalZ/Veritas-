@@ -19,6 +19,8 @@ shared resume caches, evaluation fixtures, and JSON/Markdown review artifacts.
 - Treat `eval/replay/**` records as fixtures, not mutable runtime state.
 - For repeated filesystem lookups, prefer `pathlib.Path` and explicit glob
   patterns over shelling out from Python code.
+- Shared safe-name and JSON read/write helpers live in `veritas/file_utils.py`
+  and remain re-exported through `paper_audit` for compatibility.
 
 ---
 
