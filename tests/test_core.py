@@ -849,6 +849,15 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.adapters.default_audit_adapters is paper_audit.default_audit_adapters
     assert veritas.web_runner_paths.resolve_web_runner_input_path is paper_audit.resolve_web_runner_input_path
     assert veritas.web_runner_paths._web_runner_common_search_roots is paper_audit._web_runner_common_search_roots
+    assert veritas.web_runner._web_runner_now is paper_audit._web_runner_now
+    assert veritas.web_runner._web_runner_history_path is paper_audit._web_runner_history_path
+    assert veritas.web_runner._web_runner_output_base is paper_audit._web_runner_output_base
+    assert veritas.web_runner._web_runner_safe_run is paper_audit._web_runner_safe_run
+    assert veritas.web_runner._web_runner_report_summary_from_payload is paper_audit._web_runner_report_summary_from_payload
+    assert veritas.web_runner.pick_local_path is paper_audit.pick_local_path
+    assert veritas.web_runner.dropped_local_path_from_uri_text is paper_audit.dropped_local_path_from_uri_text
+    assert callable(veritas.web_runner.web_runner_default_output_stem_from_namespace)
+    assert callable(veritas.web_runner.web_runner_config_status_from_namespace)
 
 
 def test_importing_veritas_package_does_not_import_legacy_boundary():
@@ -3842,6 +3851,18 @@ def test_web_runner_default_output_stem_uses_input_parent_and_timestamp(tmp_path
     output = paper_audit.web_runner_default_output_stem(input_path, timestamp="20260605-153000")
 
     assert output == str(tmp_path / "Project Alpha" / "paper.v1_20260605-153000" / "audit_report")
+
+
+def test_web_runner_default_output_stem_namespace_preserves_timestamp_override(tmp_path):
+    input_path = tmp_path / "Project Alpha"
+    input_path.mkdir()
+
+    output = veritas.web_runner.web_runner_default_output_stem_from_namespace(
+        {"_web_runner_timestamp": lambda: "20260605-153000"},
+        input_path,
+    )
+
+    assert output == str(tmp_path / "Project Alpha_20260605-153000" / "audit_report")
 
 
 def test_pick_local_path_uses_dialog_runner_without_browsing_http(tmp_path):
