@@ -1,6 +1,6 @@
 """Public package boundary for Veritas paper audit."""
 
-from . import adapter_types, adapters, artifacts, cli, config, desktop_gui, evaluation, evidence_rendering, failed_diagnostics, fake_adapters, file_utils, followups, html_utils, local_analysis, models, preflight, preflight_types, production_adapters, project_files, renderers, report_schema, retry_commands, risk_rule_helpers, risk_rules, run, run_types, runtime_config, runtime_metadata, text_utils, versions, web_runner, web_runner_paths, workspace
+from . import adapter_types, adapters, artifacts, cli, config, desktop_gui, evaluation, evidence_rendering, failed_diagnostics, fake_adapters, file_utils, followups, html_utils, local_analysis, models, paper_identity, preflight, preflight_types, production_adapters, project_files, renderers, report_schema, retry_commands, risk_rule_helpers, risk_rules, run, run_types, runtime_config, runtime_metadata, text_utils, versions, web_runner, web_runner_paths, workspace
 
 __all__ = [
     "adapter_types",
@@ -18,6 +18,7 @@ __all__ = [
     "html_utils",
     "local_analysis",
     "models",
+    "paper_identity",
     "preflight",
     "preflight_types",
     "production_adapters",

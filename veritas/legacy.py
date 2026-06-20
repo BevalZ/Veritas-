@@ -118,6 +118,7 @@ from .models import (
     ReferenceAuditModel,
     RunMetadataModel,
 )
+from .paper_identity import extract_paper_identity
 from .preflight import _chat_completions_endpoint, preflight_mineru_from_namespace, preflight_text_llm_from_namespace
 from .preflight_types import PreflightResult, run_preflight_once
 from .project_files import (
@@ -1187,81 +1188,6 @@ def mineru_extract(file_path, language="ch", output_dir=None):
     else:
         # 当作URL处理
         return mineru_precision_extract_by_url(str(file_path), language=language, output_dir=output_dir)
-
-
-def extract_paper_identity(full_text: str, input_path: Path = None) -> Dict[str, Any]:
-    """Best-effort paper identity extraction for follow-up drafts."""
-    raw_text = _clean_mineru_table_block(full_text or "")
-    lines = []
-    for line in raw_text.splitlines():
-        cleaned = re.sub(r"\s+", " ", str(line or "")).strip()
-        if cleaned:
-            lines.append(cleaned)
-    top_lines = lines[:40]
-
-    def score_title(line: str) -> float:
-        lowered = line.lower()
-        if len(line) < 12 or len(line) > 220:
-            return -100.0
-        if any(term in lowered for term in ("abstract", "keyword", "keywords", "introduction", "references", "reference")):
-            return -100.0
-        score = 0.0
-        score += min(len(line) / 24.0, 8.0)
-        if re.search(r"[A-Za-z]", line):
-            score += 2.0
-        if re.search(r"[.!?]$", line):
-            score -= 1.5
-        if "@" in line or re.search(r"\b(?:department|university|institute|hospital)\b", lowered):
-            score -= 2.0
-        if re.search(r"\b(?:doi|vol\.?|volume|issue|pages?|pp\.?|journal|nature|science|cell|bmc|plos|springer|elsevier|wiley|frontiers)\b", lowered):
-            score -= 1.0
-        if re.search(r"\b[A-Z]\.\s*[A-Z]\.", line):
-            score -= 2.5
-        if line.count(",") >= 3:
-            score -= 1.5
-        return score
-
-    def looks_like_author_line(line: str) -> bool:
-        lowered = line.lower()
-        if len(line) > 180:
-            return False
-        if any(term in lowered for term in ("abstract", "keyword", "keywords", "introduction", "references")):
-            return False
-        return bool(
-            re.search(r"\b[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+)+\b", line)
-            or re.search(r"\bet al\.?\b", lowered)
-            or line.count(",") >= 2
-            or " and " in lowered
-        )
-
-    def looks_like_journal(line: str) -> bool:
-        lowered = line.lower()
-        return bool(re.search(r"\b(?:journal|nature|science|cell|lancet|bmc|plos|springer|elsevier|wiley|frontiers|ieee|acm|proceedings)\b", lowered))
-
-    title = max(top_lines, key=score_title, default="")
-    if title and score_title(title) < 0:
-        title = ""
-    authors = []
-    journal = ""
-    for idx, line in enumerate(top_lines):
-        if not journal and looks_like_journal(line):
-            journal = line
-        if not authors and looks_like_author_line(line) and line != title:
-            authors = [part.strip() for part in re.split(r",|;| and ", line) if part.strip()]
-        if title and authors and journal:
-            break
-    if not title and input_path is not None:
-        try:
-            title = Path(input_path).stem.replace("_", " ").replace("-", " ").strip()
-        except Exception:
-            title = ""
-    if authors:
-        authors = authors[:6]
-    return {
-        "title": title,
-        "journal": journal,
-        "authors": authors,
-    }
 
 
 def extract_text_from_file(file_path: Path, max_chars_per_file=None, use_mineru=False, mineru_lang="ch", output_dir=None) -> str:

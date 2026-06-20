@@ -30,6 +30,7 @@ veritas/
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
 ├── local_analysis.py   # Local statistics and text chunking helpers
 ├── models.py           # Stable dataclass/report models and model conversion
+├── paper_identity.py   # Best-effort article identity extraction helpers
 ├── preflight.py        # Critical capability preflight boundary
 ├── project_files.py    # Project file discovery and run metadata helpers
 ├── renderers.py        # Markdown/HTML renderer boundary
@@ -122,6 +123,9 @@ tests/
   project directory file discovery/classification, main-paper scoring, missing
   metadata detection, and run metadata normalization. Keep this boundary
   deterministic and filesystem-local; provider extraction remains elsewhere.
+- `veritas/paper_identity.py` owns best-effort article title, journal, and
+  author extraction for follow-up draft context. It should stay deterministic
+  and may reuse evidence cleanup helpers, but must not call providers.
 - `veritas/followups.py` owns PubPeer/comment and journal-letter language,
   tone, article-identity, issue-normalization, context-building, prompt
   construction, draft artifact load/save, and namespace-aware generation
