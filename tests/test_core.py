@@ -653,7 +653,9 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.runtime_config.RuntimeConfig is paper_audit.RuntimeConfig
     assert veritas.config.RuntimeConfig is paper_audit.RuntimeConfig
     assert veritas.config.CapabilityConfig is paper_audit.CapabilityConfig
+    assert veritas.preflight_types.PreflightResult is paper_audit.PreflightResult
     assert veritas.preflight.PreflightResult is paper_audit.PreflightResult
+    assert veritas.preflight.run_preflight_once is paper_audit.run_preflight_once
     assert veritas.run_types.RunRequest is paper_audit.RunRequest
     assert veritas.run_types.RunResult is paper_audit.RunResult
     assert veritas.run.RunRequest is paper_audit.RunRequest

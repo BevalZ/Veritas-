@@ -18,6 +18,7 @@ from .runtime_config import (
     default_runtime_config as _build_default_runtime_config,
     load_runtime_config as _build_runtime_config,
 )
+from .preflight_types import PreflightResult, run_preflight_once
 from .run_types import RunRequest, RunResult
 
 # Windows/重定向控制台默认GBK时，emoji/中文符号可能触发UnicodeEncodeError；统一兜底为UTF-8。
@@ -705,34 +706,6 @@ def apply_audit_artifact_type(meta: Dict[str, Any], limited_reasons: List[str]) 
         meta["artifact_suffix"] = "audit"
         meta.pop("limited_reasons", None)
     return meta
-
-
-@dataclass
-class PreflightResult:
-    """One critical capability preflight result for the current run only."""
-    capability: str
-    ok: bool
-    error_class: str = ""
-    message: str = ""
-    details: Dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "capability": self.capability,
-            "ok": self.ok,
-            "error_class": self.error_class,
-            "message": self.message,
-            "details": dict(self.details),
-            "created_at": self.created_at,
-        }
-
-
-def run_preflight_once(preflight_state: Dict[str, PreflightResult], capability: str, runner) -> PreflightResult:
-    """Run and cache a preflight only in the caller's in-memory run state."""
-    if capability not in preflight_state:
-        preflight_state[capability] = runner()
-    return preflight_state[capability]
 
 
 def preflight_mineru(timeout=10) -> PreflightResult:
