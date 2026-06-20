@@ -24,6 +24,7 @@ veritas/
 ├── cli.py              # CLI entry point boundary
 ├── config.py           # Runtime configuration boundary
 ├── desktop_gui.py      # Desktop GUI helper boundary
+├── evidence_rendering.py # Evidence excerpt/table rendering helpers
 ├── failed_diagnostics.py # Stable failed-audit payload and conversion helpers
 ├── followups.py       # PubPeer/comment and journal-letter draft workflow helpers
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
@@ -106,6 +107,11 @@ tests/
 - `veritas/html_utils.py` owns HTML escaping and script-safe JSON helpers used
   by renderers; these remain re-exported through `paper_audit` for
   compatibility while renderer extraction continues.
+- `veritas/evidence_rendering.py` owns deterministic evidence excerpt cleanup,
+  MinerU table marker removal, Markdown/HTML table parsing, data-table HTML
+  rendering, and compact evidence summary HTML. It must remain provider-free
+  because MinerU extraction, reference/resource sections, and report rendering
+  all reuse it.
 - `veritas/text_utils.py` owns shared text shortening and token similarity
   helpers used by follow-up generation, risk rules, references, and renderers.
 - `veritas/local_analysis.py` owns local non-provider analysis helpers:

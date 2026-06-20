@@ -777,6 +777,11 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.file_utils._load_merged_json_dicts is paper_audit._load_merged_json_dicts
     assert veritas.html_utils._html_escape is paper_audit._html_escape
     assert veritas.html_utils._json_for_script_tag is paper_audit._json_for_script_tag
+    assert veritas.evidence_rendering._clean_mineru_table_block is paper_audit._clean_mineru_table_block
+    assert veritas.evidence_rendering._escaped_html_table_fragment_to_html is paper_audit._escaped_html_table_fragment_to_html
+    assert veritas.evidence_rendering._parse_html_table_rows is paper_audit._parse_html_table_rows
+    assert veritas.evidence_rendering.render_evidence_html is paper_audit.render_evidence_html
+    assert veritas.evidence_rendering.render_evidence_summary_html is paper_audit.render_evidence_summary_html
     assert veritas.text_utils._brief_text is paper_audit._brief_text
     assert veritas.text_utils._normalize_title is paper_audit._normalize_title
     assert veritas.text_utils._title_tokens is paper_audit._title_tokens
