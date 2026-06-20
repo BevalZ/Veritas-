@@ -20,6 +20,7 @@ paper_audit.py          # Thin compatibility entry point for CLI/import users
 veritas/
 ├── legacy.py           # Current implementation during incremental migration
 ├── adapters.py         # External provider adapter exports
+├── artifacts.py        # Formal artifact path and outcome helpers
 ├── cli.py              # CLI entry point boundary
 ├── config.py           # Runtime configuration boundary
 ├── models.py           # Stable dataclass/report models and model conversion
@@ -79,6 +80,9 @@ tests/
 - `veritas/runtime_metadata.py` owns runtime clock metadata helpers used by
   reports and deterministic date checks; `paper_audit` keeps compatibility by
   re-exporting the same function objects through `veritas.legacy`.
+- `veritas/artifacts.py` owns formal audit artifact path, limited-outcome, and
+  coverage-blocking helpers; `paper_audit` keeps compatibility by re-exporting
+  the same function objects through `veritas.legacy`.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
   converts them before delegating to the existing Markdown and HTML renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring

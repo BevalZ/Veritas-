@@ -143,7 +143,9 @@ if not result.ok:
 - `audit_artifact_paths(input_path, artifact_type="complete", output_path=None) -> (Path, Path, Path)`
 - `audit_limited_reasons(args, meta, has_pdf_input=False) -> list[str]`
 - `apply_audit_artifact_type(meta, limited_reasons) -> dict`
-- `failed_audit_artifact_paths(input_path, output_dir=None, output_stem=None) -> (Path, Path)`
+- `failed_audit_artifact_paths(input_path, output_dir=None, output_stem=None) -> (Path, Path, Path)`
+- Formal artifact path and outcome helpers live in `veritas/artifacts.py` and
+  remain re-exported through `paper_audit` for compatibility.
 
 ### 3. Contracts
 

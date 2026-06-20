@@ -679,6 +679,11 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.runtime_metadata.runtime_utc_year is paper_audit.runtime_utc_year
     assert veritas.runtime_metadata.runtime_metadata is paper_audit.runtime_metadata
     assert veritas.runtime_metadata.ensure_runtime_meta is paper_audit.ensure_runtime_meta
+    assert veritas.artifacts.audit_artifact_paths is paper_audit.audit_artifact_paths
+    assert veritas.artifacts.failed_audit_artifact_paths is paper_audit.failed_audit_artifact_paths
+    assert veritas.artifacts.audit_limited_reasons is paper_audit.audit_limited_reasons
+    assert veritas.artifacts.coverage_blocking_failure is paper_audit.coverage_blocking_failure
+    assert veritas.artifacts.apply_audit_artifact_type is paper_audit.apply_audit_artifact_type
     assert veritas.risk_rules.apply_risk_rules is paper_audit.apply_risk_rules
     assert veritas.adapter_types.AdapterResult is paper_audit.AdapterResult
     assert veritas.adapters.AdapterResult is paper_audit.AdapterResult
