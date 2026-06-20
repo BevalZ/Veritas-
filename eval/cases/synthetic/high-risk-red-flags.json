@@ -1,0 +1,17 @@
+{
+  "case_id": "high-risk-red-flags",
+  "tags": ["synthetic", "default", "no-network", "risk-rules"],
+  "input_text": "Synthetic high-risk case with duplicated image panels and repeated exact p-values across unrelated outcomes.",
+  "expected": {
+    "risk_level": "高",
+    "min_score": 70
+  },
+  "stat_result": {
+    "benford_deviation": null,
+    "benford_status": null,
+    "p_value_count": 0,
+    "p_value_abnormal": 0,
+    "sd_count": 0,
+    "number_count": 0
+  }
+}

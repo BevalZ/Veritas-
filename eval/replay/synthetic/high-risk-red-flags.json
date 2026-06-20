@@ -1,0 +1,39 @@
+{
+  "record_version": "evaluation_record_v1",
+  "case_id": "high-risk-red-flags",
+  "adapter": "synthetic_replay",
+  "model": "fixture",
+  "prompt_version": "text_audit_prompt_v1",
+  "schema_version": "strict_evidence_schema_v1",
+  "risk_rule_version": "risk_rules_v1",
+  "input_hash": "7418ee618eef4b5e24a31f2f7395d108a78a0a5b287886c918be54472367ea55",
+  "recorded_at": "2026-06-21 00:00:00",
+  "response": {
+    "summary": "Synthetic duplicated image and impossible statistics case.",
+    "risk_level": "低",
+    "detection_score": 0,
+    "checks": [
+      {
+        "category": "image integrity",
+        "item": "Figure 2 duplicated panels",
+        "verdict": "红旗",
+        "source_text": "Figure 2 panels A and C contain the same cell morphology after rotation.",
+        "evidence": "Duplicated microscopy panels in Figure 2.",
+        "reason": "The same image content is reused for different conditions.",
+        "recommendation": "Request original image files and full figure assembly history.",
+        "confidence": 0.92
+      },
+      {
+        "category": "statistical consistency",
+        "item": "Repeated exact p-values",
+        "verdict": "红旗",
+        "source_text": "Multiple independent outcomes report p=0.049 with identical SD values.",
+        "evidence": "Repeated boundary p-values across unrelated endpoints.",
+        "reason": "The reported statistics are implausibly patterned.",
+        "recommendation": "Recalculate statistics from raw data.",
+        "confidence": 0.88
+      }
+    ],
+    "conclusion": "Synthetic high-risk replay fixture."
+  }
+}

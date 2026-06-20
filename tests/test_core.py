@@ -723,7 +723,8 @@ def test_evaluation_replay_suite_runs_synthetic_fixture_without_network():
     payload = veritas.evaluation.eval_results_payload(results)
 
     assert payload["passed"] is True
-    assert payload["total"] >= 1
+    assert payload["total"] >= 2
+    assert any(result.case_id == "high-risk-red-flags" and result.risk_level == "高" for result in results)
     assert payload["prompt_version"] == veritas.evaluation.EVAL_PROMPT_VERSION
     assert payload["schema_version"] == veritas.evaluation.EVAL_SCHEMA_VERSION
     assert payload["risk_rule_version"] == paper_audit.RISK_RULE_VERSION
