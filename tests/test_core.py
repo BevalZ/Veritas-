@@ -798,6 +798,22 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.web_runner_paths._web_runner_common_search_roots is paper_audit._web_runner_common_search_roots
 
 
+def test_importing_veritas_package_does_not_import_legacy_boundary():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import veritas; print('veritas.legacy' in sys.modules)",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.stdout.strip() == "False"
+
+
 def test_paper_audit_import_still_allows_legacy_monkeypatches(monkeypatch):
     calls = {"count": 0}
 

@@ -52,6 +52,9 @@ tests/
 - Add new code to the narrow `veritas/*` boundary that owns the concept:
   config, preflight, run, workspace, models, risk_rules, adapters, artifacts,
   failed_diagnostics, or renderers.
+- Thin boundary modules that still delegate to `veritas.legacy` should import
+  legacy inside the delegating function, not at module import time, unless a
+  tested compatibility contract requires object identity.
 - Renderer-facing code should accept stable dataclass models or dictionaries and
   normalize at the renderer boundary.
 - Avoid adding new orchestration logic directly to `paper_audit.py`.
@@ -112,6 +115,8 @@ tests/
   `veritas.legacy` re-exports the same function objects for `paper_audit`
   compatibility.
 - `veritas/renderers.py` accepts `AuditReportModel` / `EvidenceFinding` and
-  converts them before delegating to the existing Markdown and HTML renderers.
+  converts them before lazily delegating to the existing Markdown and HTML
+  renderers.
 - `veritas/run.py` exposes the run orchestration boundary without requiring
-  callers to import the legacy module directly.
+  callers to import the legacy module directly; the legacy run engine is loaded
+  only when `run_audit(...)` is called.
