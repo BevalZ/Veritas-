@@ -130,7 +130,7 @@ from .evidence_rendering import (
 )
 from .runtime_metadata import ensure_runtime_meta, runtime_metadata, runtime_utc_year
 from . import risk_rules as _risk_rules
-from .text_utils import _brief_text, _normalize_title, _title_tokens, _token_similarity
+from .text_utils import _brief_text, _normalize_title, _text_fingerprint, _title_tokens, _token_similarity
 from .models import (
     AuditFailure,
     AuditReportModel,
@@ -355,13 +355,6 @@ def resume_event(resume_dir: Path, step: str, status: str, detail: str = "", **e
 
 def _allow_llm_cache_read(no_resume=False, llm_cache_only=False):
     return (not bool(no_resume)) or bool(llm_cache_only)
-
-
-def _text_fingerprint(text: str, extra: str = ""):
-    h = hashlib.sha256()
-    h.update((text or "").encode("utf-8", errors="ignore"))
-    h.update(str(extra).encode("utf-8", errors="ignore"))
-    return h.hexdigest()[:16]
 
 
 # LLM运行参数：由CLI覆盖。默认保守，避免一次请求无限阻塞。

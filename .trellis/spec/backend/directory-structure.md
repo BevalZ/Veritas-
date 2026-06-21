@@ -137,8 +137,9 @@ tests/
   rendering, and compact evidence summary HTML. It must remain provider-free
   because MinerU extraction, reference/resource sections, and report rendering
   all reuse it.
-- `veritas/text_utils.py` owns shared text shortening and token similarity
-  helpers used by follow-up generation, risk rules, references, and renderers.
+- `veritas/text_utils.py` owns shared text shortening, short text fingerprint,
+  and token similarity helpers used by follow-up generation, risk rules,
+  references, cache keys, evidence IDs, and renderers.
 - `veritas/local_analysis.py` owns local non-provider analysis helpers:
   Benford/numeric extraction, local statistical checks, and structure-aware text
   chunking. These helpers must remain deterministic and must not call LLMs or

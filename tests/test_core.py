@@ -800,6 +800,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.image_selection._image_semantic_priority_key is paper_audit._image_semantic_priority_key
     assert veritas.image_selection._image_detector_priority_key is paper_audit._image_detector_priority_key
     assert veritas.text_utils._brief_text is paper_audit._brief_text
+    assert veritas.text_utils._text_fingerprint is paper_audit._text_fingerprint
     assert veritas.text_utils._normalize_title is paper_audit._normalize_title
     assert veritas.text_utils._title_tokens is paper_audit._title_tokens
     assert veritas.text_utils._token_similarity is paper_audit._token_similarity

@@ -1,5 +1,6 @@
 """Shared text normalization and summarization helpers."""
 
+import hashlib
 import html
 import re
 
@@ -10,6 +11,14 @@ def _brief_text(text, limit=180):
     if len(text) > limit:
         return text[:limit].rstrip() + "…"
     return text
+
+
+def _text_fingerprint(text: str, extra: str = ""):
+    """Stable short fingerprint used by report evidence IDs and LLM caches."""
+    h = hashlib.sha256()
+    h.update((text or "").encode("utf-8", errors="ignore"))
+    h.update(str(extra).encode("utf-8", errors="ignore"))
+    return h.hexdigest()[:16]
 
 
 def _normalize_title(value):
@@ -39,6 +48,7 @@ def _token_similarity(a, b):
 
 __all__ = [
     "_brief_text",
+    "_text_fingerprint",
     "_normalize_title",
     "_title_tokens",
     "_token_similarity",
