@@ -197,8 +197,9 @@ tests/
   offline bibliography parsing, DOI/title/author/container/year hint extraction,
   author similarity, reference query/cache-key construction, official-site
   search URL construction, HTML cleanup/title extraction, official-page match
-  heuristics, and deterministic online-match scoring. Crossref, OpenAlex,
-  PubMed, and official-site network lookups remain outside this boundary.
+  heuristics, Crossref/OpenAlex/PubMed response normalization, and
+  deterministic online-match scoring. Crossref, OpenAlex, PubMed, and
+  official-site network lookups remain outside this boundary.
 - `veritas/reference_reporting.py` owns deterministic reference audit issue
   labels, online summary text, Markdown tables, and HTML cards. Reference
   parsing and online lookup remain outside this boundary.

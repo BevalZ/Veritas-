@@ -206,6 +206,7 @@ from .reference_parsing import (
     REFERENCE_OFFICIAL_SITE_RULES,
     _author_similarity,
     _clean_reference_text,
+    _crossref_work_to_match,
     _html_title,
     _html_to_searchable_text,
     _looks_like_reference_author_fragment,
@@ -215,6 +216,8 @@ from .reference_parsing import (
     _normalize_doi,
     _official_page_matches_reference,
     _official_site_search_urls,
+    _openalex_work_to_match,
+    _pubmed_summary_to_match,
     _reference_items_from_numbered_lines,
     _reference_year,
     _score_reference_match,
@@ -2889,79 +2892,6 @@ def _reference_get_json(url, timeout=10, headers=None):
     # source fast-fail so a full bibliography cannot hang on one slow provider.
     data, _ = _http_request(url, "GET", headers=headers or {}, timeout=timeout)
     return json.loads(data.decode("utf-8", errors="replace"))
-
-
-def _crossref_work_to_match(work):
-    title = " ".join(work.get("title") or []).strip()
-    year = ""
-    for key in ("published-print", "published-online", "published", "created"):
-        parts = ((work.get(key) or {}).get("date-parts") or [[]])[0]
-        if parts:
-            year = str(parts[0])
-            break
-    authors = []
-    for author in work.get("author") or []:
-        name = " ".join(p for p in (author.get("given"), author.get("family")) if p)
-        if name:
-            authors.append(name)
-    container = " ".join(work.get("container-title") or work.get("short-container-title") or [])
-    return {
-        "source": "Crossref",
-        "title": title,
-        "year": year,
-        "doi": _normalize_doi(work.get("DOI", "")),
-        "authors": authors[:5],
-        "container": container,
-        "url": work.get("URL", ""),
-        "retracted": bool(work.get("relation", {}).get("is-retracted-by")),
-    }
-
-
-def _openalex_work_to_match(work):
-    title = work.get("display_name") or work.get("title") or ""
-    authors = []
-    for authorship in work.get("authorships") or []:
-        name = ((authorship.get("author") or {}).get("display_name") or "").strip()
-        if name:
-            authors.append(name)
-    location = work.get("primary_location") or {}
-    source = location.get("source") or {}
-    return {
-        "source": "OpenAlex",
-        "title": title,
-        "year": str(work.get("publication_year") or ""),
-        "doi": _normalize_doi(work.get("doi", "")),
-        "authors": authors[:5],
-        "container": source.get("display_name", ""),
-        "url": work.get("doi") or work.get("id") or "",
-        "retracted": bool(work.get("is_retracted")),
-    }
-
-
-def _pubmed_summary_to_match(uid, item):
-    title = item.get("title") or ""
-    authors = []
-    for author in item.get("authors") or []:
-        name = (author.get("name") or "").strip()
-        if name:
-            authors.append(name)
-    pubdate = item.get("pubdate") or ""
-    year = _reference_year(pubdate)
-    doi = ""
-    for article_id in item.get("articleids") or []:
-        if str(article_id.get("idtype", "")).lower() == "doi":
-            doi = _normalize_doi(article_id.get("value", ""))
-            break
-    return {
-        "source": "PubMed",
-        "title": title,
-        "year": year,
-        "doi": doi,
-        "authors": authors[:5],
-        "container": item.get("fulljournalname") or item.get("source") or "",
-        "url": f"https://pubmed.ncbi.nlm.nih.gov/{uid}/",
-        "retracted": "retracted publication" in " ".join(item.get("pubtype") or []).lower(),
-    }
 
 
 def lookup_crossref_reference(ref, timeout=10):
