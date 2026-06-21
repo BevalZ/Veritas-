@@ -788,6 +788,11 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.paper_identity.extract_paper_identity is paper_audit.extract_paper_identity
     assert callable(veritas.image_cache._image_file_fingerprint_from_namespace)
     assert callable(veritas.image_cache._image_semantic_cache_key_from_namespace)
+    assert veritas.image_reporting._image_semantic_display is paper_audit._image_semantic_display
+    assert veritas.image_reporting._image_detector_display is paper_audit._image_detector_display
+    assert callable(veritas.image_reporting.format_image_audit_html)
+    assert callable(veritas.image_reporting.format_image_audit_markdown)
+    assert callable(veritas.image_reporting.save_image_review_manifest)
     assert veritas.text_utils._brief_text is paper_audit._brief_text
     assert veritas.text_utils._normalize_title is paper_audit._normalize_title
     assert veritas.text_utils._title_tokens is paper_audit._title_tokens
