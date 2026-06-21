@@ -14,6 +14,7 @@ __all__ = [
     "resume_event",
     "_allow_llm_cache_read",
     "detect_pdf_input",
+    "run_cache_use_manifest",
     "run_input_manifest",
     "run_extraction_route",
     "run_scope_flags_from_args",
@@ -117,6 +118,25 @@ def run_input_manifest(input_path, runtime):
         "size_bytes": path.stat().st_size if path.is_file() else None,
         "created_at": runtime["local_time"],
         "runtime": runtime,
+    }
+
+
+def run_cache_use_manifest(
+    resume_dir,
+    no_resume,
+    allow_llm_cache_read,
+    allow_llm_cache_write,
+    extract_cache_version,
+    image_semantic_cache_version,
+):
+    """Build the cache-use manifest recorded in a per-run workspace."""
+    return {
+        "shared_resume_dir": str(resume_dir),
+        "no_resume": bool(no_resume),
+        "allow_llm_cache_read": bool(allow_llm_cache_read),
+        "allow_llm_cache_write": bool(allow_llm_cache_write),
+        "extract_cache_version": extract_cache_version,
+        "image_semantic_cache_version": image_semantic_cache_version,
     }
 
 

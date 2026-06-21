@@ -165,6 +165,7 @@ from .run_logging import (
     get_resume_dir,
     progress_bar,
     resume_event,
+    run_cache_use_manifest,
     run_extraction_route,
     run_input_manifest,
     run_scope_flags_from_args,
@@ -4096,14 +4097,18 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
     print(f"  - 范围限制开关: {', '.join(scope_flags) if scope_flags else '无，默认尝试完整审查'}")
 
     resume_event(resume_dir, "init", "done", f"input={input_path}; llm={LLM_MODEL}; url={LLM_API_URL}; max_chars={args.max_chars}; use_mineru={use_mineru_default}")
-    record_run_workspace_json(run_workspace, "cache_use.json", {
-        "shared_resume_dir": str(resume_dir),
-        "no_resume": bool(args.no_resume),
-        "allow_llm_cache_read": bool(allow_llm_cache_read),
-        "allow_llm_cache_write": bool(allow_llm_cache_write),
-        "extract_cache_version": EXTRACT_CACHE_VERSION,
-        "image_semantic_cache_version": IMAGE_SEMANTIC_CACHE_VERSION,
-    })
+    record_run_workspace_json(
+        run_workspace,
+        "cache_use.json",
+        run_cache_use_manifest(
+            resume_dir,
+            args.no_resume,
+            allow_llm_cache_read,
+            allow_llm_cache_write,
+            EXTRACT_CACHE_VERSION,
+            IMAGE_SEMANTIC_CACHE_VERSION,
+        ),
+    )
     completed_stages = ["init", "runtime_config_loaded"]
     preflight_state = {}
     preflight_results = []

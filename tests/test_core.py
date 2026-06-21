@@ -692,6 +692,26 @@ def test_run_input_manifest_records_local_file_state(tmp_path):
     assert manifest["runtime"] is runtime
 
 
+def test_run_cache_use_manifest_records_versions(tmp_path):
+    manifest = paper_audit.run_cache_use_manifest(
+        tmp_path / ".paper_audit_resume",
+        no_resume=True,
+        allow_llm_cache_read=False,
+        allow_llm_cache_write=False,
+        extract_cache_version="extract-v1",
+        image_semantic_cache_version="image-v2",
+    )
+
+    assert manifest == {
+        "shared_resume_dir": str(tmp_path / ".paper_audit_resume"),
+        "no_resume": True,
+        "allow_llm_cache_read": False,
+        "allow_llm_cache_write": False,
+        "extract_cache_version": "extract-v1",
+        "image_semantic_cache_version": "image-v2",
+    }
+
+
 def test_run_audit_accepts_direct_docx_file_input(monkeypatch, tmp_path):
     docx_path = tmp_path / "paper.docx"
     docx_path.write_bytes(b"fake-docx")
@@ -1050,6 +1070,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.resume_event is paper_audit.resume_event
     assert veritas.run_logging._allow_llm_cache_read is paper_audit._allow_llm_cache_read
     assert veritas.run_logging.detect_pdf_input is paper_audit.detect_pdf_input
+    assert veritas.run_logging.run_cache_use_manifest is paper_audit.run_cache_use_manifest
     assert veritas.run_logging.run_input_manifest is paper_audit.run_input_manifest
     assert veritas.run_logging.run_extraction_route is paper_audit.run_extraction_route
     assert veritas.run_logging.run_scope_flags_from_args is paper_audit.run_scope_flags_from_args
