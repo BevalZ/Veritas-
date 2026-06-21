@@ -2441,6 +2441,15 @@ def test_smart_chunk_text_never_exceeds_limit_for_long_paragraph():
     assert all(total == len(chunks) for _, _, total in chunks)
 
 
+def test_hard_split_text_prefers_readable_boundaries():
+    small_parts = veritas.local_analysis._hard_split_text("alpha beta gamma. delta epsilon zeta. tail", 25)
+    readable_parts = veritas.local_analysis._hard_split_text("A" * 230 + ". " + "B" * 80, 260)
+
+    assert all(len(part) <= 25 for part in small_parts)
+    assert readable_parts[0].endswith(".")
+    assert veritas.local_analysis._hard_split_text("", 25) == []
+
+
 def test_smart_chunk_text_preserves_table_boundaries():
     rows = ["| col1 | col2 |", "| --- | --- |"] + [f"| row{i} | value{i} |" for i in range(40)]
     table = "\n".join([

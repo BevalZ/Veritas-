@@ -79,27 +79,28 @@ def local_stat_check(text):
     return result
 
 
+def _hard_split_text(text, size):
+    parts = []
+    text = text or ""
+    while len(text) > size:
+        cut = size
+        window_start = max(0, size - 800)
+        candidates = [text.rfind(sep, window_start, size) for sep in ["\n", "。", ". ", "; ", "；", ", ", "，", " "]]
+        best = max(candidates)
+        if best > max(200, size // 2):
+            cut = best + 1
+        parts.append(text[:cut].strip())
+        text = text[cut:].strip()
+    if text.strip():
+        parts.append(text.strip())
+    return parts
+
+
 def smart_chunk_text(text, chunk_size=8000, overlap=1000):
     """Split text by structure while preserving table blocks."""
     if chunk_size <= 0:
         chunk_size = 8000
     overlap = max(0, min(overlap, chunk_size // 4))
-
-    def hard_split(s, size):
-        parts = []
-        s = s or ""
-        while len(s) > size:
-            cut = size
-            window_start = max(0, size - 800)
-            candidates = [s.rfind(sep, window_start, size) for sep in ["\n", "。", ". ", "; ", "；", ", ", "，", " "]]
-            best = max(candidates)
-            if best > max(200, size // 2):
-                cut = best + 1
-            parts.append(s[:cut].strip())
-            s = s[cut:].strip()
-        if s.strip():
-            parts.append(s.strip())
-        return parts
 
     def split_structured_blocks(s):
         blocks = []
@@ -127,7 +128,7 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
         body = body.replace("[[TABLE_END]]", "").strip()
         rows = [r for r in body.splitlines() if r.strip()]
         if not rows:
-            return hard_split(block, size)
+            return _hard_split_text(block, size)
         table_header_rows = rows[:2] if len(rows) >= 2 and "|" in rows[0] else rows[:1]
         chunks = []
         current_rows = []
@@ -138,7 +139,7 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
             candidate = prefix + "\n" + "\n".join(candidate_rows) + "\n[[TABLE_END]]"
             if current_rows and len(candidate) > size:
                 chunk = prefix + "\n" + "\n".join(current_rows) + "\n[[TABLE_END]]"
-                chunks.extend(hard_split(chunk, size) if len(chunk) > size else [chunk])
+                chunks.extend(_hard_split_text(chunk, size) if len(chunk) > size else [chunk])
                 current_rows = [row]
                 part += 1
             else:
@@ -146,7 +147,7 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
         if current_rows:
             prefix = f"{header}\n[[TABLE_CONTINUATION part={part}]]\n" + "\n".join(table_header_rows)
             chunk = prefix + "\n" + "\n".join(current_rows) + "\n[[TABLE_END]]"
-            chunks.extend(hard_split(chunk, size) if len(chunk) > size else [chunk])
+            chunks.extend(_hard_split_text(chunk, size) if len(chunk) > size else [chunk])
         return chunks
 
     if len(text) <= chunk_size:
@@ -157,7 +158,7 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
         if kind == "table":
             blocks.extend(split_table_block(block, chunk_size))
         elif len(block) > chunk_size:
-            blocks.extend(hard_split(block, chunk_size))
+            blocks.extend(_hard_split_text(block, chunk_size))
         else:
             blocks.append(block)
 
@@ -170,7 +171,7 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
             prefix = current[-overlap:] + "\n\n" if overlap > 0 and len(current) > overlap else ""
             candidate = (prefix + part).strip()
             if len(candidate) > chunk_size:
-                chunks.extend(split_table_block(part, chunk_size) if "[[TABLE_START" in part else hard_split(part, chunk_size))
+                chunks.extend(split_table_block(part, chunk_size) if "[[TABLE_START" in part else _hard_split_text(part, chunk_size))
                 current = ""
             else:
                 current = candidate
@@ -182,7 +183,7 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
     safe_chunks = []
     for chunk in chunks:
         if len(chunk) > chunk_size:
-            safe_chunks.extend(split_table_block(chunk, chunk_size) if "[[TABLE_START" in chunk else hard_split(chunk, chunk_size))
+            safe_chunks.extend(split_table_block(chunk, chunk_size) if "[[TABLE_START" in chunk else _hard_split_text(chunk, chunk_size))
         elif chunk.strip():
             safe_chunks.append(chunk)
 
