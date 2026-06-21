@@ -27,6 +27,7 @@ __all__ = [
     "apply_llm_partial_report_warning",
     "save_llm_failure_cache_result",
     "llm_retry_failure_summary",
+    "llm_no_success_failure_summary",
     "online_cache_state",
     "save_online_cache_result",
     "image_audit_cache_state",
@@ -414,6 +415,15 @@ def llm_retry_failure_summary(still_failed, strict_failed_chunks):
         "detail": detail,
         "event_detail": f"still_failed={failed_nums}; strict={strict_failed_chunks}",
         "message": "LLM分块重试后仍失败，停止生成完整审查报告: " + detail,
+    }
+
+
+def llm_no_success_failure_summary(failed_chunks):
+    """Build summary fields when no text-LLM chunks produced usable reports."""
+    message = f"所有LLM分块均失败，无法生成语义审查报告。失败块: {failed_chunks}。"
+    return {
+        "message": message,
+        "details": {"failed_chunks": failed_chunks},
     }
 
 

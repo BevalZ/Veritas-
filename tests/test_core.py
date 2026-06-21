@@ -1133,6 +1133,15 @@ def test_llm_retry_failure_summary_builds_user_facing_details():
     }
 
 
+def test_llm_no_success_failure_summary_builds_message_and_details():
+    summary = paper_audit.llm_no_success_failure_summary([1, 2, 4])
+
+    assert summary == {
+        "message": "所有LLM分块均失败，无法生成语义审查报告。失败块: [1, 2, 4]。",
+        "details": {"failed_chunks": [1, 2, 4]},
+    }
+
+
 def test_online_cache_state_loads_resume_cache_when_enabled(tmp_path):
     resume_dir = tmp_path / ".paper_audit_resume"
     resume_dir.mkdir()
@@ -1809,6 +1818,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.apply_llm_partial_report_warning is paper_audit.apply_llm_partial_report_warning
     assert veritas.run_logging.save_llm_failure_cache_result is paper_audit.save_llm_failure_cache_result
     assert veritas.run_logging.llm_retry_failure_summary is paper_audit.llm_retry_failure_summary
+    assert veritas.run_logging.llm_no_success_failure_summary is paper_audit.llm_no_success_failure_summary
     assert veritas.run_logging.online_cache_state is paper_audit.online_cache_state
     assert veritas.run_logging.save_online_cache_result is paper_audit.save_online_cache_result
     assert veritas.run_logging.image_audit_cache_state is paper_audit.image_audit_cache_state

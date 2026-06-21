@@ -172,6 +172,7 @@ from .run_logging import (
     image_semantic_cache_save_callback,
     llm_chunk_cache_read_state,
     llm_failure_cache_payload,
+    llm_no_success_failure_summary,
     llm_retry_failure_summary,
     llm_success_cache_payload,
     online_cache_state,
@@ -3411,16 +3412,16 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
 
         chunk_reports, failed_final = apply_llm_chunk_coverage_meta(meta, chunk_reports, total_chunks, chunk_size, overlap)
         if not chunk_reports:
-            message = f"所有LLM分块均失败，无法生成语义审查报告。失败块: {failed_final}。"
-            resume_event(resume_dir, "stage4_merge", "skipped_no_success", message)
+            failure_summary = llm_no_success_failure_summary(failed_final)
+            resume_event(resume_dir, "stage4_merge", "skipped_no_success", failure_summary["message"])
             failure = AuditFailure(
                 capability="text_llm",
                 error_class="schema_error",
-                message=message,
+                message=failure_summary["message"],
                 fix_hints=["检查文本LLM服务和证据schema输出。", "更换稳定服务后重试。"],
                 completed_stages=completed_stages,
                 retry_command=retry_command,
-                details={"failed_chunks": failed_final},
+                details=failure_summary["details"],
             )
             return save_failed_run_result(
                 failure,
