@@ -25,6 +25,7 @@ veritas/
 ├── config.py           # Runtime configuration boundary
 ├── cross_file_consistency.py # Cross-file consistency audit and rendering helpers
 ├── desktop_gui.py      # Desktop GUI helper boundary
+├── evidence_chain.py   # Evidence-chain audit and evidence-cluster helpers
 ├── evidence_rendering.py # Evidence excerpt/table rendering helpers
 ├── failed_diagnostics.py # Stable failed-audit payload and conversion helpers
 ├── followups.py       # PubPeer/comment and journal-letter draft workflow helpers
@@ -158,6 +159,11 @@ tests/
   findings, and Markdown/HTML rendering for the cross-file audit section. It
   must remain provider-free and should consume already-extracted file entries
   rather than reading project files itself.
+- `veritas/evidence_chain.py` owns deterministic Methods/Results/Abstract
+  claim-chain findings, evidence key extraction, evidence item normalization,
+  evidence-cluster aggregation, and Markdown/HTML rendering for the evidence
+  chain section. It may aggregate existing report, reference, resource, image,
+  statistics, and cross-file audit payloads, but must not call providers.
 - `veritas/paper_identity.py` owns best-effort article title, journal, and
   author extraction for follow-up draft context. It should stay deterministic
   and may reuse evidence cleanup helpers, but must not call providers.
