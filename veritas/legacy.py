@@ -2689,6 +2689,80 @@ def launch_image_ai_detect(
     return image_audit
 
 
+def _write_run_report_artifacts(
+    input_path,
+    args,
+    report,
+    meta,
+    stat_result,
+    reference_audit,
+    resource_audit,
+    run_workspace,
+    resume_dir,
+):
+    output_override = explicit_output_path_from_args(args)
+    output_path, html_output_path, json_path = audit_artifact_paths(
+        input_path,
+        artifact_type=meta.get("artifact_type", "complete"),
+        output_path=output_override,
+    )
+    meta["artifact_paths"] = {
+        "markdown": str(output_path),
+        "html": str(html_output_path),
+        "json": str(json_path),
+    }
+    meta["followups_dir"] = str(html_output_path.parent / "followups")
+    report_input = str(input_path)
+    md_report = format_report(report, report_input, meta, stat_result)
+    html_report = format_html_report(report, report_input, meta, stat_result)
+
+    output_path.write_text(md_report, encoding="utf-8")
+    print(f"✅ Markdown报告已保存: {output_path}")
+    resume_event(resume_dir, "stage5_report", "markdown_saved", str(output_path))
+
+    html_output_path.write_text(html_report, encoding="utf-8")
+    print(f"✅ HTML报告已保存: {html_output_path}")
+    resume_event(resume_dir, "stage5_report", "html_saved", str(html_output_path))
+
+    if args.json:
+        json_path.write_text(
+            json.dumps({"report_type": meta.get("artifact_type", "complete"), "llm_report": report, "stat_result": stat_result, "meta": meta, "reference_audit": reference_audit, "resource_audit": resource_audit, "cross_file_consistency_audit": meta.get("cross_file_consistency_audit"), "evidence_chain_audit": meta.get("evidence_chain_audit")},
+                       ensure_ascii=False, indent=2),
+            encoding="utf-8")
+        print(f"✅ 原始JSON已保存: {json_path}")
+
+    record_run_workspace_artifacts(
+        run_workspace,
+        meta.get("artifact_type", "complete"),
+        [output_path, html_output_path, json_path],
+        meta={"artifact_type": meta.get("artifact_type"), "limited_reasons": meta.get("limited_reasons", [])},
+    )
+    return output_path, html_output_path, json_path
+
+
+def _handle_run_report_opening(args, html_output_path, report_actions_port, run_workspace, meta):
+    if args.no_open:
+        print(f"🌐 已跳过自动打开HTML报告: {html_output_path}")
+        return
+    action_status = ensure_report_action_service(
+        port=report_actions_port,
+        log_path=Path(run_workspace["run_dir"]) / "report_actions.log",
+    )
+    meta["report_actions"]["service_status"] = action_status.get("status")
+    if action_status.get("ok"):
+        if action_status.get("status") == "already_running":
+            print(f"🌐 HTML动作服务已在运行: {action_status.get('url')}")
+        else:
+            print(f"🌐 HTML动作服务已自动启动: {action_status.get('url')}")
+    else:
+        print(f"⚠️ HTML动作服务自动启动失败: {action_status.get('error') or action_status.get('status')}，报告仍可打开")
+    try:
+        open_html_artifact(html_output_path)
+        print(f"🌐 已在浏览器中打开HTML报告")
+    except Exception as e:
+        print(f"⚠️ 自动打开浏览器失败: {e}，请手动打开: {html_output_path}")
+
+
 
 def run_audit(run_request: RunRequest, args=None) -> RunResult:
     args = args if args is not None else run_request.to_args()
@@ -3599,74 +3673,23 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
         "url": report_action_service_url("127.0.0.1", report_actions_port),
         "auto_start": not bool(getattr(args, "no_open", False)),
     }
-    # 确定输出路径（优先HTML）
-    output_override = explicit_output_path_from_args(args)
-    output_path, html_output_path, json_path = audit_artifact_paths(
+    output_path, html_output_path, json_path = _write_run_report_artifacts(
         input_path,
-        artifact_type=meta.get("artifact_type", "complete"),
-        output_path=output_override,
-    )
-    meta["artifact_paths"] = {
-        "markdown": str(output_path),
-        "html": str(html_output_path),
-        "json": str(json_path),
-    }
-    meta["followups_dir"] = str(html_output_path.parent / "followups")
-    report_input = str(input_path)
-    md_report = format_report(report, report_input, meta, stat_result)
-
-    # 生成HTML报告
-    html_report = format_html_report(report, report_input, meta, stat_result)
-
-    # 写入Markdown报告
-    output_path.write_text(md_report, encoding="utf-8")
-    print(f"✅ Markdown报告已保存: {output_path}")
-    resume_event(resume_dir, "stage5_report", "markdown_saved", str(output_path))
-
-    # 写入HTML报告
-    html_output_path.write_text(html_report, encoding="utf-8")
-    print(f"✅ HTML报告已保存: {html_output_path}")
-    resume_event(resume_dir, "stage5_report", "html_saved", str(html_output_path))
-
-    if args.json:
-        json_path.write_text(
-            json.dumps({"report_type": meta.get("artifact_type", "complete"), "llm_report": report, "stat_result": stat_result, "meta": meta, "reference_audit": reference_audit, "resource_audit": resource_audit, "cross_file_consistency_audit": meta.get("cross_file_consistency_audit"), "evidence_chain_audit": meta.get("evidence_chain_audit")},
-                       ensure_ascii=False, indent=2),
-            encoding="utf-8")
-        print(f"✅ 原始JSON已保存: {json_path}")
-
-    record_run_workspace_artifacts(
+        args,
+        report,
+        meta,
+        stat_result,
+        reference_audit,
+        resource_audit,
         run_workspace,
-        meta.get("artifact_type", "complete"),
-        [output_path, html_output_path, json_path],
-        meta={"artifact_type": meta.get("artifact_type"), "limited_reasons": meta.get("limited_reasons", [])},
+        resume_dir,
     )
 
     resume_event(resume_dir, "all", "done", "audit completed")
     progress_bar(5, 5, "阶段5/5 全部完成")
     print(f"🧾 完整日志: {_run_logging._RUN_LOG_FILE}")
 
-    # 自动打开HTML报告
-    if args.no_open:
-        print(f"🌐 已跳过自动打开HTML报告: {html_output_path}")
-    else:
-        action_status = ensure_report_action_service(
-            port=report_actions_port,
-            log_path=Path(run_workspace["run_dir"]) / "report_actions.log",
-        )
-        meta["report_actions"]["service_status"] = action_status.get("status")
-        if action_status.get("ok"):
-            if action_status.get("status") == "already_running":
-                print(f"🌐 HTML动作服务已在运行: {action_status.get('url')}")
-            else:
-                print(f"🌐 HTML动作服务已自动启动: {action_status.get('url')}")
-        else:
-            print(f"⚠️ HTML动作服务自动启动失败: {action_status.get('error') or action_status.get('status')}，报告仍可打开")
-        try:
-            open_html_artifact(html_output_path)
-            print(f"🌐 已在浏览器中打开HTML报告")
-        except Exception as e:
-            print(f"⚠️ 自动打开浏览器失败: {e}，请手动打开: {html_output_path}")
+    _handle_run_report_opening(args, html_output_path, report_actions_port, run_workspace, meta)
 
     # 打印摘要
     if not report.get("parse_error"):
