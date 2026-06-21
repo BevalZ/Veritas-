@@ -41,6 +41,8 @@ veritas/
 ├── reference_parsing.py # Reference section parsing and query-building helpers
 ├── reference_reporting.py # Reference audit Markdown/HTML rendering helpers
 ├── renderers.py        # Markdown/HTML renderer boundary
+├── resource_parsing.py # Resource URL extraction and classification helpers
+├── resource_reporting.py # Resource audit Markdown/HTML rendering helpers
 ├── risk_rule_helpers.py # Shared risk scoring/merge helpers for rules/rendering
 ├── risk_rules.py       # Versioned final risk scoring boundary
 ├── run.py              # Run request/result and orchestration boundary
@@ -159,6 +161,11 @@ tests/
 - `veritas/reference_reporting.py` owns deterministic reference audit issue
   labels, online summary text, Markdown tables, and HTML cards. Reference
   parsing and online lookup remain outside this boundary.
+- `veritas/resource_parsing.py` owns deterministic extraction, cleanup,
+  context capture, and classification of code/data/deployed-resource URLs from
+  paper text. Resource availability network checks remain outside this boundary.
+- `veritas/resource_reporting.py` owns deterministic resource audit status
+  labels and Markdown/HTML report sections.
 - `veritas/followups.py` owns PubPeer/comment and journal-letter language,
   tone, article-identity, issue-normalization, context-building, prompt
   construction, draft artifact load/save, and namespace-aware generation

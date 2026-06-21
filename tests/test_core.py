@@ -821,6 +821,11 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.reference_reporting._reference_issue_text is paper_audit._reference_issue_text
     assert veritas.reference_reporting.format_reference_audit_html is paper_audit.format_reference_audit_html
     assert veritas.reference_reporting.format_reference_audit_markdown is paper_audit.format_reference_audit_markdown
+    assert veritas.resource_parsing.extract_paper_resources is paper_audit.extract_paper_resources
+    assert veritas.resource_parsing._clean_resource_url is paper_audit._clean_resource_url
+    assert veritas.resource_parsing._classify_resource is paper_audit._classify_resource
+    assert veritas.resource_reporting.format_resource_audit_html is paper_audit.format_resource_audit_html
+    assert veritas.resource_reporting.format_resource_audit_markdown is paper_audit.format_resource_audit_markdown
     assert veritas.followups.normalize_followup_language is paper_audit.normalize_followup_language
     assert veritas.followups.normalize_followup_tone is paper_audit.normalize_followup_tone
     assert veritas.followups.normalize_article_identity is paper_audit.normalize_article_identity
