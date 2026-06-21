@@ -107,7 +107,9 @@ tests/
 - Run orchestration state that crosses multiple helper calls should use stable
   dataclasses in `veritas/run_types.py` instead of ad-hoc dictionaries with
   string keys. This keeps the orchestration seam explicit and makes missing
-  fields fail early.
+  fields fail early. Stage helpers that return either success payloads or
+  `AuditFailure` should use a narrow result dataclass for that stage rather
+  than a generic catch-all result object.
 - Avoid adding new orchestration logic directly to `paper_audit.py`.
 
 ---
@@ -125,10 +127,13 @@ tests/
 
 - `paper_audit.py` aliases `veritas.legacy` for historical `import paper_audit`
   compatibility while still running `veritas.legacy.main()` as a script.
-- `veritas/run_types.py` owns `RunRequest`, `RunAuditContext`, and `RunResult`.
+- `veritas/run_types.py` owns `RunRequest`, `RunAuditContext`, stage result
+  dataclasses such as `Stage1TextExtractionResult`, and `RunResult`.
   `RunAuditContext` is the prepared runtime context for one audit orchestration
   run; helpers may produce it, while `veritas.legacy.run_audit` consumes its
-  attributes rather than dictionary keys.
+  attributes rather than dictionary keys. Stage result dataclasses should stay
+  concept-specific so they deepen the seam instead of becoming wide untyped
+  payload bags.
 - `veritas/models.py` owns `AuditFailure`, `AuditReportModel`,
   `EvidenceFinding`, and related lightweight dataclasses; `paper_audit` keeps
   compatibility by re-exporting the same class objects through `veritas.legacy`.
