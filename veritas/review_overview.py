@@ -63,6 +63,25 @@ def _build_llm_action_items(report):
     return items
 
 
+def _select_diverse_action_items(items, limit):
+    selected = []
+    used_sources = set()
+    for item in items:
+        if item["source"] in used_sources:
+            continue
+        selected.append(item)
+        used_sources.add(item["source"])
+        if len(selected) >= limit:
+            return selected
+    for item in items:
+        if item in selected:
+            continue
+        selected.append(item)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
 def build_audit_action_items(report, meta, stat_result, limit=8):
     meta = meta or {}
     stat_result = stat_result or {}
@@ -141,22 +160,7 @@ def build_audit_action_items(report, meta, stat_result, limit=8):
             "anchor": "image-audit",
         })
     items.sort(key=lambda item: (-item["score"], item["source"], item["title"]))
-    selected = []
-    used_sources = set()
-    for item in items:
-        if item["source"] in used_sources:
-            continue
-        selected.append(item)
-        used_sources.add(item["source"])
-        if len(selected) >= limit:
-            return selected
-    for item in items:
-        if item in selected:
-            continue
-        selected.append(item)
-        if len(selected) >= limit:
-            break
-    return selected
+    return _select_diverse_action_items(items, limit)
 
 
 def format_audit_action_summary_markdown(report, meta, stat_result):

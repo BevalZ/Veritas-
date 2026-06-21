@@ -3884,6 +3884,21 @@ def test_llm_action_items_use_sorted_check_anchor_and_skip_clean_items():
     assert all("通过" not in item["title"] for item in items)
 
 
+def test_select_diverse_action_items_prefers_unique_sources_then_fills_limit():
+    items = [
+        {"source": "A", "title": "a1", "score": 100},
+        {"source": "A", "title": "a2", "score": 99},
+        {"source": "B", "title": "b1", "score": 80},
+        {"source": "C", "title": "c1", "score": 70},
+    ]
+
+    selected = veritas.review_overview._select_diverse_action_items(items, 3)
+
+    assert [item["title"] for item in selected] == ["a1", "b1", "c1"]
+    assert veritas.review_overview._select_diverse_action_items(items, 2) == [items[0], items[2]]
+    assert veritas.review_overview._select_diverse_action_items(items[:2], 3) == items[:2]
+
+
 def test_reference_issue_text_uses_chinese_labels():
     text = paper_audit._reference_issue_text(["missing_doi", "online_not_found", "year_mismatch"])
 
