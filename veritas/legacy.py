@@ -160,10 +160,13 @@ from .runtime_metadata import ensure_runtime_meta, runtime_metadata, runtime_utc
 from . import run_logging as _run_logging
 from .run_logging import (
     _allow_llm_cache_read,
+    detect_pdf_input,
     get_output_base,
     get_resume_dir,
     progress_bar,
     resume_event,
+    run_extraction_route,
+    run_scope_flags_from_args,
     save_mineru_artifacts,
     setup_run_logging,
 )
@@ -4082,47 +4085,15 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
     })
     allow_llm_cache_read = _allow_llm_cache_read(args.no_resume, getattr(args, "llm_cache_only", False))
     allow_llm_cache_write = not args.no_resume
-    pdf_suffixes = {".pdf"}
-    has_pdf_input = input_path.suffix.lower() in pdf_suffixes
-    if input_path.is_dir():
-        try:
-            has_pdf_input = any(p.is_file() and p.suffix.lower() in pdf_suffixes for p in input_path.rglob("*"))
-        except Exception:
-            has_pdf_input = False
+    has_pdf_input = detect_pdf_input(input_path)
     use_mineru_default = has_pdf_input and not args.no_mineru
     if use_mineru_default and not args.mineru:
         print("📡 检测到PDF输入，默认启用MinerU提取；如需原始PDF文本提取请使用 --no-mineru")
 
     output_override_preview = explicit_output_path_from_args(args)
     preview_md, preview_html, preview_json = audit_artifact_paths(input_path, output_path=output_override_preview)
-    if input_path.is_dir():
-        extraction_route = "directory_multi_format"
-    elif input_path.suffix.lower() == ".pdf":
-        extraction_route = "mineru_pdf" if use_mineru_default else "raw_pdf_stream"
-    elif input_path.suffix.lower() == ".docx":
-        extraction_route = "direct_docx"
-    elif input_path.suffix.lower() in {".xlsx", ".xlsm", ".csv"}:
-        extraction_route = "spreadsheet_text"
-    else:
-        extraction_route = f"{input_path.suffix.lower().lstrip('.') or 'file'}_text"
-    scope_flags = []
-    for attr, label in (
-        ("no_mineru", "--no-mineru"),
-        ("no_reference_online", "--no-reference-online"),
-        ("no_image_semantic", "--no-image-semantic"),
-        ("no_image_detector", "--no-image-detector"),
-        ("llm_cache_only", "--llm-cache-only"),
-    ):
-        if getattr(args, attr, False):
-            scope_flags.append(label)
-    for attr, label in (
-        ("reference_online_limit", "--reference-online-limit"),
-        ("image_audit_limit", "--image-audit-limit"),
-        ("image_semantic_limit", "--image-semantic-limit"),
-        ("image_detector_limit", "--image-detector-limit"),
-    ):
-        if getattr(args, attr, None) is not None:
-            scope_flags.append(f"{label}={getattr(args, attr)}")
+    extraction_route = run_extraction_route(input_path, use_mineru_default)
+    scope_flags = run_scope_flags_from_args(args)
     print("🧭 运行摘要:")
     print(f"  - 输入: {input_path} ({'目录' if input_path.is_dir() else '单文件'})")
     print(f"  - 提取路线: {extraction_route}")

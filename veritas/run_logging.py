@@ -13,6 +13,9 @@ __all__ = [
     "get_resume_dir",
     "resume_event",
     "_allow_llm_cache_read",
+    "detect_pdf_input",
+    "run_extraction_route",
+    "run_scope_flags_from_args",
     "progress_bar",
     "save_mineru_artifacts",
 ]
@@ -86,6 +89,58 @@ def resume_event(resume_dir: Path, step: str, status: str, detail: str = "", **e
 
 def _allow_llm_cache_read(no_resume=False, llm_cache_only=False):
     return (not bool(no_resume)) or bool(llm_cache_only)
+
+
+def detect_pdf_input(input_path, pdf_suffixes=None):
+    """Return whether the input path is a PDF or a directory containing a PDF."""
+    path = Path(input_path)
+    suffixes = {s.lower() for s in (pdf_suffixes or {".pdf"})}
+    if path.suffix.lower() in suffixes:
+        return True
+    if path.is_dir():
+        try:
+            return any(p.is_file() and p.suffix.lower() in suffixes for p in path.rglob("*"))
+        except Exception:
+            return False
+    return False
+
+
+def run_extraction_route(input_path, use_mineru_default=False):
+    """Return the run-summary extraction route label for an input path."""
+    path = Path(input_path)
+    suffix = path.suffix.lower()
+    if path.is_dir():
+        return "directory_multi_format"
+    if suffix == ".pdf":
+        return "mineru_pdf" if use_mineru_default else "raw_pdf_stream"
+    if suffix == ".docx":
+        return "direct_docx"
+    if suffix in {".xlsx", ".xlsm", ".csv"}:
+        return "spreadsheet_text"
+    return f"{suffix.lstrip('.') or 'file'}_text"
+
+
+def run_scope_flags_from_args(args):
+    """Return user-visible scope-limiting flags for the run summary."""
+    scope_flags = []
+    for attr, label in (
+        ("no_mineru", "--no-mineru"),
+        ("no_reference_online", "--no-reference-online"),
+        ("no_image_semantic", "--no-image-semantic"),
+        ("no_image_detector", "--no-image-detector"),
+        ("llm_cache_only", "--llm-cache-only"),
+    ):
+        if getattr(args, attr, False):
+            scope_flags.append(label)
+    for attr, label in (
+        ("reference_online_limit", "--reference-online-limit"),
+        ("image_audit_limit", "--image-audit-limit"),
+        ("image_semantic_limit", "--image-semantic-limit"),
+        ("image_detector_limit", "--image-detector-limit"),
+    ):
+        if getattr(args, attr, None) is not None:
+            scope_flags.append(f"{label}={getattr(args, attr)}")
+    return scope_flags
 
 
 def progress_bar(current, total, label="", width=28):

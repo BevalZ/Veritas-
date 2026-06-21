@@ -635,6 +635,47 @@ def _minimal_run_args(input_path, output_path):
     )
 
 
+def test_run_logging_detects_pdf_input_and_extraction_routes(tmp_path):
+    direct_pdf = tmp_path / "paper.pdf"
+    direct_pdf.write_text("pdf", encoding="utf-8")
+    project = tmp_path / "project"
+    nested_pdf = project / "supplement" / "appendix.PDF"
+    nested_pdf.parent.mkdir(parents=True)
+    nested_pdf.write_text("pdf", encoding="utf-8")
+
+    assert paper_audit.detect_pdf_input(direct_pdf) is True
+    assert paper_audit.detect_pdf_input(project) is True
+    assert paper_audit.detect_pdf_input(tmp_path / "paper.docx") is False
+    assert paper_audit.run_extraction_route(project) == "directory_multi_format"
+    assert paper_audit.run_extraction_route(direct_pdf, use_mineru_default=True) == "mineru_pdf"
+    assert paper_audit.run_extraction_route(direct_pdf, use_mineru_default=False) == "raw_pdf_stream"
+    assert paper_audit.run_extraction_route(tmp_path / "paper.docx") == "direct_docx"
+    assert paper_audit.run_extraction_route(tmp_path / "data.csv") == "spreadsheet_text"
+    assert paper_audit.run_extraction_route(tmp_path / "notes") == "file_text"
+
+
+def test_run_scope_flags_from_args_formats_limits():
+    args = types.SimpleNamespace(
+        no_mineru=True,
+        no_reference_online=False,
+        no_image_semantic=True,
+        no_image_detector=False,
+        llm_cache_only=True,
+        reference_online_limit=3,
+        image_audit_limit=None,
+        image_semantic_limit=2,
+        image_detector_limit=None,
+    )
+
+    assert paper_audit.run_scope_flags_from_args(args) == [
+        "--no-mineru",
+        "--no-image-semantic",
+        "--llm-cache-only",
+        "--reference-online-limit=3",
+        "--image-semantic-limit=2",
+    ]
+
+
 def test_run_audit_accepts_direct_docx_file_input(monkeypatch, tmp_path):
     docx_path = tmp_path / "paper.docx"
     docx_path.write_bytes(b"fake-docx")
@@ -992,6 +1033,9 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.get_resume_dir is paper_audit.get_resume_dir
     assert veritas.run_logging.resume_event is paper_audit.resume_event
     assert veritas.run_logging._allow_llm_cache_read is paper_audit._allow_llm_cache_read
+    assert veritas.run_logging.detect_pdf_input is paper_audit.detect_pdf_input
+    assert veritas.run_logging.run_extraction_route is paper_audit.run_extraction_route
+    assert veritas.run_logging.run_scope_flags_from_args is paper_audit.run_scope_flags_from_args
     assert veritas.run_logging.progress_bar is paper_audit.progress_bar
     assert veritas.run_logging.save_mineru_artifacts is paper_audit.save_mineru_artifacts
     assert veritas.adapter_types.AdapterResult is paper_audit.AdapterResult
