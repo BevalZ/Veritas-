@@ -302,7 +302,7 @@ from .resource_reporting import (
     format_resource_audit_html,
     format_resource_audit_markdown,
 )
-from .run_types import RunRequest, RunResult
+from .run_types import RunAuditContext, RunRequest, RunResult
 from .report_schema import LLM_REQUIRED_FINDING_FIELDS, normalize_llm_report_schema, parse_report
 from .report_checks import (
     _check_reason,
@@ -2953,19 +2953,19 @@ def _prepare_run_audit_context(input_path, args):
             IMAGE_SEMANTIC_CACHE_VERSION,
         ),
     )
-    return {
-        "output_dir": output_dir,
-        "output_stem": output_stem,
-        "resume_dir": resume_dir,
-        "retry_command": retry_command,
-        "failed_artifact_kwargs": failed_artifact_kwargs,
-        "run_runtime": run_runtime,
-        "run_workspace": run_workspace,
-        "allow_llm_cache_read": allow_llm_cache_read,
-        "allow_llm_cache_write": allow_llm_cache_write,
-        "has_pdf_input": has_pdf_input,
-        "use_mineru_default": use_mineru_default,
-    }
+    return RunAuditContext(
+        output_dir=output_dir,
+        output_stem=output_stem,
+        resume_dir=resume_dir,
+        retry_command=retry_command,
+        failed_artifact_kwargs=failed_artifact_kwargs,
+        run_runtime=run_runtime,
+        run_workspace=run_workspace,
+        allow_llm_cache_read=allow_llm_cache_read,
+        allow_llm_cache_write=allow_llm_cache_write,
+        has_pdf_input=has_pdf_input,
+        use_mineru_default=use_mineru_default,
+    )
 
 
 def _single_file_text_entry(file_path, text):
@@ -3741,16 +3741,16 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
         return RunResult.failed(failure, {}, meta={"input_path": str(input_path)})
 
     context = _prepare_run_audit_context(input_path, args)
-    output_dir = context["output_dir"]
-    resume_dir = context["resume_dir"]
-    retry_command = context["retry_command"]
-    failed_artifact_kwargs = context["failed_artifact_kwargs"]
-    run_runtime = context["run_runtime"]
-    run_workspace = context["run_workspace"]
-    allow_llm_cache_read = context["allow_llm_cache_read"]
-    allow_llm_cache_write = context["allow_llm_cache_write"]
-    has_pdf_input = context["has_pdf_input"]
-    use_mineru_default = context["use_mineru_default"]
+    output_dir = context.output_dir
+    resume_dir = context.resume_dir
+    retry_command = context.retry_command
+    failed_artifact_kwargs = context.failed_artifact_kwargs
+    run_runtime = context.run_runtime
+    run_workspace = context.run_workspace
+    allow_llm_cache_read = context.allow_llm_cache_read
+    allow_llm_cache_write = context.allow_llm_cache_write
+    has_pdf_input = context.has_pdf_input
+    use_mineru_default = context.use_mineru_default
     completed_stages = ["init", "runtime_config_loaded"]
     preflight_state = {}
     preflight_results = []

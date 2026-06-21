@@ -111,6 +111,22 @@ class RunRequest:
         )
 
 
+@dataclass
+class RunAuditContext:
+    """Prepared runtime context for one legacy audit orchestration run."""
+    output_dir: Path
+    output_stem: str
+    resume_dir: Path
+    retry_command: str
+    failed_artifact_kwargs: Dict[str, Any]
+    run_runtime: Dict[str, Any]
+    run_workspace: Dict[str, Any]
+    allow_llm_cache_read: bool
+    allow_llm_cache_write: bool
+    has_pdf_input: bool
+    use_mineru_default: bool
+
+
 def _failure_field(failure: Any, name: str, default=None):
     if isinstance(failure, dict):
         return failure.get(name, default)
@@ -161,4 +177,4 @@ class RunResult:
         )
 
 
-__all__ = ["RunRequest", "RunResult"]
+__all__ = ["RunRequest", "RunAuditContext", "RunResult"]
