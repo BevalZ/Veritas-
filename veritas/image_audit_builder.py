@@ -20,6 +20,39 @@ def _namespace_value(namespace, name, default=None):
     return (namespace or {}).get(name, default)
 
 
+def _run_semantic_image_checks(
+    analyses,
+    semantic_limit,
+    semantic_timeout,
+    semantic_cache,
+    semantic_cache_save,
+    semantic_priority_key,
+    effective_limit,
+    semantic_cache_key,
+    flush_image_cache,
+    call_semantic,
+):
+    semantic_checked = 0
+    semantic_candidates = sorted(analyses, key=semantic_priority_key)
+    semantic_queue = semantic_candidates[:effective_limit(semantic_limit, len(semantic_candidates))]
+    for idx, item in enumerate(semantic_queue, 1):
+        cache_key = semantic_cache_key(item.get("path", ""))
+        semantic_result = semantic_cache.get(cache_key)
+        if isinstance(semantic_result, dict) and semantic_result.get("status") == "error":
+            semantic_cache.pop(cache_key, None)
+            flush_image_cache(semantic_cache_save, "图像语义")
+            semantic_result = None
+        if not semantic_result:
+            print(f"  🖼️ 图像语义分析 [{idx}/{len(semantic_queue)}] {item.get('file', '')}")
+            semantic_result = call_semantic(item.get("path", ""), timeout=semantic_timeout)
+            if semantic_result.get("status") != "error":
+                semantic_cache[cache_key] = semantic_result
+                flush_image_cache(semantic_cache_save, "图像语义")
+        item["semantic"] = semantic_result
+        semantic_checked += 1
+    return semantic_checked
+
+
 def build_image_audit_from_namespace(
     namespace,
     input_path: str,
@@ -68,23 +101,18 @@ def build_image_audit_from_namespace(
     detector_cache = detector_cache if isinstance(detector_cache, dict) else {}
     semantic_checked = 0
     if semantic:
-        semantic_candidates = sorted(analyses, key=semantic_priority_key)
-        semantic_queue = semantic_candidates[:effective_limit(semantic_limit, len(semantic_candidates))]
-        for idx, item in enumerate(semantic_queue, 1):
-            cache_key = semantic_cache_key(item.get("path", ""))
-            semantic_result = semantic_cache.get(cache_key)
-            if isinstance(semantic_result, dict) and semantic_result.get("status") == "error":
-                semantic_cache.pop(cache_key, None)
-                flush_image_cache(semantic_cache_save, "图像语义")
-                semantic_result = None
-            if not semantic_result:
-                print(f"  🖼️ 图像语义分析 [{idx}/{len(semantic_queue)}] {item.get('file', '')}")
-                semantic_result = call_semantic(item.get("path", ""), timeout=semantic_timeout)
-                if semantic_result.get("status") != "error":
-                    semantic_cache[cache_key] = semantic_result
-                    flush_image_cache(semantic_cache_save, "图像语义")
-            item["semantic"] = semantic_result
-            semantic_checked += 1
+        semantic_checked = _run_semantic_image_checks(
+            analyses,
+            semantic_limit,
+            semantic_timeout,
+            semantic_cache,
+            semantic_cache_save,
+            semantic_priority_key,
+            effective_limit,
+            semantic_cache_key,
+            flush_image_cache,
+            call_semantic,
+        )
     detector_checked = 0
     if detector:
         detector_candidates = sorted(analyses, key=detector_priority_key)

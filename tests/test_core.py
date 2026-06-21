@@ -3450,6 +3450,36 @@ def test_build_image_audit_uses_semantic_cache(monkeypatch, tmp_path):
     assert calls["count"] == 1
 
 
+def test_run_semantic_image_checks_invalidates_error_cache_and_flushes_success():
+    analyses = [{"path": "img-a.png", "file": "img-a.png"}, {"path": "img-b.png", "file": "img-b.png"}]
+    cache = {
+        "img-a.png": {"status": "error", "message": "old error"},
+        "img-b.png": {"status": "ok", "summary": "cached"},
+    }
+    flushes = []
+    calls = []
+
+    checked = veritas.image_audit_builder._run_semantic_image_checks(
+        analyses,
+        semantic_limit=None,
+        semantic_timeout=9,
+        semantic_cache=cache,
+        semantic_cache_save=lambda: None,
+        semantic_priority_key=lambda item: item["file"],
+        effective_limit=lambda limit, count: count,
+        semantic_cache_key=lambda path: path,
+        flush_image_cache=lambda callback, label: flushes.append(label),
+        call_semantic=lambda path, timeout=45: (calls.append((path, timeout)) or {"status": "ok", "summary": "fresh"}),
+    )
+
+    assert checked == 2
+    assert calls == [("img-a.png", 9)]
+    assert flushes == ["图像语义", "图像语义"]
+    assert cache["img-a.png"] == {"status": "ok", "summary": "fresh"}
+    assert analyses[0]["semantic"] == {"status": "ok", "summary": "fresh"}
+    assert analyses[1]["semantic"] == {"status": "ok", "summary": "cached"}
+
+
 def test_build_image_audit_semantic_cache_key_includes_service_context(monkeypatch, tmp_path):
     image_path = tmp_path / "figure.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * (paper_audit.MIN_IMAGE_BYTES + 10))
