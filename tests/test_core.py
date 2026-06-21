@@ -2681,6 +2681,26 @@ def test_reference_online_error_result_contains_error_class_and_message():
     }
 
 
+def test_reference_audit_status_handles_offline_and_online_rules():
+    refs = [{"online": {"online_status": "verified"}}, {"online": {"online_status": "likely"}}]
+
+    assert veritas.reference_audit._reference_audit_status([], refs, False, 0) == "ok"
+    assert veritas.reference_audit._reference_audit_status(
+        [{"index": 1, "issues": ["missing_doi"]}],
+        refs,
+        False,
+        0,
+    ) == "needs_review"
+    assert veritas.reference_audit._reference_audit_status(
+        [{"index": 1, "issues": ["online_not_found"]}],
+        refs,
+        True,
+        2,
+    ) == "online_needs_review"
+    assert veritas.reference_audit._reference_audit_status([], [{"online": {"online_status": "verified"}}], True, 1) == "ok"
+    assert veritas.reference_audit._reference_audit_status([], refs, True, 2) == "needs_review"
+
+
 def test_parse_references_strips_mineru_markup():
     refs = """[[EXTRACTION_NOTE]] noise [[/EXTRACTION_NOTE]]
 [[BLOCK type=text page=1]]

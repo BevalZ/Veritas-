@@ -56,6 +56,29 @@ def _reference_online_error_result(ref, error, query_for, brief_text):
     }
 
 
+def _reference_audit_status(issues, refs, online, effective_online_limit):
+    status = "ok"
+    if issues:
+        status = "needs_review" if len(issues) < max(3, len(refs) // 3) else "weak"
+    if online and refs:
+        hard_online_issues = [
+            item for item in issues
+            if any(str(issue).startswith("online_") or issue in {"doi_not_found", "no_online_match"} for issue in item.get("issues", []))
+        ]
+        if hard_online_issues:
+            status = "online_needs_review" if len(hard_online_issues) < max(3, len(refs) // 3) else "online_weak"
+        elif effective_online_limit >= len(refs):
+            online_statuses = [
+                (ref.get("online") or {}).get("online_status")
+                for ref in refs
+            ]
+            if online_statuses and all(item == "verified" for item in online_statuses):
+                status = "ok"
+            elif online_statuses and all(item in {"verified", "likely"} for item in online_statuses):
+                status = "needs_review"
+    return status
+
+
 def audit_references_from_namespace(namespace, references_text, online=False, online_limit=50, timeout=10, cache=None):
     """Reference plausibility check with optional online scholarly database verification."""
     parse = _namespace_value(namespace, "parse_references", parse_references)
@@ -120,25 +143,7 @@ def audit_references_from_namespace(namespace, references_text, online=False, on
 
         if ref_issues:
             issues.append({"index": idx, "issues": ref_issues, "text": ref.get("text", "")})
-    status = "ok"
-    if issues:
-        status = "needs_review" if len(issues) < max(3, len(refs) // 3) else "weak"
-    if online and refs:
-        hard_online_issues = [
-            item for item in issues
-            if any(str(issue).startswith("online_") or issue in {"doi_not_found", "no_online_match"} for issue in item.get("issues", []))
-        ]
-        if hard_online_issues:
-            status = "online_needs_review" if len(hard_online_issues) < max(3, len(refs) // 3) else "online_weak"
-        elif effective_online_limit >= len(refs):
-            online_statuses = [
-                (ref.get("online") or {}).get("online_status")
-                for ref in refs
-            ]
-            if online_statuses and all(item == "verified" for item in online_statuses):
-                status = "ok"
-            elif online_statuses and all(item in {"verified", "likely"} for item in online_statuses):
-                status = "needs_review"
+    status = _reference_audit_status(issues, refs, online, effective_online_limit)
     return {
         "status": status,
         "reference_count": len(refs),
