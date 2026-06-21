@@ -1489,22 +1489,7 @@ class DesktopGuiApp:
         self.root.geometry("1220x760")
         self.root.minsize(1040, 640)
         self._configure_style()
-
-        self.input_var = tk.StringVar()
-        self.output_var = tk.StringVar()
-        self.input_display_var = tk.StringVar(value="拖入论文或项目目录")
-        self.output_display_var = tk.StringVar(value="选择报告目录")
-        self.fresh_var = tk.BooleanVar(value=False)
-        self.auto_open_var = tk.BooleanVar(value=True)
-        self.status_var = tk.StringVar(value="待命")
-        self.report_type_var = tk.StringVar(value="待生成")
-        self.risk_var = tk.StringVar(value="待评估")
-        self.summary_var = tk.StringVar(value="选择材料后开始分析。")
-        self.stage_var = tk.StringVar(value="待命")
-        self.progress_var = tk.DoubleVar(value=0.0)
-        self.log_title_var = tk.StringVar(value="运行日志")
-        self.config_summary_var = tk.StringVar(value="状态")
-        self.config_row_vars = []
+        self._init_view_variables()
 
         main = ttk.Frame(self.root, padding=14, style="App.TFrame")
         main.pack(fill=tk.BOTH, expand=True)
@@ -1521,7 +1506,30 @@ class DesktopGuiApp:
         right.columnconfigure(0, weight=1)
 
         self.drag_drop_available = self._enable_drag_drop_package()
+        self._build_sidebar(left)
+        self._build_report_area(right)
 
+    def _init_view_variables(self):
+        tk = self.tk
+        self.input_var = tk.StringVar()
+        self.output_var = tk.StringVar()
+        self.input_display_var = tk.StringVar(value="拖入论文或项目目录")
+        self.output_display_var = tk.StringVar(value="选择报告目录")
+        self.fresh_var = tk.BooleanVar(value=False)
+        self.auto_open_var = tk.BooleanVar(value=True)
+        self.status_var = tk.StringVar(value="待命")
+        self.report_type_var = tk.StringVar(value="待生成")
+        self.risk_var = tk.StringVar(value="待评估")
+        self.summary_var = tk.StringVar(value="选择材料后开始分析。")
+        self.stage_var = tk.StringVar(value="待命")
+        self.progress_var = tk.DoubleVar(value=0.0)
+        self.log_title_var = tk.StringVar(value="运行日志")
+        self.config_summary_var = tk.StringVar(value="状态")
+        self.config_row_vars = []
+
+    def _build_sidebar(self, left):
+        tk = self.tk
+        ttk = self.ttk
         ttk.Label(left, text="Veritas", style="Brand.TLabel").pack(anchor=tk.W, pady=(0, 16))
 
         input_card = ttk.Frame(left, padding=12, style="SidebarCard.TFrame")
@@ -1577,6 +1585,9 @@ class DesktopGuiApp:
             status_label.pack(side=tk.RIGHT)
             self.config_row_vars.append((name_var, status_var, status_label))
 
+    def _build_report_area(self, right):
+        tk = self.tk
+        ttk = self.ttk
         report = ttk.Frame(right, padding=14, style="ReportCard.TFrame")
         report.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         report.columnconfigure(0, weight=1)
