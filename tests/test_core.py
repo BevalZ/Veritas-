@@ -1119,6 +1119,18 @@ def test_save_llm_failure_cache_result_persists_payload_and_event(tmp_path):
     ]
 
 
+def test_llm_retry_start_summary_builds_failed_chunk_numbers_and_event_detail():
+    summary = paper_audit.llm_retry_start_summary(
+        [("chunk-a", 0, "timeout"), ("chunk-c", 2, "schema bad")],
+        llm_cache_only=True,
+    )
+
+    assert summary == {
+        "failed_chunks": [1, 3],
+        "event_detail": "failed_chunks=[1, 3]; cache_only=True",
+    }
+
+
 def test_llm_retry_failure_summary_builds_user_facing_details():
     summary = paper_audit.llm_retry_failure_summary(
         [(0, "timeout"), (2, "schema bad")],
@@ -1828,6 +1840,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.llm_chunk_cache_read_state is paper_audit.llm_chunk_cache_read_state
     assert veritas.run_logging.apply_llm_partial_report_warning is paper_audit.apply_llm_partial_report_warning
     assert veritas.run_logging.save_llm_failure_cache_result is paper_audit.save_llm_failure_cache_result
+    assert veritas.run_logging.llm_retry_start_summary is paper_audit.llm_retry_start_summary
     assert veritas.run_logging.llm_retry_failure_summary is paper_audit.llm_retry_failure_summary
     assert veritas.run_logging.llm_no_success_failure_summary is paper_audit.llm_no_success_failure_summary
     assert veritas.run_logging.llm_merge_done_detail is paper_audit.llm_merge_done_detail

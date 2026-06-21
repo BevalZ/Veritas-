@@ -175,6 +175,7 @@ from .run_logging import (
     llm_merge_done_detail,
     llm_no_success_failure_summary,
     llm_retry_failure_summary,
+    llm_retry_start_summary,
     llm_success_cache_payload,
     online_cache_state,
     progress_bar,
@@ -3359,8 +3360,9 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             progress_bar(chunk_idx + 1, total_chunks, f"阶段3/5 LLM审查完成：第{chunk_idx+1}/{total_chunks}块")
 
         if failed_chunks:
-            print(f"🔁 首轮完成，按顺序重试失败块: {[idx+1 for _, idx, _ in failed_chunks]}")
-            resume_event(resume_dir, "stage3_llm_retry", "start", f"failed_chunks={[idx+1 for _, idx, _ in failed_chunks]}; cache_only={getattr(args, 'llm_cache_only', False)}")
+            retry_summary = llm_retry_start_summary(failed_chunks, getattr(args, "llm_cache_only", False))
+            print(f"🔁 首轮完成，按顺序重试失败块: {retry_summary['failed_chunks']}")
+            resume_event(resume_dir, "stage3_llm_retry", "start", retry_summary["event_detail"])
             still_failed = []
             if getattr(args, "llm_cache_only", False):
                 still_failed = [(idx, first_error) for _, idx, first_error in failed_chunks]

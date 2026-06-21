@@ -26,6 +26,7 @@ __all__ = [
     "llm_chunk_cache_read_state",
     "apply_llm_partial_report_warning",
     "save_llm_failure_cache_result",
+    "llm_retry_start_summary",
     "llm_retry_failure_summary",
     "llm_no_success_failure_summary",
     "llm_merge_done_detail",
@@ -405,6 +406,15 @@ def save_llm_failure_cache_result(
         f"chunk={chunk_idx+1}/{total_chunks}; error={error}",
         cache=str(chunk_cache),
     )
+
+
+def llm_retry_start_summary(failed_chunks, llm_cache_only):
+    """Build summary fields for the text-LLM retry phase start."""
+    failed_nums = [idx + 1 for _, idx, _ in failed_chunks]
+    return {
+        "failed_chunks": failed_nums,
+        "event_detail": f"failed_chunks={failed_nums}; cache_only={llm_cache_only}",
+    }
 
 
 def llm_retry_failure_summary(still_failed, strict_failed_chunks):
