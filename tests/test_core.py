@@ -1379,6 +1379,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.report_checks._merged_group_html is paper_audit._merged_group_html
     assert callable(veritas.report_html_fragments.build_html_report_body_from_namespace)
     assert callable(veritas.report_html_fragments.build_html_report_context_from_namespace)
+    assert callable(veritas.report_html_fragments.build_html_report_head)
     assert callable(veritas.report_html_fragments.build_html_status_fragments_from_namespace)
     assert callable(veritas.report_html_sections.format_html_check_sections_from_namespace)
     assert callable(veritas.report_markdown.format_report_from_namespace)
@@ -3867,6 +3868,17 @@ def test_format_html_report_normalizes_cached_directory_meta(tmp_path):
 
     assert "N/A MB" not in rendered
     assert "<span>提取方式</span><strong>directory_multi_format</strong>" in rendered
+
+
+def test_build_html_report_head_contains_shell_styles_and_risk_color():
+    head = paper_audit.build_html_report_head("#123456")
+
+    assert head.startswith("<!DOCTYPE html>")
+    assert "<html lang=\"zh-CN\">" in head
+    assert "<style>" in head
+    assert "</head>" in head
+    assert "background: #123456;" in head
+    assert ".score-panel" in head
 
 
 def test_clipboard_windows_uses_clip_exe_without_shell(monkeypatch):
