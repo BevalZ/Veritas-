@@ -1890,6 +1890,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.web_runner.web_runner_page_body_markup is paper_audit.web_runner_page_body_markup
     assert veritas.web_runner.web_runner_page_head_markup is paper_audit.web_runner_page_head_markup
     assert veritas.web_runner.web_runner_page_script_markup is paper_audit.web_runner_page_script_markup
+    assert veritas.web_runner.web_runner_page_bootstrap_script is paper_audit.web_runner_page_bootstrap_script
     assert veritas.web_runner.render_web_runner_page is paper_audit.render_web_runner_page
     assert veritas.web_runner.web_runner_cors_headers is paper_audit.web_runner_cors_headers
     assert callable(veritas.web_runner.web_runner_default_output_stem_from_namespace)
@@ -5115,6 +5116,9 @@ def test_web_runner_page_contains_workbench_controls():
     assert paper_audit.web_runner_page_styles() in rendered
     assert paper_audit.web_runner_page_body_markup() in rendered
     assert paper_audit.web_runner_page_script_markup("console.log('ok');") == "<script>\nconsole.log('ok');\n</script>\n</body>\n</html>"
+    assert paper_audit.web_runner_page_bootstrap_script() in rendered
+    assert "startRunWithPayload(startPayloadFromForm())" in paper_audit.web_runner_page_bootstrap_script()
+    assert "dropZone.addEventListener" in paper_audit.web_runner_page_bootstrap_script()
     assert "custom-css" in paper_audit.web_runner_page_head_markup("custom-css")
     assert ".drop-zone.dragover" in paper_audit.web_runner_page_styles()
     assert "@media (max-width:900px)" in paper_audit.web_runner_page_styles()

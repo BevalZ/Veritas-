@@ -394,6 +394,45 @@ def web_runner_page_script_markup(script):
     return "<script>\n" + str(script).strip("\n") + "\n</script>\n</body>\n</html>"
 
 
+def web_runner_page_bootstrap_script():
+    """Return event binding and initial refresh JavaScript for the Web Runner page."""
+    return """$('startBtn').addEventListener('click', async () => {
+  if (!$('outputPath').value && $('inputPath').value) {
+    $('outputPath').value = defaultOutputStemForInput($('inputPath').value);
+  }
+  await startRunWithPayload(startPayloadFromForm());
+});
+$('pickFileBtn').addEventListener('click', () => chooseLocalPath('input_file'));
+$('pickDirectoryBtn').addEventListener('click', () => chooseLocalPath('input_directory'));
+$('pickOutputBtn').addEventListener('click', () => chooseLocalPath('output_directory'));
+$('cancelBtn').addEventListener('click', async () => {
+  if (!activeRunId) return;
+  await api(`/api/runs/${encodeURIComponent(activeRunId)}/cancel`, {method:'POST', body:'{}'});
+  pollLogs();
+});
+const dropZone = $('inputDropZone');
+['dragenter', 'dragover'].forEach(name => dropZone.addEventListener(name, (event) => {
+  if (!dragHasFiles(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  dropZone.classList.add('dragover');
+}));
+['dragleave', 'drop'].forEach(name => dropZone.addEventListener(name, (event) => {
+  if (!dragHasFiles(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  dropZone.classList.remove('dragover');
+  if (name === 'drop') applyDroppedPath(event.dataTransfer);
+}));
+['dragover', 'drop'].forEach(name => document.addEventListener(name, (event) => {
+  if (!dragHasFiles(event)) return;
+  event.preventDefault();
+}));
+refreshConfig();
+renderCurrentRun(null);
+refreshRuns();"""
+
+
 def render_web_runner_page():
     return web_runner_page_head_markup() + web_runner_page_body_markup() + web_runner_page_script_markup("""
 const $ = (id) => document.getElementById(id);
@@ -691,42 +730,7 @@ async function pollLogs() {
     setStatus(e.error || 'error', 'failed');
   }
 }
-$('startBtn').addEventListener('click', async () => {
-  if (!$('outputPath').value && $('inputPath').value) {
-    $('outputPath').value = defaultOutputStemForInput($('inputPath').value);
-  }
-  await startRunWithPayload(startPayloadFromForm());
-});
-$('pickFileBtn').addEventListener('click', () => chooseLocalPath('input_file'));
-$('pickDirectoryBtn').addEventListener('click', () => chooseLocalPath('input_directory'));
-$('pickOutputBtn').addEventListener('click', () => chooseLocalPath('output_directory'));
-$('cancelBtn').addEventListener('click', async () => {
-  if (!activeRunId) return;
-  await api(`/api/runs/${encodeURIComponent(activeRunId)}/cancel`, {method:'POST', body:'{}'});
-  pollLogs();
-});
-const dropZone = $('inputDropZone');
-['dragenter', 'dragover'].forEach(name => dropZone.addEventListener(name, (event) => {
-  if (!dragHasFiles(event)) return;
-  event.preventDefault();
-  event.stopPropagation();
-  dropZone.classList.add('dragover');
-}));
-['dragleave', 'drop'].forEach(name => dropZone.addEventListener(name, (event) => {
-  if (!dragHasFiles(event)) return;
-  event.preventDefault();
-  event.stopPropagation();
-  dropZone.classList.remove('dragover');
-  if (name === 'drop') applyDroppedPath(event.dataTransfer);
-}));
-['dragover', 'drop'].forEach(name => document.addEventListener(name, (event) => {
-  if (!dragHasFiles(event)) return;
-  event.preventDefault();
-}));
-refreshConfig();
-renderCurrentRun(null);
-refreshRuns();
-""")
+""" + web_runner_page_bootstrap_script())
 
 
 def web_runner_cors_headers():
@@ -757,6 +761,7 @@ __all__ = [
     "web_runner_page_body_markup",
     "web_runner_page_head_markup",
     "web_runner_page_script_markup",
+    "web_runner_page_bootstrap_script",
     "render_web_runner_page",
     "web_runner_cors_headers",
 ]

@@ -378,7 +378,7 @@ tests/
   require the `WebRunnerState` class: run timestamps/ids, history paths, safe
   run serialization, artifact summary extraction, local CORS headers, local
   path picking, dropped file URI parsing, static Web Runner workbench head/CSS/body
-  markup/script-wrapper/HTML rendering, Web Runner audit subprocess command preparation, and
+  markup/script-wrapper/bootstrap-script/HTML rendering, Web Runner audit subprocess command preparation, and
   namespace-aware config/default-output helpers.
   `veritas.legacy` may keep `WebRunnerState` and wrap namespace-aware helpers
   with its globals while the state machine remains in the compatibility layer.
