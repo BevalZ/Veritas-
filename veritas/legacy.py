@@ -181,6 +181,7 @@ from .run_logging import (
     run_extraction_route,
     run_input_manifest,
     run_scope_flags_from_args,
+    save_llm_failure_cache_result,
     save_mineru_artifacts,
     save_online_cache_result,
     save_stage1_extract_cache,
@@ -3340,8 +3341,16 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     print(f"  ⚠️ 第{chunk_idx+1}块LLM调用/解析失败，先记录并继续其他块: {e}")
                     failed_chunks.append((chunk_text, chunk_idx, str(e)))
                     if allow_llm_cache_write:
-                        _json_save(chunk_cache, llm_failure_cache_payload(e, chunk_idx, total_chunks, "failed_pending_retry"))
-                        resume_event(resume_dir, "stage3_llm_chunk", "failed_pending_retry", f"chunk={chunk_idx+1}/{total_chunks}; error={e}", cache=str(chunk_cache))
+                        save_llm_failure_cache_result(
+                            chunk_cache,
+                            e,
+                            chunk_idx,
+                            total_chunks,
+                            "failed_pending_retry",
+                            _json_save,
+                            resume_event,
+                            resume_dir,
+                        )
             if chunk_reports[chunk_idx] and not chunk_reports[chunk_idx].get("parse_error"):
                 print(f"     → 第{chunk_idx+1}块风险: {chunk_reports[chunk_idx].get('risk_level', '未知')}")
             progress_bar(chunk_idx + 1, total_chunks, f"阶段3/5 LLM审查完成：第{chunk_idx+1}/{total_chunks}块")
@@ -3363,8 +3372,17 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                         still_failed.append((chunk_idx, str(e)))
                         chunk_cache = llm_cache_dir / f"chunk_{chunk_idx:04d}.json"
                         if allow_llm_cache_write:
-                            _json_save(chunk_cache, llm_failure_cache_payload(e, chunk_idx, total_chunks, "failed_final", first_error=first_error))
-                            resume_event(resume_dir, "stage3_llm_chunk", "failed_final", f"chunk={chunk_idx+1}/{total_chunks}; error={e}", cache=str(chunk_cache))
+                            save_llm_failure_cache_result(
+                                chunk_cache,
+                                e,
+                                chunk_idx,
+                                total_chunks,
+                                "failed_final",
+                                _json_save,
+                                resume_event,
+                                resume_dir,
+                                first_error=first_error,
+                            )
             if still_failed:
                 failed_nums = [idx + 1 for idx, _ in still_failed]
                 detail = "; ".join([f"第{idx+1}块: {err}" for idx, err in still_failed])

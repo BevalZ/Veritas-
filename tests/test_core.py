@@ -1076,6 +1076,49 @@ def test_apply_llm_partial_report_warning_leaves_complete_report_unchanged():
     assert report == {"summary": "完整摘要"}
 
 
+def test_save_llm_failure_cache_result_persists_payload_and_event(tmp_path):
+    saved = {}
+    events = []
+    chunk_cache = tmp_path / "chunk_0001.json"
+
+    def fake_json_save(path, payload):
+        saved["path"] = path
+        saved["payload"] = payload
+
+    def fake_resume_event(resume_dir, step, status, detail, **extra):
+        events.append((resume_dir, step, status, detail, extra))
+
+    paper_audit.save_llm_failure_cache_result(
+        chunk_cache,
+        RuntimeError("schema bad"),
+        chunk_idx=1,
+        total_chunks=3,
+        status="failed_final",
+        json_save=fake_json_save,
+        resume_event_func=fake_resume_event,
+        resume_dir=tmp_path / "resume",
+        first_error="timeout",
+    )
+
+    assert saved["path"] == chunk_cache
+    assert saved["payload"]["report"] == {"parse_error": True, "raw_output": "schema bad"}
+    assert saved["payload"]["raw_content"] == "schema bad"
+    assert saved["payload"]["chunk_index"] == 1
+    assert saved["payload"]["total_chunks"] == 3
+    assert saved["payload"]["status"] == "failed_final"
+    assert saved["payload"]["first_error"] == "timeout"
+    assert isinstance(saved["payload"]["saved_at"], str)
+    assert events == [
+        (
+            tmp_path / "resume",
+            "stage3_llm_chunk",
+            "failed_final",
+            "chunk=2/3; error=schema bad",
+            {"cache": str(chunk_cache)},
+        )
+    ]
+
+
 def test_online_cache_state_loads_resume_cache_when_enabled(tmp_path):
     resume_dir = tmp_path / ".paper_audit_resume"
     resume_dir.mkdir()
@@ -1750,6 +1793,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.llm_failure_cache_payload is paper_audit.llm_failure_cache_payload
     assert veritas.run_logging.llm_chunk_cache_read_state is paper_audit.llm_chunk_cache_read_state
     assert veritas.run_logging.apply_llm_partial_report_warning is paper_audit.apply_llm_partial_report_warning
+    assert veritas.run_logging.save_llm_failure_cache_result is paper_audit.save_llm_failure_cache_result
     assert veritas.run_logging.online_cache_state is paper_audit.online_cache_state
     assert veritas.run_logging.save_online_cache_result is paper_audit.save_online_cache_result
     assert veritas.run_logging.image_audit_cache_state is paper_audit.image_audit_cache_state

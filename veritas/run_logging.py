@@ -25,6 +25,7 @@ __all__ = [
     "llm_failure_cache_payload",
     "llm_chunk_cache_read_state",
     "apply_llm_partial_report_warning",
+    "save_llm_failure_cache_result",
     "online_cache_state",
     "save_online_cache_result",
     "image_audit_cache_state",
@@ -370,6 +371,37 @@ def apply_llm_partial_report_warning(report, meta):
     report["_partial_warning"] = warning
     report["summary"] = warning + " " + str(report.get("summary", ""))
     return warning
+
+
+def save_llm_failure_cache_result(
+    chunk_cache,
+    error,
+    chunk_idx,
+    total_chunks,
+    status,
+    json_save,
+    resume_event_func,
+    resume_dir,
+    first_error=None,
+):
+    """Persist a failed text-LLM chunk cache and record its resume event."""
+    json_save(
+        chunk_cache,
+        llm_failure_cache_payload(
+            error,
+            chunk_idx,
+            total_chunks,
+            status,
+            first_error=first_error,
+        ),
+    )
+    resume_event_func(
+        resume_dir,
+        "stage3_llm_chunk",
+        status,
+        f"chunk={chunk_idx+1}/{total_chunks}; error={error}",
+        cache=str(chunk_cache),
+    )
 
 
 def online_cache_state(resume_dir, filename, no_resume, json_load):
