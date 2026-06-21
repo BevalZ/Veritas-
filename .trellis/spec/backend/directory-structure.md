@@ -296,8 +296,8 @@ tests/
   tests and user scripts can still monkeypatch evidence renderers, check
   helpers, HTML escaping, and text shortening.
 - `veritas/report_markdown.py` owns top-level Markdown report composition,
-  including metadata header, local statistics table, LLM finding summaries, and
-  aggregation of already-rendered audit sections. It should stay
+  including metadata header line construction, local statistics table, LLM
+  finding summaries, and aggregation of already-rendered audit sections. It should stay
   namespace-aware while compatibility wrappers live in `veritas.legacy`, so
   tests and user scripts can still monkeypatch section renderers, check
   helpers, version constants, runtime clock, and metadata normalization.

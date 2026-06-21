@@ -29,32 +29,17 @@ def _namespace_value(namespace, name, default=None):
     return (namespace or {}).get(name, default)
 
 
-def format_report_from_namespace(namespace, report, pdf_path, meta, stat_result):
-    """Format the audit result as a Markdown report."""
-    normalize_meta = _namespace_value(namespace, "normalize_run_meta", normalize_run_meta)
-    meta = normalize_meta(meta, pdf_path)
-    prompt_version = _namespace_value(namespace, "PROMPT_VERSION", PROMPT_VERSION)
-    schema_version = _namespace_value(namespace, "SCHEMA_VERSION", SCHEMA_VERSION)
-    adapter_version = _namespace_value(namespace, "ADAPTER_VERSION", ADAPTER_VERSION)
-    risk_rule_version = _namespace_value(namespace, "RISK_RULE_VERSION", RISK_RULE_VERSION)
-    current_year = _namespace_value(namespace, "runtime_utc_year", runtime_utc_year)
-    review_overview = _namespace_value(namespace, "format_review_overview_markdown", format_review_overview_markdown)
-    action_summary = _namespace_value(namespace, "format_audit_action_summary_markdown", format_audit_action_summary_markdown)
-    evidence_chain = _namespace_value(namespace, "format_evidence_chain_audit_markdown", format_evidence_chain_audit_markdown)
-    image_audit = _namespace_value(namespace, "format_image_audit_markdown", format_image_audit_markdown)
-    cross_file = _namespace_value(namespace, "format_cross_file_consistency_markdown", format_cross_file_consistency_markdown)
-    resource_audit = _namespace_value(namespace, "format_resource_audit_markdown", format_resource_audit_markdown)
-    reference_audit = _namespace_value(namespace, "format_reference_audit_markdown", format_reference_audit_markdown)
-    check_sort_key = _namespace_value(namespace, "_check_sort_key", _check_sort_key)
-    is_suspicious = _namespace_value(namespace, "_is_suspicious_check", _is_suspicious_check)
-    check_source_tags = _namespace_value(namespace, "_check_source_tags", _check_source_tags)
-    check_source_text = _namespace_value(namespace, "_check_source_text", _check_source_text)
-    check_reason = _namespace_value(namespace, "_check_reason", _check_reason)
-    merged_group_summary = _namespace_value(namespace, "_merged_group_summary_text", _merged_group_summary_text)
-    md_escape = _namespace_value(namespace, "_md_escape_cell", _md_escape_cell)
-    brief_text = _namespace_value(namespace, "_brief_text", _brief_text)
-
-    risk_icons = {"高": "🔴", "中": "🟡", "低": "🟢", "严重证据冲突": "⚫️"}
+def _markdown_report_metadata_lines(
+    report,
+    pdf_path,
+    meta,
+    prompt_version,
+    schema_version,
+    adapter_version,
+    risk_rule_version,
+    current_year,
+):
+    """Build the top-level Markdown metadata header lines."""
     artifact_type = meta.get("artifact_type") or "complete"
     artifact_label = "范围受限审查 (limited)" if artifact_type == "limited" else "完整审查 (complete)"
     runtime = meta.get("runtime") or {}
@@ -81,6 +66,45 @@ def format_report_from_namespace(namespace, report, pdf_path, meta, stat_result)
             lines.append(f"**LLM覆盖率**: ✅ {meta.get('llm_coverage')} 个分块全部成功")
     lines.append(f"**审查时间**: {runtime.get('local_time') or time.strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append(f"**运行时UTC年份**: {runtime.get('utc_year', current_year())}（用于未来发表年份等非LLM日期判断）")
+    return lines
+
+
+def format_report_from_namespace(namespace, report, pdf_path, meta, stat_result):
+    """Format the audit result as a Markdown report."""
+    normalize_meta = _namespace_value(namespace, "normalize_run_meta", normalize_run_meta)
+    meta = normalize_meta(meta, pdf_path)
+    prompt_version = _namespace_value(namespace, "PROMPT_VERSION", PROMPT_VERSION)
+    schema_version = _namespace_value(namespace, "SCHEMA_VERSION", SCHEMA_VERSION)
+    adapter_version = _namespace_value(namespace, "ADAPTER_VERSION", ADAPTER_VERSION)
+    risk_rule_version = _namespace_value(namespace, "RISK_RULE_VERSION", RISK_RULE_VERSION)
+    current_year = _namespace_value(namespace, "runtime_utc_year", runtime_utc_year)
+    review_overview = _namespace_value(namespace, "format_review_overview_markdown", format_review_overview_markdown)
+    action_summary = _namespace_value(namespace, "format_audit_action_summary_markdown", format_audit_action_summary_markdown)
+    evidence_chain = _namespace_value(namespace, "format_evidence_chain_audit_markdown", format_evidence_chain_audit_markdown)
+    image_audit = _namespace_value(namespace, "format_image_audit_markdown", format_image_audit_markdown)
+    cross_file = _namespace_value(namespace, "format_cross_file_consistency_markdown", format_cross_file_consistency_markdown)
+    resource_audit = _namespace_value(namespace, "format_resource_audit_markdown", format_resource_audit_markdown)
+    reference_audit = _namespace_value(namespace, "format_reference_audit_markdown", format_reference_audit_markdown)
+    check_sort_key = _namespace_value(namespace, "_check_sort_key", _check_sort_key)
+    is_suspicious = _namespace_value(namespace, "_is_suspicious_check", _is_suspicious_check)
+    check_source_tags = _namespace_value(namespace, "_check_source_tags", _check_source_tags)
+    check_source_text = _namespace_value(namespace, "_check_source_text", _check_source_text)
+    check_reason = _namespace_value(namespace, "_check_reason", _check_reason)
+    merged_group_summary = _namespace_value(namespace, "_merged_group_summary_text", _merged_group_summary_text)
+    md_escape = _namespace_value(namespace, "_md_escape_cell", _md_escape_cell)
+    brief_text = _namespace_value(namespace, "_brief_text", _brief_text)
+
+    risk_icons = {"高": "🔴", "中": "🟡", "低": "🟢", "严重证据冲突": "⚫️"}
+    lines = _markdown_report_metadata_lines(
+        report,
+        pdf_path,
+        meta,
+        prompt_version,
+        schema_version,
+        adapter_version,
+        risk_rule_version,
+        current_year,
+    )
 
     if not report.get("parse_error"):
         lines.extend([""])

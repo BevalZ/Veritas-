@@ -4595,6 +4595,39 @@ def test_report_headers_state_complete_or_limited(tmp_path):
     assert "用户关闭参考文献在线核验" in limited
 
 
+def test_markdown_report_metadata_lines_include_versions_scope_and_runtime():
+    lines = veritas.report_markdown._markdown_report_metadata_lines(
+        {"rule_version": "report-rule"},
+        "paper.pdf",
+        {
+            "artifact_type": "limited",
+            "limited_reasons": ["only cached LLM chunks"],
+            "chunk_count": 3,
+            "chunk_size": 1000,
+            "overlap": 120,
+            "llm_coverage": "2/3",
+            "llm_failed_chunks": [2],
+            "llm_partial_report": True,
+            "runtime": {"local_time": "2026-01-02 03:04:05", "utc_year": 2026},
+            "prompt_version": "meta-prompt",
+        },
+        "default-prompt",
+        "schema-v",
+        "adapter-v",
+        "rules-v",
+        lambda: 2099,
+    )
+
+    joined = "\n".join(lines)
+    assert "**产物类型**: 范围受限审查 (limited)" in joined
+    assert "prompt=meta-prompt；schema=schema-v；adapter=adapter-v；rules=report-rule" in joined
+    assert "**范围限制**: only cached LLM chunks" in joined
+    assert "分块审查 | 3块 | 单块上限1000字符 | 重叠120字符" in joined
+    assert "部分报告，仅成功审查 2/3 个分块；失败块: [2]" in joined
+    assert "**审查时间**: 2026-01-02 03:04:05" in joined
+    assert "**运行时UTC年份**: 2026" in joined
+
+
 def test_reports_include_review_overview_and_internal_evidence_links(tmp_path):
     stat = {
         "benford_deviation": None,
