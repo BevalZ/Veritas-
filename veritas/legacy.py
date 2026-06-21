@@ -695,7 +695,7 @@ def mineru_precision_extract_by_url(pdf_url, model_version="vlm", language="ch",
         return None, {"error": f"创建任务失败: {e}"}
 
     if result.get("code") != 0 and not result.get("data", {}).get("batch_id"):
-        return None, {"error": f"创建任务返回异常: {result}"}
+        return None, {"error": f"创建任务返回异常: HTTP {status}; {result}"}
 
     batch_id = result.get("data", {}).get("batch_id")
     if not batch_id:

@@ -115,7 +115,7 @@ def _parse_html_table_rows(text):
     rows = []
     for row_html in row_matches:
         cells = []
-        for tag, value in re.findall(r"<(td|th)\b[^>]*>(.*?)</\1>", row_html, flags=re.I | re.S):
+        for _tag, value in re.findall(r"<(td|th)\b[^>]*>(.*?)</\1>", row_html, flags=re.I | re.S):
             value = re.sub(r"<br\s*/?>", "\n", value, flags=re.I)
             value = re.sub(r"<[^>]+>", " ", value)
             cells.append(html.unescape(re.sub(r"\s+", " ", value).strip()))
