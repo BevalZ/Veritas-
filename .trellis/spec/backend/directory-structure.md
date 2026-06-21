@@ -42,6 +42,7 @@ veritas/
 ├── reference_parsing.py # Reference section parsing and query-building helpers
 ├── reference_reporting.py # Reference audit Markdown/HTML rendering helpers
 ├── renderers.py        # Markdown/HTML renderer boundary
+├── report_checks.py    # Deterministic LLM finding scoring/display helpers
 ├── resource_parsing.py # Resource URL extraction and classification helpers
 ├── resource_reporting.py # Resource audit Markdown/HTML rendering helpers
 ├── risk_rule_helpers.py # Shared risk scoring/merge helpers for rules/rendering
@@ -168,6 +169,10 @@ tests/
 - `veritas/reference_reporting.py` owns deterministic reference audit issue
   labels, online summary text, Markdown tables, and HTML cards. Reference
   parsing and online lookup remain outside this boundary.
+- `veritas/report_checks.py` owns deterministic LLM finding suspicion scoring,
+  source tags, source/reason extraction, merged-finding summary HTML, and check
+  sort/verdict helpers shared by report rendering and evidence-chain clustering.
+  It must remain provider-free and must not call text LLMs or external services.
 - `veritas/resource_parsing.py` owns deterministic extraction, cleanup,
   context capture, and classification of code/data/deployed-resource URLs from
   paper text. Resource availability network checks remain outside this boundary.
