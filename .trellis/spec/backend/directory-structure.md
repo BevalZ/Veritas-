@@ -30,6 +30,7 @@ veritas/
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
 ├── image_cache.py      # Image audit cache key and fingerprint helpers
 ├── image_reporting.py  # Image audit report and review-manifest rendering helpers
+├── image_results.py    # Image provider response normalization helpers
 ├── local_analysis.py   # Local statistics and text chunking helpers
 ├── mineru_text.py      # MinerU structured content-list text formatting helpers
 ├── models.py           # Stable dataclass/report models and model conversion
@@ -119,6 +120,9 @@ tests/
   display summaries, Markdown/HTML report sections, and the standalone
   `image_ai_review_manifest.html` review checklist. Provider calls and image
   collection stay outside this boundary.
+- `veritas/image_results.py` owns deterministic normalization of image semantic
+  model responses, imagedetector responses, provider timeout result payloads,
+  and JSON-object extraction from model text. It must not perform network I/O.
 - `veritas/evidence_rendering.py` owns deterministic evidence excerpt cleanup,
   MinerU table marker removal, Markdown/HTML table parsing, data-table HTML
   rendering, and compact evidence summary HTML. It must remain provider-free

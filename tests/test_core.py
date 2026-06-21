@@ -793,6 +793,9 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert callable(veritas.image_reporting.format_image_audit_html)
     assert callable(veritas.image_reporting.format_image_audit_markdown)
     assert callable(veritas.image_reporting.save_image_review_manifest)
+    assert veritas.image_results._normalize_glm_image_result is paper_audit._normalize_glm_image_result
+    assert veritas.image_results._normalize_detector_result is paper_audit._normalize_detector_result
+    assert veritas.image_results._extract_json_object is paper_audit._extract_json_object
     assert veritas.text_utils._brief_text is paper_audit._brief_text
     assert veritas.text_utils._normalize_title is paper_audit._normalize_title
     assert veritas.text_utils._title_tokens is paper_audit._title_tokens
