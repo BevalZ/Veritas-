@@ -825,6 +825,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.image_results._normalize_glm_image_result is paper_audit._normalize_glm_image_result
     assert veritas.image_results._normalize_detector_result is paper_audit._normalize_detector_result
     assert veritas.image_results._extract_json_object is paper_audit._extract_json_object
+    assert callable(veritas.image_local_analysis.analyze_image_reasonability_from_namespace)
     assert veritas.image_payloads._image_to_data_url is paper_audit._image_to_data_url
     assert veritas.image_payloads._prepare_detector_upload_file is paper_audit._prepare_detector_upload_file
     assert veritas.image_collection._dedupe_paths is paper_audit._dedupe_paths
@@ -2326,6 +2327,19 @@ def test_image_payload_helpers_fallback_to_raw_file_bytes(tmp_path):
     assert upload_name == "figure.txt"
     assert upload_mime == "text/plain"
     assert upload_content == b"not-an-image"
+
+
+def test_analyze_image_reasonability_preserves_min_size_monkeypatch(monkeypatch, tmp_path):
+    image_path = tmp_path / "figure.bin"
+    image_path.write_bytes(b"x" * 10)
+
+    monkeypatch.setattr(paper_audit, "MIN_IMAGE_BYTES", 100)
+    small = paper_audit.analyze_image_reasonability(image_path)
+    monkeypatch.setattr(paper_audit, "MIN_IMAGE_BYTES", 1)
+    large_enough = paper_audit.analyze_image_reasonability(image_path)
+
+    assert "too_small" in small["issues"]
+    assert "too_small" not in large_enough["issues"]
 
 
 def test_call_imagedetector_uses_web_upload_flow(monkeypatch, tmp_path):

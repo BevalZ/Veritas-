@@ -34,6 +34,7 @@ veritas/
 ├── http_client.py      # Shared low-level HTTP request helper
 ├── image_cache.py      # Image audit cache key and fingerprint helpers
 ├── image_collection.py # Local image discovery and MinerU zip image extraction helpers
+├── image_local_analysis.py # Local image sanity checks before provider review
 ├── image_payloads.py   # Local image payload preparation helpers
 ├── image_reporting.py  # Image audit report and review-manifest rendering helpers
 ├── image_results.py    # Image provider response normalization helpers
@@ -147,6 +148,10 @@ tests/
   and newest-per-source MinerU ZIP selection. It must not call image providers;
   `veritas.legacy` may wrap namespace-aware helpers so historical monkeypatches
   of image size/extension constants continue to affect collection.
+- `veritas/image_local_analysis.py` owns local image sanity checks before
+  provider review. It may use optional Pillow for local dimensions/statistics
+  but must not call image providers; legacy wrappers preserve `MIN_IMAGE_BYTES`
+  monkeypatch behavior.
 - `veritas/image_payloads.py` owns local image-to-data-URL conversion and
   imagedetector upload-file preparation. It may use optional Pillow for local
   resizing/conversion but must not call image providers or network services.

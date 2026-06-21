@@ -1,6 +1,6 @@
 """Public package boundary for Veritas paper audit."""
 
-from . import adapter_types, adapters, artifacts, cli, config, cross_file_consistency, desktop_gui, evaluation, evidence_chain, evidence_rendering, external_timeout, failed_diagnostics, fake_adapters, file_utils, followups, html_utils, http_client, image_cache, image_collection, image_payloads, image_reporting, image_results, image_selection, limit_utils, local_analysis, markdown_utils, mineru_text, models, paper_identity, preflight, preflight_types, production_adapters, project_files, reference_parsing, reference_reporting, renderers, report_action_context, report_action_panel, report_action_service, report_checks, report_schema, resource_availability, resource_parsing, resource_reporting, retry_commands, review_overview, risk_rule_helpers, risk_rules, run, run_logging, run_types, runtime_config, runtime_metadata, text_extraction, text_utils, versions, web_runner, web_runner_paths, workspace
+from . import adapter_types, adapters, artifacts, cli, config, cross_file_consistency, desktop_gui, evaluation, evidence_chain, evidence_rendering, external_timeout, failed_diagnostics, fake_adapters, file_utils, followups, html_utils, http_client, image_cache, image_collection, image_local_analysis, image_payloads, image_reporting, image_results, image_selection, limit_utils, local_analysis, markdown_utils, mineru_text, models, paper_identity, preflight, preflight_types, production_adapters, project_files, reference_parsing, reference_reporting, renderers, report_action_context, report_action_panel, report_action_service, report_checks, report_schema, resource_availability, resource_parsing, resource_reporting, retry_commands, review_overview, risk_rule_helpers, risk_rules, run, run_logging, run_types, runtime_config, runtime_metadata, text_extraction, text_utils, versions, web_runner, web_runner_paths, workspace
 
 __all__ = [
     "adapter_types",
@@ -22,6 +22,7 @@ __all__ = [
     "http_client",
     "image_cache",
     "image_collection",
+    "image_local_analysis",
     "image_payloads",
     "image_reporting",
     "image_results",

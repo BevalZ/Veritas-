@@ -77,6 +77,7 @@ from .image_collection import (
     _latest_mineru_zips,
     collect_mineru_image_files_from_namespace,
 )
+from .image_local_analysis import analyze_image_reasonability_from_namespace
 from .image_payloads import _image_to_data_url, _prepare_detector_upload_file
 from .image_reporting import (
     _image_detector_display,
@@ -4761,50 +4762,7 @@ def collect_mineru_image_files(input_path: str, output_dir=None) -> List[str]:
 
 
 def analyze_image_reasonability(image_path: str):
-    """Lightweight local image sanity checks before external AI-image review."""
-    result = {
-        "path": str(image_path),
-        "file": Path(image_path).name,
-        "size_bytes": 0,
-        "width": None,
-        "height": None,
-        "format": "",
-        "risk": "needs_online_check",
-        "issues": [],
-    }
-    try:
-        path = Path(image_path)
-        result["size_bytes"] = path.stat().st_size
-        if result["size_bytes"] < MIN_IMAGE_BYTES:
-            result["issues"].append("too_small")
-        try:
-            from PIL import Image, ImageStat
-            with Image.open(path) as img:
-                result["width"], result["height"] = img.size
-                result["format"] = img.format or path.suffix.lstrip(".")
-                if result["width"] < 120 or result["height"] < 120:
-                    result["issues"].append("low_resolution")
-                ratio = max(result["width"], result["height"]) / max(1, min(result["width"], result["height"]))
-                if ratio > 8:
-                    result["issues"].append("extreme_aspect_ratio")
-                stat = ImageStat.Stat(img.convert("L").resize((128, 128)))
-                if stat.stddev and stat.stddev[0] < 3:
-                    result["issues"].append("near_blank_or_flat")
-                if stat.stddev and stat.stddev[0] > 85:
-                    result["issues"].append("very_high_noise_or_contrast")
-        except ImportError:
-            result["issues"].append("pillow_not_installed")
-        except Exception as e:
-            result["issues"].append(f"image_parse_error:{type(e).__name__}")
-    except Exception as e:
-        result["issues"].append(f"file_error:{type(e).__name__}")
-
-    severe = {"low_resolution", "near_blank_or_flat", "image_parse_error:UnidentifiedImageError"}
-    if any(issue in severe or issue.startswith("file_error") for issue in result["issues"]):
-        result["risk"] = "local_warning"
-    elif not result["issues"]:
-        result["risk"] = "local_ok"
-    return result
+    return analyze_image_reasonability_from_namespace(globals(), image_path)
 
 
 def _image_file_fingerprint(image_path: str):
