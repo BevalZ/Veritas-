@@ -812,6 +812,10 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.project_files._main_paper_score is paper_audit._main_paper_score
     assert veritas.project_files._is_missing_meta_value is paper_audit._is_missing_meta_value
     assert veritas.project_files.normalize_run_meta is paper_audit.normalize_run_meta
+    assert veritas.cross_file_consistency.build_cross_file_consistency_audit is paper_audit.build_cross_file_consistency_audit
+    assert veritas.cross_file_consistency._cross_file_severity_label is paper_audit._cross_file_severity_label
+    assert veritas.cross_file_consistency.format_cross_file_consistency_html is paper_audit.format_cross_file_consistency_html
+    assert veritas.cross_file_consistency.format_cross_file_consistency_markdown is paper_audit.format_cross_file_consistency_markdown
     assert veritas.reference_parsing.split_references_from_text is paper_audit.split_references_from_text
     assert veritas.reference_parsing.parse_references is paper_audit.parse_references
     assert veritas.reference_parsing.extract_reference_title is paper_audit.extract_reference_title

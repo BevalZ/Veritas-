@@ -4795,6 +4795,29 @@ def format_cross_file_consistency_html(audit):
   </div>"""
 
 
+from .cross_file_consistency import (
+    _cross_file_context_match,
+    _cross_file_figure_table_findings,
+    _cross_file_finding,
+    _cross_file_group_findings,
+    _cross_file_is_noisy,
+    _cross_file_sample_findings,
+    _cross_file_segment_text,
+    _cross_file_severity_label,
+    _cross_file_shared_terms,
+    _cross_file_source_label,
+    _cross_file_source_rank,
+    _cross_file_terms,
+    _extract_cross_file_group_labels,
+    _extract_cross_file_sample_records,
+    _extract_supplementary_refs,
+    _normalize_group_label,
+    build_cross_file_consistency_audit,
+    format_cross_file_consistency_html,
+    format_cross_file_consistency_markdown,
+)
+
+
 def _is_suspicious_check(c):
     verdict = str(c.get("verdict", ""))
     return ("红旗" in verdict) or ("疑点" in verdict) or ("可疑" in verdict)

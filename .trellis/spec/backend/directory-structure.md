@@ -23,6 +23,7 @@ veritas/
 ├── artifacts.py        # Formal artifact path and outcome helpers
 ├── cli.py              # CLI entry point boundary
 ├── config.py           # Runtime configuration boundary
+├── cross_file_consistency.py # Cross-file consistency audit and rendering helpers
 ├── desktop_gui.py      # Desktop GUI helper boundary
 ├── evidence_rendering.py # Evidence excerpt/table rendering helpers
 ├── failed_diagnostics.py # Stable failed-audit payload and conversion helpers
@@ -150,6 +151,11 @@ tests/
   project directory file discovery/classification, main-paper scoring, missing
   metadata detection, and run metadata normalization. Keep this boundary
   deterministic and filesystem-local; provider extraction remains elsewhere.
+- `veritas/cross_file_consistency.py` owns deterministic cross-file text
+  segmentation, sample-size/group-label/supplement-reference consistency
+  findings, and Markdown/HTML rendering for the cross-file audit section. It
+  must remain provider-free and should consume already-extracted file entries
+  rather than reading project files itself.
 - `veritas/paper_identity.py` owns best-effort article title, journal, and
   author extraction for follow-up draft context. It should stay deterministic
   and may reuse evidence cleanup helpers, but must not call providers.
