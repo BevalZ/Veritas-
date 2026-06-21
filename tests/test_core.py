@@ -1020,6 +1020,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.web_runner.web_runner_cors_headers is paper_audit.web_runner_cors_headers
     assert callable(veritas.web_runner.web_runner_default_output_stem_from_namespace)
     assert callable(veritas.web_runner.web_runner_config_status_from_namespace)
+    assert callable(veritas.web_runner.web_runner_start_command_from_namespace)
 
 
 def test_update_patterns_uses_namespace_and_fake_llm(monkeypatch, tmp_path):

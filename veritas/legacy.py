@@ -358,6 +358,7 @@ from .web_runner import (
     web_runner_config_status_from_namespace,
     web_runner_cors_headers,
     web_runner_default_output_stem_from_namespace,
+    web_runner_start_command_from_namespace,
 )
 from .workspace import (
     create_run_workspace,
@@ -1160,32 +1161,12 @@ class WebRunnerState:
         return {"ok": True, "run_id": str(run_id), "offset": len(logs), "lines": logs[start:]}
 
     def start_run(self, input_path, output=None, fresh=False):
-        input_text = str(input_path or "").strip()
-        if not input_text:
-            return {"ok": False, "error": "input_path_required", "message": "请输入文件或目录路径。"}, 400
-        resolved = resolve_web_runner_input_path(input_text, search_roots=_web_runner_common_search_roots())
-        if not resolved.get("ok"):
-            status = 409 if resolved.get("error") == "ambiguous_input_path" else 400
-            return resolved, status
-        resolved_input = str(Path(resolved.get("path")).expanduser())
-        command = [
-            sys.executable,
-            str(_report_action_entrypoint()),
-            resolved_input,
-            "--json",
-            "--no-open",
-        ]
-        output_text = str(output or "").strip()
-        if not output_text:
-            output_text = web_runner_default_output_stem(resolved_input)
-        if output_text:
-            try:
-                Path(output_text).expanduser().parent.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                return {"ok": False, "error": "output_prepare_failed", "message": f"{type(e).__name__}: {_brief_text(str(e), 240)}"}, 500
-            command.extend(["-o", output_text])
-        if fresh:
-            command.append("--fresh")
+        prepared = web_runner_start_command_from_namespace(globals(), input_path, output=output, fresh=fresh)
+        if not prepared.get("ok"):
+            return prepared["response"], prepared["status"]
+        resolved_input = prepared["input_path"]
+        output_text = prepared["output"]
+        command = prepared["command"]
 
         with self.lock:
             if self.active_run_id:

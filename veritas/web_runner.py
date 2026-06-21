@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import json
 import os
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -138,6 +139,68 @@ def web_runner_config_status_from_namespace(namespace):
     }
 
 
+def web_runner_start_command_from_namespace(namespace, input_path, output=None, fresh=False):
+    """Resolve a Web Runner input and build the isolated audit subprocess command."""
+    path_cls = _namespace_value(namespace, "Path", Path)
+    brief_text = _namespace_value(namespace, "_brief_text", _brief_text)
+    resolve_input = _namespace_value(namespace, "resolve_web_runner_input_path")
+    search_roots = _namespace_value(namespace, "_web_runner_common_search_roots")
+    default_output = _namespace_value(namespace, "web_runner_default_output_stem", web_runner_default_output_stem)
+    entrypoint = _namespace_value(namespace, "_report_action_entrypoint")
+    sys_module = _namespace_value(namespace, "sys", sys)
+
+    input_text = str(input_path or "").strip()
+    if not input_text:
+        return {
+            "ok": False,
+            "response": {"ok": False, "error": "input_path_required", "message": "请输入文件或目录路径。"},
+            "status": 400,
+        }
+    if not callable(resolve_input) or not callable(search_roots):
+        raise RuntimeError("web runner start namespace is incomplete")
+    resolved = resolve_input(input_text, search_roots=search_roots())
+    if not resolved.get("ok"):
+        return {
+            "ok": False,
+            "response": resolved,
+            "status": 409 if resolved.get("error") == "ambiguous_input_path" else 400,
+        }
+
+    resolved_input = str(path_cls(resolved.get("path")).expanduser())
+    if not callable(entrypoint):
+        raise RuntimeError("web runner entrypoint namespace is incomplete")
+    command = [
+        sys_module.executable,
+        str(entrypoint()),
+        resolved_input,
+        "--json",
+        "--no-open",
+    ]
+    output_text = str(output or "").strip()
+    if not output_text:
+        output_text = default_output(resolved_input) if callable(default_output) else web_runner_default_output_stem(resolved_input)
+    if output_text:
+        try:
+            path_cls(output_text).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            return {
+                "ok": False,
+                "response": {"ok": False, "error": "output_prepare_failed", "message": f"{type(e).__name__}: {brief_text(str(e), 240)}"},
+                "status": 500,
+            }
+        command.extend(["-o", output_text])
+    if fresh:
+        command.append("--fresh")
+
+    return {
+        "ok": True,
+        "input_path": resolved_input,
+        "output": output_text,
+        "fresh": bool(fresh),
+        "command": command,
+    }
+
+
 def pick_local_path(mode, dialog_runner=None):
     """Open a local native picker when available; never browse files over HTTP."""
     if mode not in {"input_file", "input_directory", "output_directory"}:
@@ -202,6 +265,7 @@ __all__ = [
     "_web_runner_report_summary_from_payload",
     "_web_runner_capability_status",
     "web_runner_config_status_from_namespace",
+    "web_runner_start_command_from_namespace",
     "pick_local_path",
     "dropped_local_path_from_uri_text",
     "web_runner_cors_headers",
