@@ -7,7 +7,7 @@
 输入论文文件或目录 → 文本提取 → 本地统计检测 + LLM语义分析 → 输出md/html格式报告
 用法: python paper_audit.py <paper_path> [--mineru] [--max-chars 8000] [--output report.md]
 """
-import re, json, time, argparse, urllib.request, urllib.parse, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, hashlib, html, base64, io, concurrent.futures, signal, threading, datetime
+import re, json, time, argparse, urllib.request, urllib.parse, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, hashlib, base64, io, concurrent.futures, signal, threading, datetime
 from pathlib import Path
 from typing import Tuple, Dict, List, Any, Callable
 
@@ -203,15 +203,22 @@ from .production_adapters import (
 )
 from .reference_parsing import (
     REFERENCE_CONTAINER_WORD_RE,
+    REFERENCE_OFFICIAL_SITE_RULES,
     _author_similarity,
     _clean_reference_text,
+    _html_title,
+    _html_to_searchable_text,
     _looks_like_reference_author_fragment,
     _looks_like_reference_container_part,
     _looks_like_reference_table_noise,
     _name_tokens,
     _normalize_doi,
+    _official_page_matches_reference,
+    _official_site_search_urls,
     _reference_items_from_numbered_lines,
     _reference_year,
+    _score_reference_match,
+    _score_reference_matches,
     _truncate_reference_suffix,
     build_reference_query,
     extract_reference_author_hint,
@@ -3054,85 +3061,6 @@ def lookup_pubmed_reference(ref, timeout=10):
     return [_pubmed_summary_to_match(uid, result.get(uid) or {}) for uid in ids if result.get(uid)]
 
 
-REFERENCE_OFFICIAL_SITE_RULES = [
-    (("ca cancer", "international journal of cancer"), "Wiley Online Library", "https://onlinelibrary.wiley.com/action/doSearch?AllField={query}"),
-    (("thyroid",), "Mary Ann Liebert", "https://www.liebertpub.com/action/doSearch?AllField={query}"),
-    (("nature reviews", "nat commun", "nature communications"), "Nature", "https://www.nature.com/search?q={query}"),
-    (("current opinion in oncology", "lww",), "LWW Journals", "https://journals.lww.com/pages/results.aspx?txtKeywords={query}"),
-    (("journal of clinical endocrinology", "endocrinology and metabolism"), "Oxford Academic", "https://academic.oup.com/search-results?page=1&q={query}"),
-    (("annals of oncology", "esmo open"), "Elsevier ClinicalKey", "https://www.annalsofoncology.org/action/doSearch?AllField={query}"),
-    (("lancet",), "The Lancet", "https://www.thelancet.com/action/doSearch?AllField={query}"),
-    (("cancers basel", "mdpi",), "MDPI", "https://www.mdpi.com/search?q={query}"),
-    (("proceedings of the national academy", "pnas"), "PNAS", "https://www.pnas.org/action/doSearch?AllField={query}"),
-    (("mol cancer", "molecular cancer"), "BMC Molecular Cancer", "https://molecular-cancer.biomedcentral.com/search?query={query}"),
-    (("jama",), "JAMA Network", "https://jamanetwork.com/searchresults?q={query}"),
-    (("endocrine", "hashimoto", "papillary thyroid carcinoma"), "Springer Link", "https://link.springer.com/search?query={query}"),
-    (("kolmogorov arnold networks", "arxiv"), "arXiv", "https://arxiv.org/search/?query={query}&searchtype=all&source=header"),
-]
-
-
-def _html_to_searchable_text(content):
-    raw = content.decode("utf-8", errors="replace") if isinstance(content, (bytes, bytearray)) else str(content or "")
-    raw = re.sub(r"(?is)<(script|style|noscript).*?</\1>", " ", raw)
-    raw = re.sub(r"(?is)<[^>]+>", " ", raw)
-    return re.sub(r"\s+", " ", html.unescape(raw)).strip()
-
-
-def _html_title(content):
-    raw = content.decode("utf-8", errors="replace") if isinstance(content, (bytes, bytearray)) else str(content or "")
-    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw)
-    if not match:
-        return ""
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", match.group(1)))).strip()
-
-
-def _official_page_matches_reference(ref, page_text):
-    query = build_reference_query(ref)
-    title_tokens = _title_tokens(query.get("title") or "")
-    page_tokens = _title_tokens(page_text)
-    if not title_tokens or not page_tokens:
-        return False
-    coverage = len(title_tokens & page_tokens) / max(len(title_tokens), 1)
-    year = query.get("year")
-    if not year:
-        return coverage >= 0.82
-    years = {_reference_year(token) for token in re.findall(r"\b(?:19|20)\d{2}\b", page_text)}
-    years.discard("")
-    year_ok = year in years or any(abs(int(year) - int(item)) <= 1 for item in years)
-    return (coverage >= 0.72 and year_ok) or coverage >= 0.9
-
-
-def _official_site_search_urls(ref):
-    query = build_reference_query(ref)
-    probe = _normalize_title(" ".join([
-        query.get("container", ""),
-        query.get("title", ""),
-        ref.get("text", ""),
-    ]))
-    title = query.get("title") or ""
-    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'’-]*", title)
-    search_terms = [title or query.get("bibliographic") or ref.get("text", "")[:180]]
-    if len(words) >= 7:
-        # OCR can damage the first word of a title; retry with the distinctive
-        # title tail before declaring that the publisher site cannot find it.
-        search_terms.append(" ".join(words[1:]))
-    if len(words) >= 11:
-        distinctive = [word for word in words if len(word) >= 4][:12]
-        if len(distinctive) >= 4:
-            search_terms.append(" ".join(distinctive))
-    seen = set()
-    urls = []
-    for needles, label, template in REFERENCE_OFFICIAL_SITE_RULES:
-        if any(needle in probe for needle in needles):
-            for term in search_terms:
-                search = urllib.parse.quote(term)
-                url = template.format(query=search)
-                if url not in seen:
-                    urls.append((label, url))
-                    seen.add(url)
-    return urls
-
-
 def lookup_official_site_reference(ref, timeout=10):
     """Verify references from DOI landing pages and publisher/official site searches."""
     query = build_reference_query(ref)
@@ -3172,78 +3100,6 @@ def lookup_official_site_reference(ref, timeout=10):
             "official_site": True,
         })
     return matches
-
-
-def _score_reference_match(ref, match):
-    query = build_reference_query(ref)
-    problems = []
-    score = 0.0
-    ref_doi = query.get("doi")
-    match_doi = _normalize_doi(match.get("doi", ""))
-    title_sim = max(
-        _token_similarity(query.get("title") or "", match.get("title", "")),
-        _token_similarity(ref.get("text", ""), match.get("title", "")),
-    )
-    author_sim = _author_similarity(query.get("author"), match.get("authors") or [])
-    container_sim = _token_similarity(query.get("container") or "", match.get("container", ""))
-    if ref_doi:
-        if match_doi and ref_doi == match_doi:
-            score += 0.72
-        elif match_doi:
-            problems.append("doi_mismatch")
-            score -= 0.2
-        else:
-            problems.append("doi_missing_in_source")
-        score += min(title_sim, 1.0) * 0.18
-        score += min(author_sim, 1.0) * 0.04
-    else:
-        score += min(title_sim, 1.0) * 0.62
-        score += min(author_sim, 1.0) * 0.14
-        score += min(container_sim, 1.0) * 0.08
-    if title_sim < 0.45 and not ref_doi:
-        problems.append("title_low_similarity")
-    ref_year = query.get("year")
-    match_year = _reference_year(match.get("year", ""))
-    if ref_year and match_year:
-        if ref_year == match_year:
-            score += 0.06 if ref_doi else 0.16
-        elif abs(int(ref_year) - int(match_year)) <= 1:
-            score += 0.03 if ref_doi else 0.08
-            problems.append("year_near_mismatch")
-        else:
-            problems.append("year_mismatch")
-            score -= 0.1
-    elif ref_year and not match_year:
-        problems.append("year_missing_in_source")
-    if (
-        not ref_doi
-        and match_doi
-        and ref_year
-        and match_year
-        and (ref_year == match_year or abs(int(ref_year) - int(match_year)) <= 1)
-        and title_sim >= 0.78
-    ):
-        score = max(score, 0.93)
-    if match.get("source") == "DOI landing page" and ref_doi and ref_doi == match_doi:
-        score = max(score, 0.95)
-    if match.get("official_site") and title_sim >= 0.82 and (not ref_year or not match_year or abs(int(ref_year) - int(match_year)) <= 1):
-        score = max(score, 0.94)
-    if match.get("retracted"):
-        problems.append("source_marks_retracted")
-    return max(0.0, min(1.0, score)), problems
-
-
-def _score_reference_matches(ref, raw_matches):
-    scored = []
-    for match in raw_matches:
-        score, problems = _score_reference_match(ref, match)
-        enriched = dict(match)
-        enriched["match_score"] = round(score, 3)
-        enriched["_match_problems"] = problems
-        scored.append(enriched)
-    scored.sort(key=lambda m: m.get("match_score", 0), reverse=True)
-    return scored
-
 
 def verify_reference_online(ref, timeout=10):
     query = build_reference_query(ref)
