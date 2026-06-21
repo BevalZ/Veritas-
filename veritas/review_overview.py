@@ -47,6 +47,22 @@ def _build_evidence_chain_action_item(evidence_chain_audit):
     return None
 
 
+def _build_llm_action_items(report):
+    checks = sorted(report.get("checks", []) if isinstance(report, dict) else [], key=_check_sort_key)
+    items = []
+    for check_idx, check in enumerate(checks, 1):
+        if not _is_suspicious_check(check):
+            continue
+        items.append({
+            "score": _check_suspicion_score(check),
+            "source": "LLM语义审查",
+            "title": f"{check.get('category', 'N/A')} / {check.get('item', 'N/A')}",
+            "detail": _brief_text(_check_reason(check) or _check_source_text(check) or "需人工复核。", 180),
+            "anchor": f"check-{check_idx}",
+        })
+    return items
+
+
 def build_audit_action_items(report, meta, stat_result, limit=8):
     meta = meta or {}
     stat_result = stat_result or {}
@@ -55,17 +71,7 @@ def build_audit_action_items(report, meta, stat_result, limit=8):
     evidence_chain_item = _build_evidence_chain_action_item(evidence_chain_audit)
     if evidence_chain_item:
         items.append(evidence_chain_item)
-    checks = sorted(report.get("checks", []) if isinstance(report, dict) else [], key=_check_sort_key)
-    for check_idx, c in enumerate(checks, 1):
-        if not _is_suspicious_check(c):
-            continue
-        items.append({
-            "score": _check_suspicion_score(c),
-            "source": "LLM语义审查",
-            "title": f"{c.get('category', 'N/A')} / {c.get('item', 'N/A')}",
-            "detail": _brief_text(_check_reason(c) or _check_source_text(c) or "需人工复核。", 180),
-            "anchor": f"check-{check_idx}",
-        })
+    items.extend(_build_llm_action_items(report))
     if stat_result.get("benford_status") and "高偏差" in str(stat_result.get("benford_status")):
         items.append({
             "score": 260,

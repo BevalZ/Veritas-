@@ -3869,6 +3869,21 @@ def test_evidence_chain_action_item_prefers_strong_clusters():
     assert veritas.review_overview._build_evidence_chain_action_item({}) is None
 
 
+def test_llm_action_items_use_sorted_check_anchor_and_skip_clean_items():
+    items = veritas.review_overview._build_llm_action_items({
+        "checks": [
+            {"category": "低优先", "item": "后排序", "verdict": "🚩红旗", "reason": "later"},
+            {"category": "通过", "item": "clean", "verdict": "✅通过", "reason": "clean"},
+            {"category": "高优先", "item": "前排序", "verdict": "🚩红旗", "reason": "earlier"},
+        ]
+    })
+
+    assert [item["source"] for item in items] == ["LLM语义审查", "LLM语义审查"]
+    assert [item["title"] for item in items] == ["低优先 / 后排序", "高优先 / 前排序"]
+    assert [item["anchor"] for item in items] == ["check-1", "check-2"]
+    assert all("通过" not in item["title"] for item in items)
+
+
 def test_reference_issue_text_uses_chinese_labels():
     text = paper_audit._reference_issue_text(["missing_doi", "online_not_found", "year_mismatch"])
 
