@@ -860,6 +860,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.report_action_service._report_action_entrypoint is paper_audit._report_action_entrypoint
     assert callable(veritas.report_action_service.ensure_report_action_service_from_namespace)
     assert veritas.report_action_service.open_html_artifact is paper_audit.open_html_artifact
+    assert callable(veritas.report_action_service.report_action_api_response_from_namespace)
     assert veritas.report_action_service._read_json_request_body is paper_audit._read_json_request_body
     assert veritas.followups.normalize_followup_language is paper_audit.normalize_followup_language
     assert veritas.followups.normalize_followup_tone is paper_audit.normalize_followup_tone
@@ -3894,6 +3895,46 @@ def test_ensure_report_action_service_starts_background_process(monkeypatch, tmp
     assert "9002" in command
     assert popen_calls[0][1]["stdin"] == subprocess.DEVNULL
     assert popen_calls[0][1]["start_new_session"] is True
+
+
+def test_report_action_api_response_preserves_legacy_followup_monkeypatch(monkeypatch):
+    captured = {}
+
+    def fake_generate(kind, context, **kwargs):
+        captured["kind"] = kind
+        captured["context"] = context
+        captured["kwargs"] = kwargs
+        return {
+            "kind": kind,
+            "language": kwargs.get("language"),
+            "tone": kwargs.get("tone"),
+            "model": "fake-model",
+            "text": "draft",
+            "paths": {"markdown": "draft.md"},
+        }
+
+    monkeypatch.setattr(paper_audit, "LLM_TIMEOUT", 12)
+    monkeypatch.setattr(paper_audit, "generate_and_save_followup_draft", fake_generate)
+
+    result = paper_audit._report_action_api_response(
+        "/generate",
+        {
+            "kind": "pubpeer_comment",
+            "context": {"paper": "paper.pdf"},
+            "language": "en",
+            "tone": "firm",
+            "disclaimer_confirmed": True,
+        },
+    )
+
+    assert result["ok"] is True
+    assert result["text"] == "draft"
+    assert captured["kind"] == "pubpeer_comment"
+    assert captured["context"] == {"paper": "paper.pdf"}
+    assert captured["kwargs"]["language"] == "en"
+    assert captured["kwargs"]["tone"] == "firm"
+    assert captured["kwargs"]["disclaimer_confirmed"] is True
+    assert captured["kwargs"]["timeout"] == 12
 
 
 def _wait_for_test(predicate, timeout=1.0):

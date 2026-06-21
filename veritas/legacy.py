@@ -257,6 +257,7 @@ from .report_action_service import (
     _report_action_entrypoint,
     ensure_report_action_service_from_namespace,
     open_html_artifact,
+    report_action_api_response_from_namespace,
     report_action_service_health,
 )
 from .review_overview import (
@@ -1092,32 +1093,7 @@ def ensure_report_action_service(host="127.0.0.1", port=8765, log_path: Path = N
 
 
 def _report_action_api_response(route, payload):
-    """Return the shared response payload for local report action endpoints."""
-    context = payload.get("context") or {}
-    language = normalize_followup_language(payload.get("language"))
-    if route == "/followups":
-        return load_existing_followups(context, language=language)
-    kind = payload.get("kind")
-    result = generate_and_save_followup_draft(
-        kind,
-        context,
-        language=language,
-        identity=payload.get("identity"),
-        selected_issues=payload.get("selected_issues"),
-        custom_concerns=payload.get("custom_concerns"),
-        tone=payload.get("tone"),
-        disclaimer_confirmed=bool(payload.get("disclaimer_confirmed")),
-        timeout=LLM_TIMEOUT,
-    )
-    return {
-        "ok": True,
-        "kind": result.get("kind"),
-        "language": result.get("language"),
-        "tone": result.get("tone"),
-        "model": result.get("model"),
-        "text": result.get("text"),
-        "paths": result.get("paths"),
-    }
+    return report_action_api_response_from_namespace(globals(), route, payload)
 
 
 def serve_report_actions(host="127.0.0.1", port=8765):

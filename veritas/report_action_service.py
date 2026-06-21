@@ -17,6 +17,7 @@ __all__ = [
     "_report_action_entrypoint",
     "ensure_report_action_service_from_namespace",
     "open_html_artifact",
+    "report_action_api_response_from_namespace",
     "_read_json_request_body",
 ]
 
@@ -103,6 +104,41 @@ def ensure_report_action_service_from_namespace(namespace, host="127.0.0.1", por
 def open_html_artifact(html_path: Path):
     html_abs = str(Path(html_path).resolve())
     webbrowser.open(f"file:///{html_abs}" if platform.system() == "Windows" else f"file://{html_abs}")
+
+
+def report_action_api_response_from_namespace(namespace, route, payload):
+    """Return the shared response payload for local report action endpoints."""
+    normalize_language = _namespace_value(namespace, "normalize_followup_language")
+    load_followups = _namespace_value(namespace, "load_existing_followups")
+    generate_and_save = _namespace_value(namespace, "generate_and_save_followup_draft")
+    if not callable(normalize_language) or not callable(load_followups) or not callable(generate_and_save):
+        raise RuntimeError("report action API namespace is incomplete")
+
+    context = payload.get("context") or {}
+    language = normalize_language(payload.get("language"))
+    if route == "/followups":
+        return load_followups(context, language=language)
+    kind = payload.get("kind")
+    result = generate_and_save(
+        kind,
+        context,
+        language=language,
+        identity=payload.get("identity"),
+        selected_issues=payload.get("selected_issues"),
+        custom_concerns=payload.get("custom_concerns"),
+        tone=payload.get("tone"),
+        disclaimer_confirmed=bool(payload.get("disclaimer_confirmed")),
+        timeout=_namespace_value(namespace, "LLM_TIMEOUT"),
+    )
+    return {
+        "ok": True,
+        "kind": result.get("kind"),
+        "language": result.get("language"),
+        "tone": result.get("tone"),
+        "model": result.get("model"),
+        "text": result.get("text"),
+        "paths": result.get("paths"),
+    }
 
 
 def _read_json_request_body(handler, max_bytes=2_000_000):
