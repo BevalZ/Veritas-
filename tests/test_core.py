@@ -777,6 +777,9 @@ def test_run_result_represents_complete_limited_and_failed(tmp_path):
 
 def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.runtime_config.RuntimeConfig is paper_audit.RuntimeConfig
+    assert veritas.zhuque.ZHUQUE_URL is paper_audit.ZHUQUE_URL
+    assert callable(veritas.zhuque.copy_to_clipboard_from_namespace)
+    assert callable(veritas.zhuque.launch_zhuque_ai_detect_from_namespace)
     assert veritas.config.RuntimeConfig is paper_audit.RuntimeConfig
     assert veritas.config.CapabilityConfig is paper_audit.CapabilityConfig
     assert callable(veritas.config.load_runtime_config_from_namespace)

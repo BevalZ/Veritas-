@@ -334,6 +334,7 @@ from .risk_rule_helpers import (
     _soften_nonfinal_red_flag_language,
 )
 from .versions import ADAPTER_VERSION, PROMPT_VERSION, RISK_RULE_VERSION, SCHEMA_VERSION
+from .zhuque import ZHUQUE_URL, copy_to_clipboard_from_namespace, launch_zhuque_ai_detect_from_namespace
 from .web_runner_paths import (
     _web_runner_common_search_roots,
     _web_runner_is_basename_only_input,
@@ -4232,98 +4233,12 @@ PubPeer评论内容：
 # 腾讯朱雀AI文本检测辅助功能
 # ══════════════════════════════════════════════════════════════
 
-ZHUQUE_URL = "https://matrix.tencent.com/ai-detect/"
-
-
 def copy_to_clipboard(text: str) -> bool:
-    """跨平台复制文本到系统剪贴板"""
-    system = platform.system()
-    try:
-        if system == "Windows":
-            # Windows: 使用clip命令
-            process = subprocess.Popen(
-                ["clip.exe"], stdin=subprocess.PIPE
-            )
-            process.communicate(text.encode("utf-16"))
-            return process.returncode == 0
-        elif system == "Darwin":  # macOS
-            process = subprocess.Popen(
-                ["pbcopy"], stdin=subprocess.PIPE
-            )
-            process.communicate(text.encode("utf-8"))
-            return process.returncode == 0
-        else:  # Linux
-            # 优先尝试xclip，其次xsel
-            for cmd in [["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]]:
-                try:
-                    process = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-                    process.communicate(text.encode("utf-8"))
-                    if process.returncode == 0:
-                        return True
-                except FileNotFoundError:
-                    continue
-            return False
-    except Exception as e:
-        print(f"⚠️ 剪贴板写入失败: {e}")
-        return False
+    return copy_to_clipboard_from_namespace(globals(), text)
 
 
 def launch_zhuque_ai_detect(text: str):
-    """启动腾讯朱雀AI文本检测：复制文本到剪贴板 → 打开检测页面 → 弹窗提醒"""
-    print("\n" + "=" * 60)
-    print("🤖 腾讯朱雀AI文本检测")
-    print("=" * 60)
-
-    # 1) 复制文本到剪贴板
-    # 朱雀检测有字数限制，截取前8000字符
-    detect_text = text[:8000]
-    if len(text) > 8000:
-        print(f"⚠️ 文本较长({len(text)}字符)，仅复制前8000字符到剪贴板（朱雀字数限制）")
-
-    clip_ok = copy_to_clipboard(detect_text)
-    if clip_ok:
-        print("✅ 文本已复制到剪贴板")
-    else:
-        print("❌ 剪贴板写入失败，请手动复制论文文本")
-
-    # 2) 打开浏览器
-    print(f"🌐 正在打开朱雀AI检测页面...")
-    webbrowser.open(ZHUQUE_URL)
-
-    # 3) 弹窗提醒
-    system = platform.system()
-    try:
-        if system == "Windows":
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(
-                0,
-                "论文文本已复制到剪贴板！\n\n"
-                "请在打开的朱雀AI检测页面中粘贴文本并点击检测。\n"
-                "检测完成后，点击确定继续后续审查流程。",
-                "🤖 朱雀AI文本检测",
-                0x40  # MB_ICONINFORMATION
-            )
-        elif system == "Darwin":
-            subprocess.run([
-                "osascript", "-e",
-                'display dialog "论文文本已复制到剪贴板！\n\n请在朱雀AI检测页面中粘贴文本并点击检测。\n检测完成后，点击确定继续后续审查流程。" '
-                'buttons {"确定"} default button "确定" with title "🤖 朱雀AI文本检测" with icon note'
-            ])
-        else:  # Linux
-            # 尝试zenity
-            try:
-                subprocess.run([
-                    "zenity", "--info", "--title=🤖 朱雀AI文本检测", "--width=400",
-                    "--text=论文文本已复制到剪贴板！\n\n请在朱雀AI检测页面中粘贴文本并点击检测。\n检测完成后，点击确定继续后续审查流程。"
-                ])
-            except FileNotFoundError:
-                # 降级为终端提示
-                input("\n⏸️ 论文文本已复制到剪贴板，请在浏览器中粘贴检测。\n检测完成后按回车继续...")
-    except Exception:
-        # 最终降级：终端等待
-        input("\n⏸️ 论文文本已复制到剪贴板，请在浏览器中粘贴检测。\n检测完成后按回车继续...")
-
-    print("✅ 朱雀AI检测流程结束，继续后续审查...")
+    return launch_zhuque_ai_detect_from_namespace(globals(), text)
 
 
 # ──────────────────────────────────────────────────────────────

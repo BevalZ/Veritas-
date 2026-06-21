@@ -72,7 +72,8 @@ veritas/
 ├── text_utils.py       # Shared text shortening and token similarity helpers
 ├── versions.py         # Prompt/schema/adapter/risk-rule version constants
 ├── web_runner.py       # Local Web Runner helper boundary
-└── workspace.py        # Per-run workspace boundary
+├── workspace.py        # Per-run workspace boundary
+└── zhuque.py           # Tencent Zhuque clipboard/browser helper flow
 └── file_utils.py       # Shared safe-name and JSON file helpers
 └── report_schema.py    # Strict LLM evidence schema parser
 └── retry_commands.py   # Retry command builders for failed diagnostics
@@ -275,6 +276,11 @@ tests/
   namespace-aware while compatibility wrappers live in `veritas.legacy`, so
   tests and user scripts can still monkeypatch section renderers, check
   helpers, version constants, runtime clock, and metadata normalization.
+- `veritas/zhuque.py` owns the Tencent Zhuque AI text detector helper flow:
+  bounded text copy, cross-platform clipboard commands, browser launch, and
+  desktop/terminal user prompts. It should stay namespace-aware while
+  compatibility wrappers live in `veritas.legacy`, so tests and user scripts can
+  still monkeypatch platform, subprocess, browser, clipboard, and input hooks.
 - `veritas/review_overview.py` owns deterministic audit action-priority
   summaries and review-overview Markdown/HTML rendering. It may aggregate
   existing report, statistics, reference, resource, cross-file, evidence-chain,
