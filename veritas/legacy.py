@@ -3727,7 +3727,6 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
 
     context = _prepare_run_audit_context(input_path, args)
     output_dir = context["output_dir"]
-    output_stem = context["output_stem"]
     resume_dir = context["resume_dir"]
     retry_command = context["retry_command"]
     failed_artifact_kwargs = context["failed_artifact_kwargs"]
