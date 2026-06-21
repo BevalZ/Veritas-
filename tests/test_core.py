@@ -712,6 +712,52 @@ def test_run_cache_use_manifest_records_versions(tmp_path):
     }
 
 
+def test_record_preflight_result_persists_workspace_and_resume_event(tmp_path):
+    preflight_results = []
+    recorded_json = {}
+    recorded_events = []
+    result = paper_audit.PreflightResult(
+        capability="text_llm",
+        ok=False,
+        error_class="provider_unavailable",
+        message="gateway down",
+    )
+
+    def fake_record_json(workspace, name, payload):
+        recorded_json["workspace"] = workspace
+        recorded_json["name"] = name
+        recorded_json["payload"] = payload
+
+    def fake_resume_event(resume_dir, step, status, detail, **extra):
+        recorded_events.append((resume_dir, step, status, detail, extra))
+
+    paper_audit.record_preflight_result(
+        preflight_results,
+        result,
+        {"run_dir": str(tmp_path / "run")},
+        tmp_path / "resume",
+        fake_record_json,
+        fake_resume_event,
+        timestamp_func=lambda: "2026-06-21 10:00:00",
+    )
+
+    assert preflight_results == [result.to_dict()]
+    assert recorded_json["name"] == "preflight.json"
+    assert recorded_json["payload"] == {
+        "results": preflight_results,
+        "updated_at": "2026-06-21 10:00:00",
+    }
+    assert recorded_events == [
+        (
+            tmp_path / "resume",
+            "preflight_text_llm",
+            "failed",
+            "gateway down",
+            {"error_class": "provider_unavailable"},
+        )
+    ]
+
+
 def test_run_audit_accepts_direct_docx_file_input(monkeypatch, tmp_path):
     docx_path = tmp_path / "paper.docx"
     docx_path.write_bytes(b"fake-docx")
@@ -1067,6 +1113,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.get_output_base is paper_audit.get_output_base
     assert veritas.run_logging.setup_run_logging is paper_audit.setup_run_logging
     assert veritas.run_logging.get_resume_dir is paper_audit.get_resume_dir
+    assert veritas.run_logging.record_preflight_result is paper_audit.record_preflight_result
     assert veritas.run_logging.resume_event is paper_audit.resume_event
     assert veritas.run_logging._allow_llm_cache_read is paper_audit._allow_llm_cache_read
     assert veritas.run_logging.detect_pdf_input is paper_audit.detect_pdf_input

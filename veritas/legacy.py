@@ -164,6 +164,7 @@ from .run_logging import (
     get_output_base,
     get_resume_dir,
     progress_bar,
+    record_preflight_result,
     resume_event,
     run_cache_use_manifest,
     run_extraction_route,
@@ -4114,17 +4115,13 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
     preflight_results = []
 
     def _record_preflight(result: PreflightResult):
-        preflight_results.append(result.to_dict())
-        record_run_workspace_json(run_workspace, "preflight.json", {
-            "results": preflight_results,
-            "updated_at": time.strftime("%F %T"),
-        })
-        resume_event(
+        record_preflight_result(
+            preflight_results,
+            result,
+            run_workspace,
             resume_dir,
-            f"preflight_{result.capability}",
-            "ok" if result.ok else "failed",
-            result.message or "ok",
-            error_class=result.error_class,
+            record_run_workspace_json,
+            resume_event,
         )
 
     if use_mineru_default:

@@ -16,6 +16,7 @@ __all__ = [
     "detect_pdf_input",
     "run_cache_use_manifest",
     "run_input_manifest",
+    "record_preflight_result",
     "run_extraction_route",
     "run_scope_flags_from_args",
     "progress_bar",
@@ -138,6 +139,31 @@ def run_cache_use_manifest(
         "extract_cache_version": extract_cache_version,
         "image_semantic_cache_version": image_semantic_cache_version,
     }
+
+
+def record_preflight_result(
+    preflight_results,
+    result,
+    run_workspace,
+    resume_dir,
+    record_json,
+    resume_event_func,
+    timestamp_func=None,
+):
+    """Append and persist a critical-capability preflight result."""
+    timestamp = timestamp_func or (lambda: time.strftime("%F %T"))
+    preflight_results.append(result.to_dict())
+    record_json(run_workspace, "preflight.json", {
+        "results": preflight_results,
+        "updated_at": timestamp(),
+    })
+    resume_event_func(
+        resume_dir,
+        f"preflight_{result.capability}",
+        "ok" if result.ok else "failed",
+        result.message or "ok",
+        error_class=result.error_class,
+    )
 
 
 def run_extraction_route(input_path, use_mineru_default=False):
