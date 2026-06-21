@@ -34,6 +34,7 @@ veritas/
 ├── http_client.py      # Shared low-level HTTP request helper
 ├── image_cache.py      # Image audit cache key and fingerprint helpers
 ├── image_collection.py # Local image discovery and MinerU zip image extraction helpers
+├── image_detector_provider.py # imagedetector.com provider flow
 ├── image_local_analysis.py # Local image sanity checks before provider review
 ├── image_payloads.py   # Local image payload preparation helpers
 ├── image_reporting.py  # Image audit report and review-manifest rendering helpers
@@ -150,6 +151,11 @@ tests/
   `veritas.legacy` may wrap namespace-aware helpers so historical monkeypatches
   of image size/extension constants and collector hooks continue to affect
   collection.
+- `veritas/image_detector_provider.py` owns the imagedetector.com upload and
+  detection HTTP flow. It should stay namespace-aware while compatibility
+  wrappers live in `veritas.legacy`, so tests and user scripts can still
+  monkeypatch `_http_request`, payload preparation, timeout behavior, and
+  provider URL constants.
 - `veritas/image_local_analysis.py` owns local image sanity checks before
   provider review. It may use optional Pillow for local dimensions/statistics
   but must not call image providers; legacy wrappers preserve `MIN_IMAGE_BYTES`

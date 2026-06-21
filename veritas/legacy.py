@@ -79,6 +79,7 @@ from .image_collection import (
     collect_mineru_image_files_from_namespace,
     extract_images_from_pdf,
 )
+from .image_detector_provider import call_imagedetector_from_namespace, _call_imagedetector_unbounded_from_namespace
 from .image_local_analysis import analyze_image_reasonability_from_namespace
 from .image_payloads import _image_to_data_url, _prepare_detector_upload_file
 from .image_reporting import (
@@ -4782,82 +4783,11 @@ def _image_semantic_cache_key(image_path: str, api_url=None, model=None, cache_v
 
 
 def call_imagedetector(image_path: str, timeout=60):
-    """Upload an image to imagedetector.com using the site's public web flow."""
-    def _call():
-        return _call_imagedetector_unbounded(image_path, timeout=timeout)
-
-    return _run_with_alarm_timeout(_call, timeout, lambda: _detector_timeout_result(timeout))
+    return call_imagedetector_from_namespace(globals(), image_path, timeout=timeout)
 
 
 def _call_imagedetector_unbounded(image_path: str, timeout=60):
-    try:
-        file_name, mime, content = _prepare_detector_upload_file(image_path)
-        if len(content) < 1024:
-            return {
-                "status": "skipped",
-                "provider": "imagedetector.com",
-                "reason": "too_small",
-                "summary": "图片小于imagedetector网页最小上传要求，跳过自动检测。",
-            }
-        if len(content) > 10 * 1024 * 1024:
-            return {
-                "status": "skipped",
-                "provider": "imagedetector.com",
-                "reason": "too_large",
-                "summary": "图片超过imagedetector网页10MB限制，跳过自动检测。",
-            }
-        query = urllib.parse.urlencode({"fileName": file_name, "fileType": mime})
-        headers = {
-            "Accept": "application/json",
-            "Referer": IMAGE_DETECT_URL,
-            "User-Agent": "PaperAudit/1.0",
-        }
-        data, _ = _http_request(
-            f"{IMAGE_DETECT_URL.rstrip('/')}/api/get-presigned-url?{query}",
-            "GET",
-            headers=headers,
-            timeout=timeout,
-        )
-        upload_info = json.loads(data.decode("utf-8", errors="replace"))
-        presigned_url = upload_info.get("presignedUrl")
-        file_path = upload_info.get("filePath")
-        expected_type = upload_info.get("expectedContentType") or mime
-        if not presigned_url or not file_path:
-            return {
-                "status": "error",
-                "provider": "imagedetector.com",
-                "reason": "missing_upload_url",
-                "summary": "imagedetector未返回可用上传地址。",
-            }
-        _http_request(
-            presigned_url,
-            "PUT",
-            headers={"Content-Type": expected_type, "x-amz-acl": "private"},
-            data=content,
-            timeout=timeout,
-        )
-        image_url = f"{IMAGE_DETECT_UPLOAD_BASE.rstrip('/')}/{file_path.lstrip('/')}"
-        detect_payload = json.dumps({"imageUrl": image_url}).encode("utf-8")
-        data, _ = _http_request(
-            f"{IMAGE_DETECT_URL.rstrip('/')}/api/detect",
-            "POST",
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "Referer": IMAGE_DETECT_URL,
-                "User-Agent": "PaperAudit/1.0",
-            },
-            data=detect_payload,
-            timeout=timeout,
-        )
-        return _normalize_detector_result(json.loads(data.decode("utf-8", errors="replace")))
-    except Exception as e:
-        return {
-            "status": "error",
-            "provider": "imagedetector.com",
-            "reason": type(e).__name__,
-            "summary": f"imagedetector自动检测失败：{type(e).__name__}",
-        }
+    return _call_imagedetector_unbounded_from_namespace(globals(), image_path, timeout=timeout)
 
 
 def call_glm_image_semantics(image_path: str, timeout=45, api_key=None, model=None):

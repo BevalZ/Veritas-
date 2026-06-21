@@ -825,6 +825,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.image_results._normalize_glm_image_result is paper_audit._normalize_glm_image_result
     assert veritas.image_results._normalize_detector_result is paper_audit._normalize_detector_result
     assert veritas.image_results._extract_json_object is paper_audit._extract_json_object
+    assert callable(veritas.image_detector_provider.call_imagedetector_from_namespace)
+    assert callable(veritas.image_detector_provider._call_imagedetector_unbounded_from_namespace)
     assert callable(veritas.image_local_analysis.analyze_image_reasonability_from_namespace)
     assert veritas.image_payloads._image_to_data_url is paper_audit._image_to_data_url
     assert veritas.image_payloads._prepare_detector_upload_file is paper_audit._prepare_detector_upload_file
