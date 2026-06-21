@@ -64,6 +64,14 @@ def audit_artifact_paths(input_path: Path, artifact_type: str = "complete", outp
     )
 
 
+def _failed_artifact_options(input_path: Path, output_dir: Path, args) -> Dict[str, Any]:
+    """Return keyword arguments for failed artifact paths from explicit CLI output."""
+    base = explicit_output_path_from_args(args)
+    if base is None:
+        return {}
+    return {"output_dir": base.parent, "output_stem": base.name}
+
+
 def audit_limited_reasons(args, meta: Dict[str, Any], has_pdf_input=False) -> List[str]:
     """Return user-visible reasons why a successful run is limited instead of complete."""
     meta = meta or {}
@@ -154,6 +162,7 @@ __all__ = [
     "_artifact_base_from_output",
     "explicit_output_path_from_args",
     "audit_artifact_paths",
+    "_failed_artifact_options",
     "audit_limited_reasons",
     "coverage_blocking_failure",
     "apply_audit_artifact_type",

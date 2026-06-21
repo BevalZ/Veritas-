@@ -116,7 +116,8 @@ tests/
 - `veritas/runtime_metadata.py` owns runtime clock metadata helpers used by
   reports and deterministic date checks; `paper_audit` keeps compatibility by
   re-exporting the same function objects through `veritas.legacy`.
-- `veritas/artifacts.py` owns formal audit artifact path, limited-outcome, and
+- `veritas/artifacts.py` owns formal audit artifact path, explicit-output
+  normalization, failed artifact option mapping, limited-outcome, and
   coverage-blocking helpers; `paper_audit` keeps compatibility by re-exporting
   the same function objects through `veritas.legacy`.
 - `veritas/failed_diagnostics.py` owns stable failed-audit JSON payload,

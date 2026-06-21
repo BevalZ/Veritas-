@@ -890,6 +890,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.artifacts.audit_limited_reasons is paper_audit.audit_limited_reasons
     assert veritas.artifacts.coverage_blocking_failure is paper_audit.coverage_blocking_failure
     assert veritas.artifacts.apply_audit_artifact_type is paper_audit.apply_audit_artifact_type
+    assert veritas.artifacts._failed_artifact_options is paper_audit._failed_artifact_options
     assert veritas.failed_diagnostics.failed_audit_payload is paper_audit.failed_audit_payload
     assert veritas.failed_diagnostics.preflight_failure_to_audit_failure is paper_audit.preflight_failure_to_audit_failure
     assert veritas.failed_diagnostics.adapter_failure_to_audit_failure is paper_audit.adapter_failure_to_audit_failure

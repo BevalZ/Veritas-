@@ -22,6 +22,7 @@ from .adapter_types import (
 )
 from .artifacts import (
     _artifact_base_from_output,
+    _failed_artifact_options,
     apply_audit_artifact_type,
     audit_artifact_paths,
     audit_limited_reasons,
@@ -5853,13 +5854,6 @@ def launch_image_ai_detect(
             pass
     return image_audit
 
-
-
-def _failed_artifact_options(input_path: Path, output_dir: Path, args) -> Dict[str, Any]:
-    base = explicit_output_path_from_args(args)
-    if base is None:
-        return {}
-    return {"output_dir": base.parent, "output_stem": base.name}
 
 
 def run_audit(run_request: RunRequest, args=None) -> RunResult:
