@@ -4639,25 +4639,23 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             retry_command,
             completed_stages,
         )
-        md_path, json_path = save_failed_audit_diagnostics(
+        failed_result = save_failed_run_result(
             failure,
             input_path,
-            **failed_artifact_kwargs,
-            meta=meta,
-        )
-        record_run_workspace_artifacts(
             run_workspace,
-            "failed",
-            [md_path, json_path],
-            meta={"preflight_results": preflight_results, "completed_stages": completed_stages},
+            save_failed_audit_diagnostics,
+            record_run_workspace_artifacts,
+            completed_stages=completed_stages,
+            failed_artifact_kwargs=failed_artifact_kwargs,
+            diagnostics_meta=meta,
+            workspace_meta={"preflight_results": preflight_results},
+            result_meta={"preflight_results": preflight_results},
         )
-        print(f"❌ 文本LLM预检失败，未生成完整审查报告。失败诊断已保存: {md_path}, {json_path}")
-        return RunResult.failed(
-            failure,
-            {"markdown": str(md_path), "json": str(json_path)},
-            workspace=run_workspace,
-            meta={"input_path": str(input_path), "preflight_results": preflight_results},
+        print(
+            "❌ 文本LLM预检失败，未生成完整审查报告。失败诊断已保存: "
+            f"{failed_result.artifact_paths['markdown']}, {failed_result.artifact_paths['json']}"
         )
+        return failed_result
     completed_stages.append("text_llm_preflight")
 
     chunk_size = min(int(args.max_chars), 4096)  # LLM单块硬上限4096字符
@@ -4710,13 +4708,15 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     retry_command=retry_command,
                     details={"raw_error": str(e), "chunk": "1/1"},
                 )
-                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs, meta=meta)
-                record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
-                return RunResult.failed(
+                return save_failed_run_result(
                     failure,
-                    {"markdown": str(md_path), "json": str(json_path)},
-                    workspace=run_workspace,
-                    meta={"input_path": str(input_path)},
+                    input_path,
+                    run_workspace,
+                    save_failed_audit_diagnostics,
+                    record_run_workspace_artifacts,
+                    completed_stages=completed_stages,
+                    failed_artifact_kwargs=failed_artifact_kwargs,
+                    diagnostics_meta=meta,
                 )
     else:
         # 长论文：分块审查 + 合并
@@ -4793,13 +4793,15 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     retry_command=retry_command,
                     details={"failed_chunks": failed_nums, "detail": detail},
                 )
-                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs, meta=meta)
-                record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
-                return RunResult.failed(
+                return save_failed_run_result(
                     failure,
-                    {"markdown": str(md_path), "json": str(json_path)},
-                    workspace=run_workspace,
-                    meta={"input_path": str(input_path)},
+                    input_path,
+                    run_workspace,
+                    save_failed_audit_diagnostics,
+                    record_run_workspace_artifacts,
+                    completed_stages=completed_stages,
+                    failed_artifact_kwargs=failed_artifact_kwargs,
+                    diagnostics_meta=meta,
                 )
             else:
                 resume_event(resume_dir, "stage3_llm_retry", "done", "all failed chunks recovered")
@@ -4827,13 +4829,15 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                 retry_command=retry_command,
                 details={"failed_chunks": failed_final},
             )
-            md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs, meta=meta)
-            record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
-            return RunResult.failed(
+            return save_failed_run_result(
                 failure,
-                {"markdown": str(md_path), "json": str(json_path)},
-                workspace=run_workspace,
-                meta={"input_path": str(input_path)},
+                input_path,
+                run_workspace,
+                save_failed_audit_diagnostics,
+                record_run_workspace_artifacts,
+                completed_stages=completed_stages,
+                failed_artifact_kwargs=failed_artifact_kwargs,
+                diagnostics_meta=meta,
             )
         else:
 
