@@ -3646,25 +3646,8 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
     result_factory = RunResult.limited if meta.get("artifact_type") == "limited" else RunResult.complete
     return result_factory(artifact_paths, workspace=run_workspace, meta=meta)
 
-def main():
-    global LLM_TIMEOUT, LLM_RETRIES
-    parser = argparse.ArgumentParser(
-        description="学术论文自动审查工具（耿同学标准 + MinerU）",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例:
-  # 默认：PDF优先使用MinerU提取 + 完整审查
-  python paper_audit.py paper.pdf
 
-  # 调试/范围受限：禁用MinerU，不作为完整正式审查
-  python paper_audit.py paper.pdf --no-mineru
-
-  # 指定输出路径
-  python paper_audit.py paper.pdf --mineru -o report.md --json
-  
-  # 更新欺诈模式知识库（从PubPeer评论自动提取新pattern）
-  python paper_audit.py --update-patterns pubpeer_comments.txt
-""")
+def _add_main_parser_arguments(parser):
     parser.add_argument("pdf_path", nargs='?', help="待审查的文件路径或论文目录路径（支持PDF、Word .docx、Excel、Supplement等，更新/服务模式下无需提供）")
     parser.add_argument("--serve-report-actions", action="store_true",
                         help="启动本机HTML报告动作服务：一键生成PubPeer comment和期刊letter")
@@ -3676,7 +3659,7 @@ def main():
                         help="启动本机桌面GUI软件：选择输入、运行审查并直接打开报告产物")
     parser.add_argument("--web-port", type=int, default=8765,
                         help="Web Runner端口（默认8765，仅监听127.0.0.1）")
-    parser.add_argument("--update-patterns", metavar="COMMENTS_FILE", 
+    parser.add_argument("--update-patterns", metavar="COMMENTS_FILE",
                         help="从PubPeer评论文本文件中自动提取新的欺诈模式，更新知识库")
     parser.add_argument("--mineru", action="store_true",
                         help="使用MinerU API将PDF转为Markdown再审查（PDF默认已启用，保留该参数用于兼容旧命令）")
@@ -3731,6 +3714,28 @@ def main():
                         help="调试/范围受限：只复用已有成功LLM分块缓存，不再调用API；不能作为完整正式审查")
     parser.add_argument("--no-open", action="store_true",
                         help="生成报告后不自动打开HTML报告，适合CI、服务器和批处理环境")
+
+
+def main():
+    global LLM_TIMEOUT, LLM_RETRIES
+    parser = argparse.ArgumentParser(
+        description="学术论文自动审查工具（耿同学标准 + MinerU）",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  # 默认：PDF优先使用MinerU提取 + 完整审查
+  python paper_audit.py paper.pdf
+
+  # 调试/范围受限：禁用MinerU，不作为完整正式审查
+  python paper_audit.py paper.pdf --no-mineru
+
+  # 指定输出路径
+  python paper_audit.py paper.pdf --mineru -o report.md --json
+
+  # 更新欺诈模式知识库（从PubPeer评论自动提取新pattern）
+  python paper_audit.py --update-patterns pubpeer_comments.txt
+""")
+    _add_main_parser_arguments(parser)
     args = parser.parse_args()
     if getattr(args, "max_chars", 4096) > 4096:
         print(f"⚠️ --max-chars={args.max_chars} 超过4096，已自动调整为4096")
