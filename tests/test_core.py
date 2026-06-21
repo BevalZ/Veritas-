@@ -3848,6 +3848,27 @@ def test_action_summary_includes_multiple_detection_sources():
     assert {"LLM语义审查", "本地统计", "参考文献在线检索", "图像检测"}.issubset(sources)
 
 
+def test_evidence_chain_action_item_prefers_strong_clusters():
+    item = veritas.review_overview._build_evidence_chain_action_item({
+        "cluster_count": 3,
+        "clusters": [
+            {"severity": "medium", "title": "中等簇", "summary": "medium"},
+            {"severity": "strong", "title": "强簇", "summary": "strong summary"},
+        ],
+    })
+
+    assert item["score"] == 285
+    assert item["title"] == "1个强证据簇需优先复核"
+    assert "强簇" in item["detail"]
+    assert item["anchor"] == "evidence-chain-clusters"
+
+    fallback = veritas.review_overview._build_evidence_chain_action_item({"cluster_count": 2})
+
+    assert fallback["score"] == 238
+    assert fallback["title"] == "2个证据簇需复核"
+    assert veritas.review_overview._build_evidence_chain_action_item({}) is None
+
+
 def test_reference_issue_text_uses_chinese_labels():
     text = paper_audit._reference_issue_text(["missing_doi", "online_not_found", "year_mismatch"])
 

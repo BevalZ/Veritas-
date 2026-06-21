@@ -21,15 +21,12 @@ __all__ = [
 ]
 
 
-def build_audit_action_items(report, meta, stat_result, limit=8):
-    meta = meta or {}
-    stat_result = stat_result or {}
-    items = []
-    evidence_chain_audit = meta.get("evidence_chain_audit") or {}
+def _build_evidence_chain_action_item(evidence_chain_audit):
+    evidence_chain_audit = evidence_chain_audit or {}
     strong_clusters = [cluster for cluster in (evidence_chain_audit.get("clusters") or []) if cluster.get("severity") == "strong"]
     if strong_clusters:
         top = strong_clusters[0]
-        items.append({
+        return {
             "score": 285,
             "source": "证据链与证据簇审查",
             "title": f"{len(strong_clusters)}个强证据簇需优先复核",
@@ -38,15 +35,26 @@ def build_audit_action_items(report, meta, stat_result, limit=8):
                 220,
             ),
             "anchor": "evidence-chain-clusters",
-        })
-    elif evidence_chain_audit.get("cluster_count"):
-        items.append({
+        }
+    if evidence_chain_audit.get("cluster_count"):
+        return {
             "score": 238,
             "source": "证据链与证据簇审查",
             "title": f"{evidence_chain_audit.get('cluster_count')}个证据簇需复核",
             "detail": "证据簇用于把孤立疑点合并为可人工核查的问题组；建议优先查看中等以上证据簇。",
             "anchor": "evidence-chain-clusters",
-        })
+        }
+    return None
+
+
+def build_audit_action_items(report, meta, stat_result, limit=8):
+    meta = meta or {}
+    stat_result = stat_result or {}
+    items = []
+    evidence_chain_audit = meta.get("evidence_chain_audit") or {}
+    evidence_chain_item = _build_evidence_chain_action_item(evidence_chain_audit)
+    if evidence_chain_item:
+        items.append(evidence_chain_item)
     checks = sorted(report.get("checks", []) if isinstance(report, dict) else [], key=_check_sort_key)
     for check_idx, c in enumerate(checks, 1):
         if not _is_suspicious_check(c):
