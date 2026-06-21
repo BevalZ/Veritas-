@@ -707,6 +707,17 @@ def test_run_audit_rejects_directory_audit_docx_when_dependency_missing(monkeypa
     assert "python3 -m pip install python-docx" in failed_md.read_text(encoding="utf-8")
 
 
+def test_optional_dependency_for_extension_preserves_legacy_dependency_flags(monkeypatch):
+    monkeypatch.setattr(paper_audit, "DOCX_SUPPORTED", False)
+    monkeypatch.setattr(paper_audit, "EXCEL_SUPPORTED", True)
+
+    docx_dependency = paper_audit.optional_dependency_for_extension(".docx")
+    xlsx_dependency = paper_audit.optional_dependency_for_extension(".xlsx")
+
+    assert docx_dependency == ("python-docx", "python3 -m pip install python-docx")
+    assert xlsx_dependency == (None, None)
+
+
 def test_run_audit_rejects_direct_legacy_doc_file_input(monkeypatch, tmp_path):
     doc_path = tmp_path / "paper.doc"
     doc_path.write_bytes(b"legacy-doc")
@@ -819,6 +830,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.project_files.find_project_files is paper_audit.find_project_files
     assert veritas.project_files._main_paper_score is paper_audit._main_paper_score
     assert veritas.project_files._is_missing_meta_value is paper_audit._is_missing_meta_value
+    assert callable(veritas.project_files.optional_dependency_for_extension_from_namespace)
+    assert veritas.project_files.extracted_body_text is paper_audit.extracted_body_text
     assert veritas.project_files.normalize_run_meta is paper_audit.normalize_run_meta
     assert veritas.cross_file_consistency.build_cross_file_consistency_audit is paper_audit.build_cross_file_consistency_audit
     assert veritas.cross_file_consistency._cross_file_severity_label is paper_audit._cross_file_severity_label

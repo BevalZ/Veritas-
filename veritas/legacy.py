@@ -184,10 +184,12 @@ from .preflight import _chat_completions_endpoint, preflight_mineru_from_namespa
 from .preflight_types import PreflightResult, run_preflight_once
 from .project_files import (
     SUPPORTED_TEXT_FILE_EXTENSIONS,
+    extracted_body_text,
     _is_missing_meta_value,
     _main_paper_score,
     find_project_files,
     normalize_run_meta,
+    optional_dependency_for_extension_from_namespace,
 )
 from .production_adapters import (
     ProductionImageDetectorAdapter,
@@ -919,20 +921,7 @@ def extract_text_from_file(file_path: Path, max_chars_per_file=None, use_mineru=
 
 
 def optional_dependency_for_extension(ext: str):
-    ext = str(ext or "").lower()
-    if ext == ".docx" and not DOCX_SUPPORTED:
-        return "python-docx", "python3 -m pip install python-docx"
-    if ext in {".xlsx", ".xlsm"} and not EXCEL_SUPPORTED:
-        return "openpyxl", "python3 -m pip install openpyxl"
-    return None, None
-
-
-def extracted_body_text(file_content: str, file_name: str = "") -> str:
-    text = str(file_content or "").strip()
-    if file_name:
-        text = re.sub(rf"^=+\s*文件:\s*{re.escape(str(file_name))}\s*=+\s*", "", text).strip()
-    text = re.sub(r"^\s*=+\s*文件:.*?=+\s*", "", text, count=1).strip()
-    return text
+    return optional_dependency_for_extension_from_namespace(globals(), ext)
 
 
 # ══════════════════════════════════════════════════════════════

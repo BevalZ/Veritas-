@@ -99,6 +99,25 @@ def _is_missing_meta_value(value):
     return value is None or value == "" or value == "N/A"
 
 
+def optional_dependency_for_extension_from_namespace(namespace, ext: str):
+    ext = str(ext or "").lower()
+    docx_supported = bool((namespace or {}).get("DOCX_SUPPORTED", False))
+    excel_supported = bool((namespace or {}).get("EXCEL_SUPPORTED", False))
+    if ext == ".docx" and not docx_supported:
+        return "python-docx", "python3 -m pip install python-docx"
+    if ext in {".xlsx", ".xlsm"} and not excel_supported:
+        return "openpyxl", "python3 -m pip install openpyxl"
+    return None, None
+
+
+def extracted_body_text(file_content: str, file_name: str = "") -> str:
+    text = str(file_content or "").strip()
+    if file_name:
+        text = re.sub(rf"^=+\s*文件:\s*{re.escape(str(file_name))}\s*=+\s*", "", text).strip()
+    text = re.sub(r"^\s*=+\s*文件:.*?=+\s*", "", text, count=1).strip()
+    return text
+
+
 def normalize_run_meta(meta, input_path=None, full_text=None):
     """Fill display/report metadata that may be missing from older resume caches."""
     normalized = ensure_runtime_meta(meta)
@@ -151,6 +170,8 @@ def normalize_run_meta(meta, input_path=None, full_text=None):
 
 __all__ = [
     "SUPPORTED_TEXT_FILE_EXTENSIONS",
+    "optional_dependency_for_extension_from_namespace",
+    "extracted_body_text",
     "find_project_files",
     "_main_paper_score",
     "_is_missing_meta_value",

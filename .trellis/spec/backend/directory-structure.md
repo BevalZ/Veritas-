@@ -170,9 +170,10 @@ tests/
   flattening and table markdown normalization. MinerU API upload, polling, and
   ZIP download logic remain outside this boundary.
 - `veritas/project_files.py` owns supported text-file extension constants,
-  project directory file discovery/classification, main-paper scoring, missing
-  metadata detection, and run metadata normalization. Keep this boundary
-  deterministic and filesystem-local; provider extraction remains elsewhere.
+  project directory file discovery/classification, optional dependency checks,
+  extracted file-body cleanup, main-paper scoring, missing metadata detection,
+  and run metadata normalization. Keep this boundary deterministic and
+  filesystem-local; provider extraction remains elsewhere.
 - `veritas/cross_file_consistency.py` owns deterministic cross-file text
   segmentation, sample-size/group-label/supplement-reference consistency
   findings, and Markdown/HTML rendering for the cross-file audit section. It
