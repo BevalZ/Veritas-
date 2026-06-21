@@ -4860,6 +4860,42 @@ def test_markdown_check_detail_lines_fallback_when_source_missing():
     assert len(lines) == 4
 
 
+def test_markdown_check_sections_lines_render_overview_and_details():
+    checks = [
+        {"category": "数据", "item": "样本量", "verdict": "🚩红旗", "source_text": "Methods n=42", "reason": "mismatch"},
+        {"category": "格式", "item": "标题", "verdict": "✅通过", "source_text": "", "reason": ""},
+    ]
+
+    lines = veritas.report_markdown._markdown_check_sections_lines(
+        checks,
+        lambda check: "红旗" in check.get("verdict", ""),
+        paper_audit._md_escape_cell,
+        lambda check: ["LLM"],
+        lambda check: check.get("source_text", ""),
+        lambda check: check.get("reason", ""),
+        lambda check: "",
+        paper_audit._brief_text,
+    )
+
+    joined = "\n".join(lines)
+    assert '<a id="suspicious-findings"></a>' in lines
+    assert "## 🔍 全部检查项概览" in joined
+    assert "| 1 | 数据 | 样本量 | 🚩红旗 | Methods n=42 |" in joined
+    assert '<a id="check-2"></a>' in joined
+    assert "LLM未提供明确原文摘录" in joined
+    empty_lines = veritas.report_markdown._markdown_check_sections_lines(
+        [],
+        lambda check: False,
+        paper_audit._md_escape_cell,
+        lambda check: [],
+        lambda check: "",
+        lambda check: "",
+        lambda check: "",
+        paper_audit._brief_text,
+    )
+    assert empty_lines == []
+
+
 def test_reports_include_review_overview_and_internal_evidence_links(tmp_path):
     stat = {
         "benford_deviation": None,

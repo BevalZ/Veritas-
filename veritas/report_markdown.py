@@ -158,6 +158,63 @@ def _markdown_check_detail_lines(index, check, check_source_text, check_reason, 
     return lines
 
 
+def _markdown_check_sections_lines(
+    checks,
+    is_suspicious,
+    md_escape,
+    check_source_tags,
+    check_source_text,
+    check_reason,
+    merged_group_summary,
+    brief_text,
+):
+    if not checks:
+        return []
+
+    lines = []
+    suspicious = [check for check in checks if is_suspicious(check)]
+    lines.append('<a id="suspicious-findings"></a>')
+    lines.append("## 🚩 可疑点证据汇总表")
+    lines.append("")
+    if suspicious:
+        lines.append("| # | 判定 | 来源类型 | 分类/检查项 | 原文证据摘录 | 可疑原因 |")
+        lines.append("|---|------|----------|-------------|--------------|----------|")
+        for i, check in enumerate(suspicious[:5], 1):
+            lines.append(
+                _markdown_suspicious_finding_row(
+                    i,
+                    check,
+                    md_escape,
+                    check_source_tags,
+                    check_source_text,
+                    check_reason,
+                    brief_text,
+                )
+            )
+        if len(suspicious) > 5:
+            lines.append("")
+            lines.append(f"> 仅显示 Top 5 可疑点；完整 {len(suspicious)} 条见下方全部检查项和 HTML/JSON。")
+    else:
+        lines.append("> 未发现红旗/疑点项；仍建议人工核验关键数据、图表和引用。")
+    lines.append("")
+
+    lines.append('<a id="all-checks"></a>')
+    lines.append("## 🔍 全部检查项概览")
+    lines.append("")
+    lines.append("| # | 分类 | 检查项 | 判定 | 证据摘要 |")
+    lines.append("|---|------|--------|------|----------|")
+    for i, check in enumerate(checks, 1):
+        lines.append(_markdown_check_overview_row(i, check, md_escape, check_source_text, brief_text))
+    lines.append("")
+
+    lines.append('<a id="finding-details"></a>')
+    lines.append("## 📋 逐条详细分析（含原文支撑）")
+    lines.append("")
+    for i, check in enumerate(checks, 1):
+        lines.extend(_markdown_check_detail_lines(i, check, check_source_text, check_reason, merged_group_summary))
+    return lines
+
+
 def format_report_from_namespace(namespace, report, pdf_path, meta, stat_result):
     """Format the audit result as a Markdown report."""
     normalize_meta = _namespace_value(namespace, "normalize_run_meta", normalize_run_meta)
@@ -210,47 +267,18 @@ def format_report_from_namespace(namespace, report, pdf_path, meta, stat_result)
     lines.extend(action_summary(report, meta, stat_result))
 
     checks = sorted(report.get("checks", []), key=check_sort_key)
-    if checks:
-        suspicious = [c for c in checks if is_suspicious(c)]
-        lines.append('<a id="suspicious-findings"></a>')
-        lines.append("## 🚩 可疑点证据汇总表")
-        lines.append("")
-        if suspicious:
-            lines.append("| # | 判定 | 来源类型 | 分类/检查项 | 原文证据摘录 | 可疑原因 |")
-            lines.append("|---|------|----------|-------------|--------------|----------|")
-            for i, c in enumerate(suspicious[:5], 1):
-                lines.append(
-                    _markdown_suspicious_finding_row(
-                        i,
-                        c,
-                        md_escape,
-                        check_source_tags,
-                        check_source_text,
-                        check_reason,
-                        brief_text,
-                    )
-                )
-            if len(suspicious) > 5:
-                lines.append("")
-                lines.append(f"> 仅显示 Top 5 可疑点；完整 {len(suspicious)} 条见下方全部检查项和 HTML/JSON。")
-        else:
-            lines.append("> 未发现红旗/疑点项；仍建议人工核验关键数据、图表和引用。")
-        lines.append("")
-
-        lines.append('<a id="all-checks"></a>')
-        lines.append("## 🔍 全部检查项概览")
-        lines.append("")
-        lines.append("| # | 分类 | 检查项 | 判定 | 证据摘要 |")
-        lines.append("|---|------|--------|------|----------|")
-        for i, c in enumerate(checks, 1):
-            lines.append(_markdown_check_overview_row(i, c, md_escape, check_source_text, brief_text))
-        lines.append("")
-
-        lines.append('<a id="finding-details"></a>')
-        lines.append("## 📋 逐条详细分析（含原文支撑）")
-        lines.append("")
-        for i, c in enumerate(checks, 1):
-            lines.extend(_markdown_check_detail_lines(i, c, check_source_text, check_reason, merged_group_summary))
+    lines.extend(
+        _markdown_check_sections_lines(
+            checks,
+            is_suspicious,
+            md_escape,
+            check_source_tags,
+            check_source_text,
+            check_reason,
+            merged_group_summary,
+            brief_text,
+        )
+    )
 
     if report.get("conclusion"):
         lines.append("## 📝 综合结论")
