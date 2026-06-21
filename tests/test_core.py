@@ -6778,6 +6778,34 @@ def test_report_action_cross_file_issues_build_evidence_and_limit_results():
     assert issues[-1]["item"] == "sample_mismatch_7"
 
 
+def test_report_action_evidence_chain_issues_include_selection_and_limit_results():
+    issues = veritas.report_action_context._report_action_evidence_chain_issues(
+        {
+            "clusters": [
+                {
+                    "severity": "strong" if idx == 0 else "medium",
+                    "title": f"Evidence cluster {idx}",
+                    "summary": f"Cluster summary {idx}",
+                    "source_types": ["llm_check", "cross_file_consistency"],
+                    "evidence_count": idx + 2,
+                }
+                for idx in range(12)
+            ]
+        }
+    )
+
+    assert len(issues) == 10
+    assert issues[0]["id"] == "evidence-cluster-1"
+    assert issues[0]["source"] == "evidence_chain_audit"
+    assert issues[0]["category"] == "证据链与证据簇审查"
+    assert issues[0]["item"] == "Evidence cluster 0"
+    assert issues[0]["evidence"] == "Cluster summary 0"
+    assert "来源: llm_check, cross_file_consistency；证据数: 2。" == issues[0]["reason"]
+    assert issues[0]["default_selected"] is True
+    assert issues[1]["default_selected"] is False
+    assert issues[-1]["item"] == "Evidence cluster 9"
+
+
 def test_report_action_context_cleans_reference_issue_text():
     context = paper_audit._report_action_context(
         {"summary": "ok", "risk_level": "中", "detection_score": 50, "checks": [], "conclusion": "done"},

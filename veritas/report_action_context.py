@@ -53,17 +53,10 @@ def _report_action_cross_file_issues(cross_file_audit):
     return issues
 
 
-def _report_action_context(report, pdf_path, meta, stat_result):
-    meta = meta or {}
-    paper_identity = meta.get("paper_identity") or {}
-    issues = _report_action_audit_issues(report)
-    cross_file_audit = (meta or {}).get("cross_file_consistency_audit") or {}
-    cross_file_issues = _report_action_cross_file_issues(cross_file_audit)
-    issues = cross_file_issues + issues
-    evidence_chain_audit = (meta or {}).get("evidence_chain_audit") or {}
-    evidence_chain_issues = []
+def _report_action_evidence_chain_issues(evidence_chain_audit):
+    issues = []
     for idx, cluster in enumerate((evidence_chain_audit.get("clusters") or [])[:10], 1):
-        evidence_chain_issues.append({
+        issues.append({
             "id": cluster.get("id") or f"evidence-cluster-{idx}",
             "source": "evidence_chain_audit",
             "category": "证据链与证据簇审查",
@@ -76,6 +69,18 @@ def _report_action_context(report, pdf_path, meta, stat_result):
             ),
             "default_selected": cluster.get("severity") == "strong",
         })
+    return issues
+
+
+def _report_action_context(report, pdf_path, meta, stat_result):
+    meta = meta or {}
+    paper_identity = meta.get("paper_identity") or {}
+    issues = _report_action_audit_issues(report)
+    cross_file_audit = (meta or {}).get("cross_file_consistency_audit") or {}
+    cross_file_issues = _report_action_cross_file_issues(cross_file_audit)
+    issues = cross_file_issues + issues
+    evidence_chain_audit = (meta or {}).get("evidence_chain_audit") or {}
+    evidence_chain_issues = _report_action_evidence_chain_issues(evidence_chain_audit)
     if evidence_chain_issues:
         issues = evidence_chain_issues + issues
     reference_audit = (meta or {}).get("reference_audit") or {}
