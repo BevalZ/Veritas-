@@ -166,6 +166,7 @@ from .run_logging import (
     progress_bar,
     resume_event,
     run_extraction_route,
+    run_input_manifest,
     run_scope_flags_from_args,
     save_mineru_artifacts,
     setup_run_logging,
@@ -4074,15 +4075,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
     run_runtime = runtime_metadata()
     run_workspace = create_run_workspace(input_path, output_dir, output_stem)
     print(f"🗂️ 本次运行工作区: {run_workspace['run_dir']}")
-    record_run_workspace_json(run_workspace, "input_manifest.json", {
-        "input": str(input_path),
-        "resolved_input": str(input_path.resolve()),
-        "input_type": "directory" if input_path.is_dir() else "file",
-        "exists": input_path.exists(),
-        "size_bytes": input_path.stat().st_size if input_path.is_file() else None,
-        "created_at": run_runtime["local_time"],
-        "runtime": run_runtime,
-    })
+    record_run_workspace_json(run_workspace, "input_manifest.json", run_input_manifest(input_path, run_runtime))
     allow_llm_cache_read = _allow_llm_cache_read(args.no_resume, getattr(args, "llm_cache_only", False))
     allow_llm_cache_write = not args.no_resume
     has_pdf_input = detect_pdf_input(input_path)

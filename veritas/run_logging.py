@@ -14,6 +14,7 @@ __all__ = [
     "resume_event",
     "_allow_llm_cache_read",
     "detect_pdf_input",
+    "run_input_manifest",
     "run_extraction_route",
     "run_scope_flags_from_args",
     "progress_bar",
@@ -103,6 +104,20 @@ def detect_pdf_input(input_path, pdf_suffixes=None):
         except Exception:
             return False
     return False
+
+
+def run_input_manifest(input_path, runtime):
+    """Build the input manifest recorded in a per-run workspace."""
+    path = Path(input_path)
+    return {
+        "input": str(path),
+        "resolved_input": str(path.resolve()),
+        "input_type": "directory" if path.is_dir() else "file",
+        "exists": path.exists(),
+        "size_bytes": path.stat().st_size if path.is_file() else None,
+        "created_at": runtime["local_time"],
+        "runtime": runtime,
+    }
 
 
 def run_extraction_route(input_path, use_mineru_default=False):

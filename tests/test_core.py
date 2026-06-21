@@ -676,6 +676,22 @@ def test_run_scope_flags_from_args_formats_limits():
     ]
 
 
+def test_run_input_manifest_records_local_file_state(tmp_path):
+    input_path = tmp_path / "paper.txt"
+    input_path.write_text("abc", encoding="utf-8")
+    runtime = {"local_time": "2026-06-21T10:00:00+08:00", "utc_year": 2026}
+
+    manifest = paper_audit.run_input_manifest(input_path, runtime)
+
+    assert manifest["input"] == str(input_path)
+    assert manifest["resolved_input"] == str(input_path.resolve())
+    assert manifest["input_type"] == "file"
+    assert manifest["exists"] is True
+    assert manifest["size_bytes"] == 3
+    assert manifest["created_at"] == runtime["local_time"]
+    assert manifest["runtime"] is runtime
+
+
 def test_run_audit_accepts_direct_docx_file_input(monkeypatch, tmp_path):
     docx_path = tmp_path / "paper.docx"
     docx_path.write_bytes(b"fake-docx")
@@ -1034,6 +1050,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.resume_event is paper_audit.resume_event
     assert veritas.run_logging._allow_llm_cache_read is paper_audit._allow_llm_cache_read
     assert veritas.run_logging.detect_pdf_input is paper_audit.detect_pdf_input
+    assert veritas.run_logging.run_input_manifest is paper_audit.run_input_manifest
     assert veritas.run_logging.run_extraction_route is paper_audit.run_extraction_route
     assert veritas.run_logging.run_scope_flags_from_args is paper_audit.run_scope_flags_from_args
     assert veritas.run_logging.progress_bar is paper_audit.progress_bar

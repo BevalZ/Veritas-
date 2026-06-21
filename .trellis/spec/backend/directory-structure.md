@@ -353,8 +353,9 @@ tests/
   only when `run_audit(...)` is called.
 - `veritas/run_logging.py` owns local run-output helpers: output base
   selection, tee logging, resume event JSONL writes, progress printing, LLM
-  cache-read policy, run-summary input/route/scope helpers, and saved MinerU
-  URL/ZIP artifacts. It should stay filesystem-local and must not call
+  cache-read policy, run-summary input/route/scope helpers, workspace input
+  manifest construction, and saved MinerU URL/ZIP artifacts. It should stay
+  filesystem-local and must not call
   providers.
 - `veritas/text_extraction.py` owns local standard-library text extraction
   fallbacks such as raw PDF stream text extraction. It must not call MinerU,
