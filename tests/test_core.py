@@ -880,6 +880,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.evidence_chain._build_evidence_clusters is paper_audit._build_evidence_clusters
     assert veritas.evidence_chain.format_evidence_chain_audit_html is paper_audit.format_evidence_chain_audit_html
     assert veritas.evidence_chain.format_evidence_chain_audit_markdown is paper_audit.format_evidence_chain_audit_markdown
+    assert callable(veritas.reference_audit.audit_references_from_namespace)
     assert veritas.reference_parsing.split_references_from_text is paper_audit.split_references_from_text
     assert veritas.reference_parsing.parse_references is paper_audit.parse_references
     assert veritas.reference_parsing.extract_reference_title is paper_audit.extract_reference_title

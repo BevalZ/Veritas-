@@ -243,6 +243,7 @@ from .reference_parsing import (
     reference_cache_key,
     split_references_from_text,
 )
+from .reference_audit import audit_references_from_namespace
 from .reference_reporting import (
     REFERENCE_ISSUE_LABELS,
     _reference_display_title,
@@ -2773,130 +2774,14 @@ def serve_web_runner(host="127.0.0.1", port=8765, open_browser=True, history_pat
 # ══════════════════════════════════════════════════════════════
 
 def audit_references(references_text, online=False, online_limit=50, timeout=10, cache=None):
-    """Reference plausibility check with optional online scholarly database verification."""
-    refs = parse_references(references_text)
-    effective_online_limit = _effective_limit(online_limit, len(refs))
-    online_checked = 0
-    online_cache = cache if isinstance(cache, dict) else {}
-
-    def base_issues_for(ref):
-        ref_issues = []
-        year = ref.get("year")
-        if not year:
-            ref_issues.append("missing_year")
-        else:
-            try:
-                if int(year) > runtime_utc_year():
-                    ref_issues.append("future_year")
-            except (TypeError, ValueError):
-                pass
-        if not ref.get("doi"):
-            ref_issues.append("missing_doi")
-        if not ref.get("has_journal_hint"):
-            ref_issues.append("missing_journal_or_source")
-        if len(ref.get("text", "")) < 25:
-            ref_issues.append("too_short")
-        return ref_issues
-
-    if online:
-        fetch_jobs = []
-        for idx, ref in enumerate(refs, 1):
-            if idx <= effective_online_limit:
-                cache_key = reference_cache_key(ref)
-                online_result = online_cache.get(cache_key)
-                if online_result:
-                    ref["online"] = online_result
-                else:
-                    fetch_jobs.append((idx, ref, cache_key))
-            else:
-                ref["online"] = {
-                    "online_status": "skipped",
-                    "confidence": 0.0,
-                    "problems": ["online_limit_reached"],
-                    "matched_sources": [],
-                    "query": build_reference_query(ref),
-                }
-
-        if fetch_jobs:
-            workers = min(4, len(fetch_jobs))
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                future_map = {
-                    executor.submit(verify_reference_online, ref, timeout=timeout): (idx, ref, cache_key)
-                    for idx, ref, cache_key in fetch_jobs
-                }
-                for future in concurrent.futures.as_completed(future_map):
-                    idx, ref, cache_key = future_map[future]
-                    try:
-                        online_result = future.result()
-                    except Exception as e:
-                        online_result = {
-                            "online_status": "error",
-                            "confidence": 0.0,
-                            "query": build_reference_query(ref),
-                            "matched_sources": [],
-                            "problems": ["all_sources_error"],
-                            "source_errors": [f"verify_reference_online: {type(e).__name__}"],
-                            "error_message": _brief_text(str(e), 240),
-                        }
-                    online_cache[cache_key] = online_result
-                    ref["online"] = online_result
-
-        online_checked = sum(
-            1 for idx, ref in enumerate(refs, 1)
-            if idx <= effective_online_limit and (ref.get("online") or {}).get("online_status") != "skipped"
-        )
-
-    issues = []
-    for idx, ref in enumerate(refs, 1):
-        ref_issues = base_issues_for(ref)
-
-        if online and idx <= effective_online_limit:
-            cache_key = reference_cache_key(ref)
-            online_result = ref.get("online") or online_cache.get(cache_key) or {}
-            ref["online"] = online_result
-            online_status = online_result.get("online_status")
-            if online_status in {"not_found", "weak", "error"}:
-                ref_issues.append(f"online_{online_status}")
-            ref_issues.extend(online_result.get("problems") or [])
-
-        if ref_issues:
-            issues.append({"index": idx, "issues": ref_issues, "text": ref.get("text", "")})
-    status = "ok"
-    if issues:
-        status = "needs_review" if len(issues) < max(3, len(refs) // 3) else "weak"
-    if online and refs:
-        hard_online_issues = [
-            item for item in issues
-            if any(str(issue).startswith("online_") or issue in {"doi_not_found", "no_online_match"} for issue in item.get("issues", []))
-        ]
-        if hard_online_issues:
-            status = "online_needs_review" if len(hard_online_issues) < max(3, len(refs) // 3) else "online_weak"
-        elif effective_online_limit >= len(refs):
-            online_statuses = [
-                (ref.get("online") or {}).get("online_status")
-                for ref in refs
-            ]
-            if online_statuses and all(item == "verified" for item in online_statuses):
-                status = "ok"
-            elif online_statuses and all(item in {"verified", "likely"} for item in online_statuses):
-                status = "needs_review"
-    return {
-        "status": status,
-        "reference_count": len(refs),
-        "doi_count": sum(1 for r in refs if r.get("doi")),
-        "year_count": sum(1 for r in refs if r.get("year")),
-        "online_enabled": bool(online),
-        "online_checked": online_checked,
-        "issues": issues,
-        "references": refs[:200],
-        "note": (
-            "在线真实性校检：优先用DOI精确检索，再用题名/年份在Crossref、OpenAlex和PubMed进行多源核验；"
-            "结果为尽力检索证据，不等同于绝对证明。"
-            if online else
-            "离线格式/可核验性校检：检查DOI、年份、来源字段等基本信息；不代表已联网验证引用真实存在。"
-        ),
-    }
-
+    return audit_references_from_namespace(
+        globals(),
+        references_text,
+        online=online,
+        online_limit=online_limit,
+        timeout=timeout,
+        cache=cache,
+    )
 
 def _reference_get_json(url, timeout=10, headers=None):
     # Reference verification already fans out across Crossref, OpenAlex, PubMed,

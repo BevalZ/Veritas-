@@ -50,6 +50,7 @@ veritas/
 ├── paper_identity.py   # Best-effort article identity extraction helpers
 ├── preflight.py        # Critical capability preflight boundary
 ├── project_files.py    # Project file discovery and run metadata helpers
+├── reference_audit.py  # Reference plausibility audit orchestration
 ├── reference_parsing.py # Reference section parsing and query-building helpers
 ├── reference_reporting.py # Reference audit Markdown/HTML rendering helpers
 ├── renderers.py        # Markdown/HTML renderer boundary
@@ -214,6 +215,12 @@ tests/
   extracted file-body cleanup, main-paper scoring, missing metadata detection,
   and run metadata normalization. Keep this boundary deterministic and
   filesystem-local; provider extraction remains elsewhere.
+- `veritas/reference_audit.py` owns reference plausibility audit orchestration,
+  including offline issue aggregation, online verification fan-out, cache reuse,
+  and final status selection. It should stay namespace-aware while
+  compatibility wrappers live in `veritas.legacy`, so tests and user scripts can
+  still monkeypatch parsers, online lookup, cache keys, runtime clock, and text
+  shortening.
 - `veritas/cross_file_consistency.py` owns deterministic cross-file text
   segmentation, sample-size/group-label/supplement-reference consistency
   findings, and Markdown/HTML rendering for the cross-file audit section. It
