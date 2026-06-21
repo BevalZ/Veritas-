@@ -96,24 +96,25 @@ def _hard_split_text(text, size):
     return parts
 
 
+def _split_structured_text_blocks(text):
+    blocks = []
+    pos = 0
+    pattern = re.compile(r"\[\[TABLE_START[^\]]*\]\][\s\S]*?\[\[TABLE_END\]\]", re.IGNORECASE)
+    for match in pattern.finditer(text or ""):
+        prefix = text[pos:match.start()]
+        blocks.extend(("text", part.strip()) for part in re.split(r"\n{2,}", prefix) if part.strip())
+        blocks.append(("table", match.group().strip()))
+        pos = match.end()
+    suffix = text[pos:]
+    blocks.extend(("text", part.strip()) for part in re.split(r"\n{2,}", suffix) if part.strip())
+    return blocks
+
+
 def smart_chunk_text(text, chunk_size=8000, overlap=1000):
     """Split text by structure while preserving table blocks."""
     if chunk_size <= 0:
         chunk_size = 8000
     overlap = max(0, min(overlap, chunk_size // 4))
-
-    def split_structured_blocks(s):
-        blocks = []
-        pos = 0
-        pattern = re.compile(r"\[\[TABLE_START[^\]]*\]\][\s\S]*?\[\[TABLE_END\]\]", re.IGNORECASE)
-        for match in pattern.finditer(s or ""):
-            prefix = s[pos:match.start()]
-            blocks.extend(("text", p.strip()) for p in re.split(r"\n{2,}", prefix) if p.strip())
-            blocks.append(("table", match.group().strip()))
-            pos = match.end()
-        suffix = s[pos:]
-        blocks.extend(("text", p.strip()) for p in re.split(r"\n{2,}", suffix) if p.strip())
-        return blocks
 
     def split_table_block(block, size):
         if len(block) <= size:
@@ -154,7 +155,7 @@ def smart_chunk_text(text, chunk_size=8000, overlap=1000):
         return [(text, 0, 1)]
 
     blocks = []
-    for kind, block in split_structured_blocks(text):
+    for kind, block in _split_structured_text_blocks(text):
         if kind == "table":
             blocks.extend(split_table_block(block, chunk_size))
         elif len(block) > chunk_size:

@@ -2450,6 +2450,18 @@ def test_hard_split_text_prefers_readable_boundaries():
     assert veritas.local_analysis._hard_split_text("", 25) == []
 
 
+def test_split_structured_text_blocks_separates_tables_and_paragraphs():
+    table = "[[TABLE_START id=1]]\n| A | B |\n[[TABLE_END]]"
+    blocks = veritas.local_analysis._split_structured_text_blocks(f"Intro\n\n{table}\n\nAfter")
+
+    assert blocks == [
+        ("text", "Intro"),
+        ("table", table),
+        ("text", "After"),
+    ]
+    assert veritas.local_analysis._split_structured_text_blocks("") == []
+
+
 def test_smart_chunk_text_preserves_table_boundaries():
     rows = ["| col1 | col2 |", "| --- | --- |"] + [f"| row{i} | value{i} |" for i in range(40)]
     table = "\n".join([
