@@ -2811,6 +2811,62 @@ def _run_reference_resource_audits(full_text, meta, args, resume_dir):
     return audit_text, reference_audit, resource_audit
 
 
+def _run_image_audit_stage(input_path, output_dir, args, resume_dir, meta):
+    image_cache_state = image_audit_cache_state(output_dir, resume_dir, args.no_resume, _json_load, _load_merged_json_dicts)
+    image_semantic_cache_path = image_cache_state["semantic_resume_path"]
+    image_semantic_local_cache_path = image_cache_state["semantic_local_path"]
+    image_semantic_cache = image_cache_state["semantic_cache"]
+    image_detector_cache_path = image_cache_state["detector_path"]
+    image_detector_cache = image_cache_state["detector_cache"]
+    image_semantic_enabled = not args.no_image_semantic and bool(GLM_API_KEY)
+    image_detector_enabled = not args.no_image_detector
+    if not args.no_image_semantic and not GLM_API_KEY:
+        print("⚠️ 图像语义分析API Key未配置，图像语义分析将跳过；本地合理性检测和imagedetector清单仍会生成")
+    image_semantic_cache_save = image_semantic_cache_save_callback(image_cache_state, _json_save) if image_semantic_enabled else None
+    image_detector_cache_save = image_detector_cache_save_callback(image_cache_state, _json_save) if image_detector_enabled else None
+    image_audit = build_image_audit(
+        str(input_path),
+        output_dir=output_dir,
+        limit=args.image_audit_limit,
+        semantic=image_semantic_enabled,
+        semantic_limit=args.image_semantic_limit,
+        semantic_timeout=args.image_semantic_timeout,
+        semantic_cache=image_semantic_cache,
+        semantic_cache_save=image_semantic_cache_save,
+        detector=image_detector_enabled,
+        detector_limit=args.image_detector_limit,
+        detector_timeout=args.image_detector_timeout,
+        detector_cache=image_detector_cache,
+        detector_cache_save=image_detector_cache_save,
+    )
+    if image_semantic_enabled and not args.no_resume:
+        image_semantic_cache_save()
+        resume_event(
+            resume_dir,
+            "stage4_image_semantic",
+            "saved",
+            f"semantic_checked={image_audit.get('semantic_checked', 0)}; cache_entries={len(image_semantic_cache)}; local_cache={image_semantic_local_cache_path}",
+            cache=str(image_semantic_cache_path),
+        )
+    if image_detector_enabled and not args.no_resume:
+        image_detector_cache_save()
+        resume_event(
+            resume_dir,
+            "stage4_image_detector",
+            "saved",
+            f"detector_checked={image_audit.get('detector_checked', 0)}; cache_entries={len(image_detector_cache)}",
+            cache=str(image_detector_cache_path),
+        )
+    meta["image_audit"] = image_audit
+    if image_audit.get("image_count"):
+        print(f"🖼️ 图像检测完成: 本地{image_audit.get('checked_count')}/{image_audit.get('image_count')}张；图像语义分析 {image_audit.get('semantic_checked')}张；imagedetector {image_audit.get('detector_checked')}张")
+        manifest_path = save_image_review_manifest(image_audit, output_dir)
+        if manifest_path:
+            meta["image_review_manifest"] = str(manifest_path)
+            print(f"🖼️ 图像AI检测结果清单已保存: {manifest_path}")
+    return image_audit
+
+
 
 def run_audit(run_request: RunRequest, args=None) -> RunResult:
     args = args if args is not None else run_request.to_args()
@@ -3501,58 +3557,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             progress_bar(4, 5, "阶段4/5 审查结果合并完成")
 
     # ─── 图像合理性检测：使用MinerU已保存zip中的图片/目录图片生成报告清单 ───
-    image_cache_state = image_audit_cache_state(output_dir, resume_dir, args.no_resume, _json_load, _load_merged_json_dicts)
-    image_semantic_cache_path = image_cache_state["semantic_resume_path"]
-    image_semantic_local_cache_path = image_cache_state["semantic_local_path"]
-    image_semantic_cache = image_cache_state["semantic_cache"]
-    image_detector_cache_path = image_cache_state["detector_path"]
-    image_detector_cache = image_cache_state["detector_cache"]
-    image_semantic_enabled = not args.no_image_semantic and bool(GLM_API_KEY)
-    image_detector_enabled = not args.no_image_detector
-    if not args.no_image_semantic and not GLM_API_KEY:
-        print("⚠️ 图像语义分析API Key未配置，图像语义分析将跳过；本地合理性检测和imagedetector清单仍会生成")
-    image_semantic_cache_save = image_semantic_cache_save_callback(image_cache_state, _json_save) if image_semantic_enabled else None
-    image_detector_cache_save = image_detector_cache_save_callback(image_cache_state, _json_save) if image_detector_enabled else None
-    image_audit = build_image_audit(
-        str(input_path),
-        output_dir=output_dir,
-        limit=args.image_audit_limit,
-        semantic=image_semantic_enabled,
-        semantic_limit=args.image_semantic_limit,
-        semantic_timeout=args.image_semantic_timeout,
-        semantic_cache=image_semantic_cache,
-        semantic_cache_save=image_semantic_cache_save,
-        detector=image_detector_enabled,
-        detector_limit=args.image_detector_limit,
-        detector_timeout=args.image_detector_timeout,
-        detector_cache=image_detector_cache,
-        detector_cache_save=image_detector_cache_save,
-    )
-    if image_semantic_enabled and not args.no_resume:
-        image_semantic_cache_save()
-        resume_event(
-            resume_dir,
-            "stage4_image_semantic",
-            "saved",
-            f"semantic_checked={image_audit.get('semantic_checked', 0)}; cache_entries={len(image_semantic_cache)}; local_cache={image_semantic_local_cache_path}",
-            cache=str(image_semantic_cache_path),
-        )
-    if image_detector_enabled and not args.no_resume:
-        image_detector_cache_save()
-        resume_event(
-            resume_dir,
-            "stage4_image_detector",
-            "saved",
-            f"detector_checked={image_audit.get('detector_checked', 0)}; cache_entries={len(image_detector_cache)}",
-            cache=str(image_detector_cache_path),
-        )
-    meta["image_audit"] = image_audit
-    if image_audit.get("image_count"):
-        print(f"🖼️ 图像检测完成: 本地{image_audit.get('checked_count')}/{image_audit.get('image_count')}张；图像语义分析 {image_audit.get('semantic_checked')}张；imagedetector {image_audit.get('detector_checked')}张")
-        manifest_path = save_image_review_manifest(image_audit, output_dir)
-        if manifest_path:
-            meta["image_review_manifest"] = str(manifest_path)
-            print(f"🖼️ 图像AI检测结果清单已保存: {manifest_path}")
+    image_audit = _run_image_audit_stage(input_path, output_dir, args, resume_dir, meta)
     failed_capability, failed_message, failed_details = coverage_blocking_failure(meta)
     if failed_capability:
         failure = AuditFailure(
