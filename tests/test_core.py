@@ -4270,6 +4270,31 @@ def test_format_html_parse_error_section_escapes_raw_output():
     assert "<bad>" not in section
 
 
+def test_format_html_suspicious_card_renders_escaped_evidence_summary():
+    card = veritas.report_html_sections._format_html_suspicious_card(
+        2,
+        {"category": "数据<组>", "item": "样本量", "verdict": "🚩红旗", "source_text": "Methods n=42", "reason": "Mismatch <risk>"},
+        paper_audit._html_escape,
+        lambda verdict: "verdict-red",
+        lambda check: check.get("source_text", ""),
+        lambda check: check.get("reason", ""),
+        lambda check: 91,
+        lambda check: ["llm", "evidence"],
+        lambda check: "<div class=\"merged-group\">merged</div>",
+        paper_audit._brief_text,
+        lambda source: f"<blockquote>{paper_audit._html_escape(source)}</blockquote>",
+    )
+
+    assert 'id="suspicious-finding-2"' in card
+    assert '<span class="suspicion-rank">#2</span>' in card
+    assert "数据&lt;组&gt; / 样本量" in card
+    assert "复核分 91" in card
+    assert "llm + evidence" in card
+    assert "<div class=\"merged-group\">merged</div>" in card
+    assert "<blockquote>Methods n=42</blockquote>" in card
+    assert "Mismatch &lt;risk&gt;" in card
+
+
 def test_clipboard_windows_uses_clip_exe_without_shell(monkeypatch):
     calls = []
 

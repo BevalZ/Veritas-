@@ -29,6 +29,46 @@ def _format_html_parse_error_section(report, html_escape):
         </div>"""
 
 
+def _format_html_suspicious_card(
+    index,
+    check,
+    html_escape,
+    verdict_class_for,
+    check_source_text,
+    check_reason,
+    check_suspicion_score,
+    check_source_tags,
+    merged_group_html,
+    brief_text,
+    evidence_html,
+):
+    verdict = check.get("verdict", "N/A")
+    verdict_class = verdict_class_for(verdict)
+    cat_item = f"{check.get('category', 'N/A')} / {check.get('item', 'N/A')}"
+    source = check_source_text(check)
+    reason = check_reason(check)
+    brief = brief_text(reason or source or "未提供详细原因", 120)
+    suspicion_score = check_suspicion_score(check)
+    source_tags = " + ".join(check_source_tags(check))
+    merged_html = merged_group_html(check)
+    return f"""
+            <details class="suspicion-card" id="suspicious-finding-{index}">
+                <summary class="suspicion-summary">
+                    <span class="suspicion-rank">#{index}</span>
+                    <span class="{verdict_class} suspicion-verdict">{html_escape(verdict)}</span>
+                    <span class="suspicion-title">{html_escape(cat_item)}</span>
+                    <span class="suspicion-score">复核分 {suspicion_score}</span>
+                    <span class="suspicion-brief"><strong>{html_escape(source_tags)}</strong> · {html_escape(brief)}</span>
+                    <span class="summary-action">查看详情</span>
+                </summary>
+                <div class="suspicion-body">
+                    {merged_html}
+                    <div class="detail-evidence"><strong>原文/证据摘录</strong>{evidence_html(source or 'LLM未提供明确原文摘录，请人工回查对应段落。')}</div>
+                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>{html_escape(reason or 'LLM未提供详细说明。')}</p></div>
+                </div>
+            </details>"""
+
+
 def format_html_check_sections_from_namespace(namespace, report):
     """Render LLM check summary/detail sections for the top-level HTML report."""
     html_escape = _namespace_value(namespace, "_html_escape", _html_escape)
@@ -53,31 +93,19 @@ def format_html_check_sections_from_namespace(namespace, report):
 
     suspicious_items = ""
     for i, c in enumerate(suspicious[:5], 1):
-        verdict = c.get("verdict", "N/A")
-        verdict_class = verdict_class_for(verdict)
-        cat_item = f"{c.get('category', 'N/A')} / {c.get('item', 'N/A')}"
-        source = check_source_text(c)
-        reason = check_reason(c)
-        brief = brief_text(reason or source or "未提供详细原因", 120)
-        suspicion_score = check_suspicion_score(c)
-        source_tags = " + ".join(check_source_tags(c))
-        merged_html = merged_group_html(c)
-        suspicious_items += f"""
-            <details class="suspicion-card" id="suspicious-finding-{i}">
-                <summary class="suspicion-summary">
-                    <span class="suspicion-rank">#{i}</span>
-                    <span class="{verdict_class} suspicion-verdict">{html_escape(verdict)}</span>
-                    <span class="suspicion-title">{html_escape(cat_item)}</span>
-                    <span class="suspicion-score">复核分 {suspicion_score}</span>
-                    <span class="suspicion-brief"><strong>{html_escape(source_tags)}</strong> · {html_escape(brief)}</span>
-                    <span class="summary-action">查看详情</span>
-                </summary>
-                <div class="suspicion-body">
-                    {merged_html}
-                    <div class="detail-evidence"><strong>原文/证据摘录</strong>{evidence_html(source or 'LLM未提供明确原文摘录，请人工回查对应段落。')}</div>
-                    <div class="detail-text"><strong>可疑原因/详细说明</strong><p>{html_escape(reason or 'LLM未提供详细说明。')}</p></div>
-                </div>
-            </details>"""
+        suspicious_items += _format_html_suspicious_card(
+            i,
+            c,
+            html_escape,
+            verdict_class_for,
+            check_source_text,
+            check_reason,
+            check_suspicion_score,
+            check_source_tags,
+            merged_group_html,
+            brief_text,
+            evidence_html,
+        )
     if len(suspicious) > 5:
         suspicious_items += f'<div class="muted">仅显示 Top 5；完整 {len(suspicious)} 条见下方全部检查项。</div>'
     if not suspicious_items:
