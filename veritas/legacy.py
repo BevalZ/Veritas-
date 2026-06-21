@@ -162,6 +162,7 @@ from .run_logging import (
     _allow_llm_cache_read,
     detect_pdf_input,
     extract_cache_matches,
+    extract_cache_payload,
     get_output_base,
     get_resume_dir,
     progress_bar,
@@ -4533,16 +4534,18 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
     completed_stages.append("stage1_text_extraction")
 
     if not args.no_resume and full_text:
-        _json_save(extract_cache_path, {
-            "input": str(input_path.resolve()),
-            "cache_version": EXTRACT_CACHE_VERSION,
-            "use_mineru": use_mineru,
-            "mineru_lang": args.mineru_lang,
-            "full_text": full_text,
-            "meta": meta,
-            "file_texts": extracted_file_texts,
-            "saved_at": time.strftime("%F %T"),
-        })
+        _json_save(
+            extract_cache_path,
+            extract_cache_payload(
+                input_path,
+                EXTRACT_CACHE_VERSION,
+                use_mineru,
+                args.mineru_lang,
+                full_text,
+                meta,
+                extracted_file_texts,
+            ),
+        )
         resume_event(resume_dir, "stage1_extract", "saved", f"chars={len(full_text)}; use_mineru={use_mineru}", cache=str(extract_cache_path))
 
     # ─── 朱雀AI文本检测（可选） ───

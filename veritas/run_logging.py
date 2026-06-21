@@ -15,6 +15,7 @@ __all__ = [
     "_allow_llm_cache_read",
     "detect_pdf_input",
     "extract_cache_matches",
+    "extract_cache_payload",
     "run_cache_use_manifest",
     "run_input_manifest",
     "record_preflight_result",
@@ -118,6 +119,30 @@ def extract_cache_matches(cached_extract, input_path, use_mineru, cache_version)
         and cached_extract.get("use_mineru") == use_mineru
         and cached_extract.get("cache_version") == cache_version
     )
+
+
+def extract_cache_payload(
+    input_path,
+    cache_version,
+    use_mineru,
+    mineru_lang,
+    full_text,
+    meta,
+    file_texts,
+    timestamp_func=None,
+):
+    """Build the stage-1 extraction cache payload."""
+    timestamp = timestamp_func or (lambda: time.strftime("%F %T"))
+    return {
+        "input": str(Path(input_path).resolve()),
+        "cache_version": cache_version,
+        "use_mineru": use_mineru,
+        "mineru_lang": mineru_lang,
+        "full_text": full_text,
+        "meta": meta,
+        "file_texts": file_texts,
+        "saved_at": timestamp(),
+    }
 
 
 def run_input_manifest(input_path, runtime):
