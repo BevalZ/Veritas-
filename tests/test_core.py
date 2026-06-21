@@ -823,6 +823,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.image_results._normalize_glm_image_result is paper_audit._normalize_glm_image_result
     assert veritas.image_results._normalize_detector_result is paper_audit._normalize_detector_result
     assert veritas.image_results._extract_json_object is paper_audit._extract_json_object
+    assert veritas.image_payloads._image_to_data_url is paper_audit._image_to_data_url
+    assert veritas.image_payloads._prepare_detector_upload_file is paper_audit._prepare_detector_upload_file
     assert veritas.image_collection._dedupe_paths is paper_audit._dedupe_paths
     assert veritas.image_collection._image_output_dir is paper_audit._image_output_dir
     assert veritas.image_collection._latest_mineru_zips is paper_audit._latest_mineru_zips
@@ -2307,6 +2309,19 @@ def test_image_semantic_display_includes_visual_fields():
     assert "风险: 色标不可见" in summary
     assert "复核: 核对图注" in summary
     assert status == "需人工核对 / 置信度 0.73"
+
+
+def test_image_payload_helpers_fallback_to_raw_file_bytes(tmp_path):
+    image_path = tmp_path / "figure.txt"
+    image_path.write_bytes(b"not-an-image")
+
+    data_url = paper_audit._image_to_data_url(image_path)
+    upload_name, upload_mime, upload_content = paper_audit._prepare_detector_upload_file(image_path)
+
+    assert data_url == "data:text/plain;base64,bm90LWFuLWltYWdl"
+    assert upload_name == "figure.txt"
+    assert upload_mime == "text/plain"
+    assert upload_content == b"not-an-image"
 
 
 def test_call_imagedetector_uses_web_upload_flow(monkeypatch, tmp_path):

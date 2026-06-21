@@ -7,7 +7,7 @@
 输入论文文件或目录 → 文本提取 → 本地统计检测 + LLM语义分析 → 输出md/html格式报告
 用法: python paper_audit.py <paper_path> [--mineru] [--max-chars 8000] [--output report.md]
 """
-import re, json, time, argparse, urllib.request, urllib.parse, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, hashlib, base64, io, concurrent.futures, signal, threading, datetime
+import re, json, time, argparse, urllib.request, urllib.parse, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, hashlib, io, concurrent.futures, signal, threading, datetime
 from pathlib import Path
 from typing import Tuple, Dict, List, Any, Callable
 
@@ -76,6 +76,7 @@ from .image_collection import (
     _latest_mineru_zips,
     collect_mineru_image_files_from_namespace,
 )
+from .image_payloads import _image_to_data_url, _prepare_detector_upload_file
 from .image_reporting import (
     _image_detector_display,
     _image_semantic_display,
@@ -4890,47 +4891,6 @@ def _image_semantic_cache_key(image_path: str, api_url=None, model=None, cache_v
         model=model,
         cache_version=cache_version,
     )
-
-
-def _image_to_data_url(image_path: str):
-    path = Path(image_path)
-    try:
-        from PIL import Image
-        with Image.open(path) as img:
-            img = img.convert("RGB")
-            img.thumbnail((1400, 1400))
-            side = max(512, img.width, img.height)
-            side = min(side, 1600)
-            canvas = Image.new("RGB", (side, side), "white")
-            x = max(0, (side - img.width) // 2)
-            y = max(0, (side - img.height) // 2)
-            canvas.paste(img, (x, y))
-            buf = io.BytesIO()
-            canvas.save(buf, format="JPEG", quality=88, optimize=True)
-            data = base64.b64encode(buf.getvalue()).decode("ascii")
-            return f"data:image/jpeg;base64,{data}"
-    except Exception:
-        mime = mimetypes.guess_type(str(path))[0] or "image/png"
-        data = base64.b64encode(path.read_bytes()).decode("ascii")
-        return f"data:{mime};base64,{data}"
-
-
-def _prepare_detector_upload_file(image_path: str):
-    path = Path(image_path)
-    mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
-    if mime in {"image/jpeg", "image/png", "image/webp"}:
-        return path.name, mime, path.read_bytes()
-    try:
-        from PIL import Image
-        with Image.open(path) as img:
-            img = img.convert("RGB")
-            img.thumbnail((1600, 1600))
-            buf = io.BytesIO()
-            buf_name = f"{path.stem}.jpg"
-            img.save(buf, format="JPEG", quality=90, optimize=True)
-            return buf_name, "image/jpeg", buf.getvalue()
-    except Exception:
-        return path.name, mime, path.read_bytes()
 
 
 class _ExternalCapabilityTimeout(BaseException):
