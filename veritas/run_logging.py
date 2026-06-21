@@ -24,6 +24,7 @@ __all__ = [
     "llm_success_cache_payload",
     "llm_failure_cache_payload",
     "llm_chunk_cache_read_state",
+    "apply_llm_partial_report_warning",
     "online_cache_state",
     "save_online_cache_result",
     "image_audit_cache_state",
@@ -356,6 +357,19 @@ def llm_chunk_cache_read_state(
         "cache_path": chunk_cache,
         "report": None,
     }
+
+
+def apply_llm_partial_report_warning(report, meta):
+    """Apply the standard partial text-LLM warning to a merged report."""
+    if not isinstance(report, dict) or not meta.get("llm_partial_report"):
+        return None
+    warning = (
+        f"注意：本报告仅覆盖 {meta.get('llm_coverage')} 个LLM分块；"
+        f"失败块: {meta.get('llm_failed_chunks')}。结论不完整，建议换稳定API后断点续跑。"
+    )
+    report["_partial_warning"] = warning
+    report["summary"] = warning + " " + str(report.get("summary", ""))
+    return warning
 
 
 def online_cache_state(resume_dir, filename, no_resume, json_load):

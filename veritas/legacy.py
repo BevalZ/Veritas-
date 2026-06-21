@@ -161,6 +161,7 @@ from . import run_logging as _run_logging
 from .run_logging import (
     _allow_llm_cache_read,
     apply_llm_chunk_coverage_meta,
+    apply_llm_partial_report_warning,
     detect_pdf_input,
     extract_cache_matches,
     extract_cache_payload,
@@ -3425,10 +3426,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             meta["chunk_count"] = total_chunks
             meta["chunk_size"] = chunk_size
             meta["overlap"] = overlap
-            if meta.get("llm_partial_report"):
-                warning = f"注意：本报告仅覆盖 {meta.get('llm_coverage')} 个LLM分块；失败块: {meta.get('llm_failed_chunks')}。结论不完整，建议换稳定API后断点续跑。"
-                report["_partial_warning"] = warning
-                report["summary"] = warning + " " + str(report.get("summary", ""))
+            apply_llm_partial_report_warning(report, meta)
             resume_event(resume_dir, "stage4_merge", "done", f"checks={len(report.get('checks', [])) if isinstance(report, dict) else 'N/A'}; coverage={meta.get('llm_coverage')}")
             progress_bar(4, 5, "阶段4/5 审查结果合并完成")
 

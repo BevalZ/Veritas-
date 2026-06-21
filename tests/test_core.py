@@ -1051,6 +1051,31 @@ def test_llm_chunk_cache_read_state_requires_call_when_cache_read_disabled(tmp_p
     assert calls == []
 
 
+def test_apply_llm_partial_report_warning_updates_report_summary():
+    report = {"summary": "原始摘要"}
+    meta = {
+        "llm_partial_report": True,
+        "llm_coverage": "2/4",
+        "llm_failed_chunks": [3, 4],
+    }
+
+    warning = paper_audit.apply_llm_partial_report_warning(report, meta)
+
+    assert warning == "注意：本报告仅覆盖 2/4 个LLM分块；失败块: [3, 4]。结论不完整，建议换稳定API后断点续跑。"
+    assert report["_partial_warning"] == warning
+    assert report["summary"] == warning + " 原始摘要"
+
+
+def test_apply_llm_partial_report_warning_leaves_complete_report_unchanged():
+    report = {"summary": "完整摘要"}
+    meta = {"llm_partial_report": False, "llm_coverage": "4/4", "llm_failed_chunks": []}
+
+    warning = paper_audit.apply_llm_partial_report_warning(report, meta)
+
+    assert warning is None
+    assert report == {"summary": "完整摘要"}
+
+
 def test_online_cache_state_loads_resume_cache_when_enabled(tmp_path):
     resume_dir = tmp_path / ".paper_audit_resume"
     resume_dir.mkdir()
@@ -1724,6 +1749,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.llm_success_cache_payload is paper_audit.llm_success_cache_payload
     assert veritas.run_logging.llm_failure_cache_payload is paper_audit.llm_failure_cache_payload
     assert veritas.run_logging.llm_chunk_cache_read_state is paper_audit.llm_chunk_cache_read_state
+    assert veritas.run_logging.apply_llm_partial_report_warning is paper_audit.apply_llm_partial_report_warning
     assert veritas.run_logging.online_cache_state is paper_audit.online_cache_state
     assert veritas.run_logging.save_online_cache_result is paper_audit.save_online_cache_result
     assert veritas.run_logging.image_audit_cache_state is paper_audit.image_audit_cache_state
