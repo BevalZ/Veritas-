@@ -78,6 +78,309 @@ def build_html_status_fragments_from_namespace(namespace, report, meta, stat_res
     }
 
 
+def _html_report_compact_skin_css(risk_color):
+    """Return the compact grayscale CSS overrides for the report shell."""
+    return f"""  /* Compact grayscale report skin: evidence first, decoration last. */
+  :root {{
+    --bg: #f6f6f6;
+    --paper: #ffffff;
+    --surface: #ffffff;
+    --surface2: #eeeeee;
+    --text: #171717;
+    --text-muted: #666666;
+    --accent: #111111;
+    --accent2: #3f3f46;
+    --border: #d4d4d4;
+    --red: #b42318;
+    --yellow: #8a5a00;
+    --green: #166534;
+    --shadow: none;
+  }}
+  body {{
+    background: #f6f6f6;
+    color: var(--text);
+    line-height: 1.55;
+    padding: 18px;
+  }}
+  .container {{ max-width: 1280px; }}
+  .header, .section {{
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: none;
+  }}
+  .header {{
+    padding: 18px;
+    margin-bottom: 14px;
+    text-align: left;
+  }}
+  .report-topline {{
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }}
+  .report-kicker {{
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+  }}
+  .header h1 {{
+    font-size: 24px;
+    line-height: 1.2;
+    margin: 3px 0 8px;
+    letter-spacing: 0;
+  }}
+  .report-summary {{
+    max-width: 820px;
+    color: #333333;
+    font-size: 14px;
+  }}
+  .risk-badge {{
+    border-radius: 6px;
+    padding: 7px 10px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
+  }}
+  .score-panel {{
+    display: grid;
+    grid-template-columns: 170px minmax(220px, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }}
+  .score-value {{
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 900;
+    color: {risk_color};
+  }}
+  .score-caption {{
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 4px;
+  }}
+  .priority-label {{
+    font-weight: 900;
+    color: {risk_color};
+    margin-bottom: 4px;
+  }}
+  .score-bar {{
+    height: 7px;
+    background: #e5e5e5;
+    border-radius: 4px;
+    margin-top: 0;
+  }}
+  .score-fill {{
+    background: {risk_color};
+    border-radius: 4px;
+    transition: none;
+  }}
+  .score-breakdown {{
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }}
+  .meta-grid {{
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }}
+  .meta-grid > div, .meta-item {{
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 10px;
+    background: #fafafa;
+    color: var(--text-muted);
+    font-size: 12px;
+  }}
+  .meta-grid strong, .meta-item strong {{
+    display: block;
+    color: var(--text);
+    font-size: 13px;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+  }}
+  .section {{
+    padding: 16px;
+    margin-bottom: 14px;
+  }}
+  .section h2 {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 17px;
+    line-height: 1.25;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+  }}
+  .section-hint {{
+    margin: -4px 0 12px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }}
+  table {{ font-size: 13px; }}
+  th, td {{
+    padding: 8px 9px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }}
+  th {{
+    background: #f1f1f1;
+    color: #444444;
+    font-size: 11px;
+    letter-spacing: 0;
+  }}
+  .action-card, .suspicion-card, .detail-card, .reference-card {{
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-left: 3px solid #111111;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }}
+  .cross-file-card {{
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--yellow);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }}
+  .evidence-summary {{ border-left: 3px solid var(--red); }}
+  .suspicion-summary {{
+    grid-template-columns: 44px minmax(72px, 112px) minmax(180px, 1fr) 96px;
+    gap: 7px 10px;
+  }}
+  .suspicion-rank, .action-rank, .detail-num {{
+    background: #f1f1f1;
+    color: #111111;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+  }}
+  .suspicion-brief {{
+    grid-column: 2 / 4;
+    color: var(--text-muted);
+  }}
+  .summary-action {{
+    grid-column: 4;
+    grid-row: 2;
+    justify-self: end;
+    color: #111111;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }}
+  .detail-summary .summary-action {{
+    grid-column: auto;
+    grid-row: auto;
+    margin-left: auto;
+  }}
+  .detail-card[open], .suspicion-card[open] {{
+    background: #fbfbfb;
+  }}
+  .cross-file-card[open] {{
+    background: #fbfbfb;
+  }}
+  .detail-summary::after, .suspicion-summary::after {{
+    content: none;
+  }}
+  .detail-body, .suspicion-body {{
+    border-top: 1px solid var(--border);
+    margin-top: 10px;
+    padding-top: 10px;
+  }}
+  .detail-evidence {{
+    background: #f7f7f7;
+    color: #222222;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }}
+  .detail-evidence blockquote {{
+    color: #222222;
+  }}
+  .detail-text {{
+    color: #4b4b4b;
+  }}
+  .data-table-wrap {{
+    background: #ffffff;
+    border-radius: 6px;
+  }}
+  .data-table th {{
+    background: #ededed;
+  }}
+  .merged-group {{
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fff;
+  }}
+  .merged-group summary {{
+    cursor: pointer;
+    font-weight: 800;
+    color: #111111;
+  }}
+  .coverage-warning, .coverage-ok, .conclusion-section, .action-section, .web-action-section {{
+    border-left-width: 3px;
+    background: #ffffff;
+  }}
+  .web-action-section {{ border-left-color: #2563eb; }}
+  .action-button, .secondary-button {{
+    border-radius: 6px;
+    padding: 8px 11px;
+    color: #111111;
+  }}
+  .action-button {{ color: #ffffff; }}
+  .generated-draft {{
+    border-radius: 6px;
+    min-height: 220px;
+    color: #111111;
+  }}
+  .image-thumb {{
+    max-width: 84px;
+    max-height: 64px;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #ffffff;
+  }}
+  .muted-inline {{
+    color: var(--text-muted);
+    font-size: 12px;
+  }}
+  @media (max-width: 900px) {{
+    body {{ padding: 10px; }}
+    .report-topline {{ flex-direction: column; }}
+    .score-panel {{ grid-template-columns: 1fr; }}
+    .meta-grid {{ grid-template-columns: 1fr 1fr; }}
+    .overview-grid {{ grid-template-columns: 1fr 1fr; }}
+    .overview-columns, .limitation-grid {{ grid-template-columns: 1fr; }}
+    .suspicion-summary, .reference-summary {{
+      grid-template-columns: 40px minmax(70px, 100px) 1fr;
+    }}
+    .suspicion-score, .reference-confidence, .summary-action {{
+      grid-column: 2 / 4;
+      justify-self: start;
+    }}
+    .suspicion-brief, .reference-issues {{
+      grid-column: 1 / 4;
+    }}
+  }}
+  @media (max-width: 560px) {{
+    .meta-grid {{ grid-template-columns: 1fr; }}
+    .overview-grid {{ grid-template-columns: 1fr; }}
+    .checks-table {{ table-layout: auto; }}
+  }}
+"""
+
+
 def build_html_report_head(risk_color):
     """Build the top-level HTML report head and CSS."""
     return f"""<!DOCTYPE html>
@@ -744,305 +1047,7 @@ def build_html_report_head(risk_color):
     margin-top: 32px;
     padding: 16px;
   }}
-  /* Compact grayscale report skin: evidence first, decoration last. */
-  :root {{
-    --bg: #f6f6f6;
-    --paper: #ffffff;
-    --surface: #ffffff;
-    --surface2: #eeeeee;
-    --text: #171717;
-    --text-muted: #666666;
-    --accent: #111111;
-    --accent2: #3f3f46;
-    --border: #d4d4d4;
-    --red: #b42318;
-    --yellow: #8a5a00;
-    --green: #166534;
-    --shadow: none;
-  }}
-  body {{
-    background: #f6f6f6;
-    color: var(--text);
-    line-height: 1.55;
-    padding: 18px;
-  }}
-  .container {{ max-width: 1280px; }}
-  .header, .section {{
-    background: #ffffff;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: none;
-  }}
-  .header {{
-    padding: 18px;
-    margin-bottom: 14px;
-    text-align: left;
-  }}
-  .report-topline {{
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: flex-start;
-    margin-bottom: 12px;
-  }}
-  .report-kicker {{
-    color: var(--text-muted);
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0;
-  }}
-  .header h1 {{
-    font-size: 24px;
-    line-height: 1.2;
-    margin: 3px 0 8px;
-    letter-spacing: 0;
-  }}
-  .report-summary {{
-    max-width: 820px;
-    color: #333333;
-    font-size: 14px;
-  }}
-  .risk-badge {{
-    border-radius: 6px;
-    padding: 7px 10px;
-    margin: 0;
-    font-size: 13px;
-    line-height: 1;
-    white-space: nowrap;
-  }}
-  .score-panel {{
-    display: grid;
-    grid-template-columns: 170px minmax(220px, 1fr);
-    gap: 12px;
-    align-items: center;
-    padding: 12px 0;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-  }}
-  .score-value {{
-    font-size: 34px;
-    line-height: 1;
-    font-weight: 900;
-    color: {risk_color};
-  }}
-  .score-caption {{
-    color: var(--text-muted);
-    font-size: 12px;
-    margin-top: 4px;
-  }}
-  .priority-label {{
-    font-weight: 900;
-    color: {risk_color};
-    margin-bottom: 4px;
-  }}
-  .score-bar {{
-    height: 7px;
-    background: #e5e5e5;
-    border-radius: 4px;
-    margin-top: 0;
-  }}
-  .score-fill {{
-    background: {risk_color};
-    border-radius: 4px;
-    transition: none;
-  }}
-  .score-breakdown {{
-    margin-top: 8px;
-    color: var(--text-muted);
-    font-size: 12px;
-  }}
-  .meta-grid {{
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: 12px;
-  }}
-  .meta-grid > div, .meta-item {{
-    min-width: 0;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 9px 10px;
-    background: #fafafa;
-    color: var(--text-muted);
-    font-size: 12px;
-  }}
-  .meta-grid strong, .meta-item strong {{
-    display: block;
-    color: var(--text);
-    font-size: 13px;
-    margin-top: 3px;
-    overflow-wrap: anywhere;
-  }}
-  .section {{
-    padding: 16px;
-    margin-bottom: 14px;
-  }}
-  .section h2 {{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 17px;
-    line-height: 1.25;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-  }}
-  .section-hint {{
-    margin: -4px 0 12px;
-    color: var(--text-muted);
-    font-size: 13px;
-  }}
-  table {{ font-size: 13px; }}
-  th, td {{
-    padding: 8px 9px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: top;
-  }}
-  th {{
-    background: #f1f1f1;
-    color: #444444;
-    font-size: 11px;
-    letter-spacing: 0;
-  }}
-  .action-card, .suspicion-card, .detail-card, .reference-card {{
-    background: #ffffff;
-    border: 1px solid var(--border);
-    border-left: 3px solid #111111;
-    border-radius: 6px;
-    padding: 10px 12px;
-  }}
-  .cross-file-card {{
-    background: #ffffff;
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--yellow);
-    border-radius: 6px;
-    padding: 10px 12px;
-  }}
-  .evidence-summary {{ border-left: 3px solid var(--red); }}
-  .suspicion-summary {{
-    grid-template-columns: 44px minmax(72px, 112px) minmax(180px, 1fr) 96px;
-    gap: 7px 10px;
-  }}
-  .suspicion-rank, .action-rank, .detail-num {{
-    background: #f1f1f1;
-    color: #111111;
-    border: 1px solid var(--border);
-    border-radius: 5px;
-  }}
-  .suspicion-brief {{
-    grid-column: 2 / 4;
-    color: var(--text-muted);
-  }}
-  .summary-action {{
-    grid-column: 4;
-    grid-row: 2;
-    justify-self: end;
-    color: #111111;
-    font-size: 12px;
-    font-weight: 800;
-    white-space: nowrap;
-  }}
-  .detail-summary .summary-action {{
-    grid-column: auto;
-    grid-row: auto;
-    margin-left: auto;
-  }}
-  .detail-card[open], .suspicion-card[open] {{
-    background: #fbfbfb;
-  }}
-  .cross-file-card[open] {{
-    background: #fbfbfb;
-  }}
-  .detail-summary::after, .suspicion-summary::after {{
-    content: none;
-  }}
-  .detail-body, .suspicion-body {{
-    border-top: 1px solid var(--border);
-    margin-top: 10px;
-    padding-top: 10px;
-  }}
-  .detail-evidence {{
-    background: #f7f7f7;
-    color: #222222;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-  }}
-  .detail-evidence blockquote {{
-    color: #222222;
-  }}
-  .detail-text {{
-    color: #4b4b4b;
-  }}
-  .data-table-wrap {{
-    background: #ffffff;
-    border-radius: 6px;
-  }}
-  .data-table th {{
-    background: #ededed;
-  }}
-  .merged-group {{
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px;
-    margin-bottom: 10px;
-    background: #fff;
-  }}
-  .merged-group summary {{
-    cursor: pointer;
-    font-weight: 800;
-    color: #111111;
-  }}
-  .coverage-warning, .coverage-ok, .conclusion-section, .action-section, .web-action-section {{
-    border-left-width: 3px;
-    background: #ffffff;
-  }}
-  .web-action-section {{ border-left-color: #2563eb; }}
-  .action-button, .secondary-button {{
-    border-radius: 6px;
-    padding: 8px 11px;
-    color: #111111;
-  }}
-  .action-button {{ color: #ffffff; }}
-  .generated-draft {{
-    border-radius: 6px;
-    min-height: 220px;
-    color: #111111;
-  }}
-  .image-thumb {{
-    max-width: 84px;
-    max-height: 64px;
-    object-fit: contain;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: #ffffff;
-  }}
-  .muted-inline {{
-    color: var(--text-muted);
-    font-size: 12px;
-  }}
-  @media (max-width: 900px) {{
-    body {{ padding: 10px; }}
-    .report-topline {{ flex-direction: column; }}
-    .score-panel {{ grid-template-columns: 1fr; }}
-    .meta-grid {{ grid-template-columns: 1fr 1fr; }}
-    .overview-grid {{ grid-template-columns: 1fr 1fr; }}
-    .overview-columns, .limitation-grid {{ grid-template-columns: 1fr; }}
-    .suspicion-summary, .reference-summary {{
-      grid-template-columns: 40px minmax(70px, 100px) 1fr;
-    }}
-    .suspicion-score, .reference-confidence, .summary-action {{
-      grid-column: 2 / 4;
-      justify-self: start;
-    }}
-    .suspicion-brief, .reference-issues {{
-      grid-column: 1 / 4;
-    }}
-  }}
-  @media (max-width: 560px) {{
-    .meta-grid {{ grid-template-columns: 1fr; }}
-    .overview-grid {{ grid-template-columns: 1fr; }}
-    .checks-table {{ table-layout: auto; }}
-  }}
-</style>
+{_html_report_compact_skin_css(risk_color)}</style>
 </head>
 """
 

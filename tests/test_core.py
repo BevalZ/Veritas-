@@ -4240,6 +4240,16 @@ def test_build_html_report_head_contains_shell_styles_and_risk_color():
     assert ".score-panel" in head
 
 
+def test_html_report_compact_skin_css_contains_risk_color_and_responsive_rules():
+    css = veritas.report_html_fragments._html_report_compact_skin_css("#654321")
+
+    assert "Compact grayscale report skin" in css
+    assert "color: #654321;" in css
+    assert "background: #654321;" in css
+    assert "@media (max-width: 900px)" in css
+    assert ".checks-table { table-layout: auto; }" in css
+
+
 def test_clipboard_windows_uses_clip_exe_without_shell(monkeypatch):
     calls = []
 
