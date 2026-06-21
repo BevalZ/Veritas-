@@ -124,6 +124,40 @@ def _format_html_detail_card(
             </details>"""
 
 
+def _format_html_suspicious_items(
+    suspicious,
+    html_escape,
+    verdict_class_for,
+    check_source_text,
+    check_reason,
+    check_suspicion_score,
+    check_source_tags,
+    merged_group_html,
+    brief_text,
+    evidence_html,
+):
+    suspicious_items = ""
+    for i, check in enumerate(suspicious[:5], 1):
+        suspicious_items += _format_html_suspicious_card(
+            i,
+            check,
+            html_escape,
+            verdict_class_for,
+            check_source_text,
+            check_reason,
+            check_suspicion_score,
+            check_source_tags,
+            merged_group_html,
+            brief_text,
+            evidence_html,
+        )
+    if len(suspicious) > 5:
+        suspicious_items += f'<div class="muted">仅显示 Top 5；完整 {len(suspicious)} 条见下方全部检查项。</div>'
+    if not suspicious_items:
+        suspicious_items = '<div class="muted">未发现红旗/疑点项；仍建议人工核验关键数据、图表和引用。</div>'
+    return suspicious_items
+
+
 def format_html_check_sections_from_namespace(namespace, report):
     """Render LLM check summary/detail sections for the top-level HTML report."""
     html_escape = _namespace_value(namespace, "_html_escape", _html_escape)
@@ -146,25 +180,18 @@ def format_html_check_sections_from_namespace(namespace, report):
     checks = sorted(report.get("checks", []), key=check_sort_key)
     suspicious = [c for c in checks if is_suspicious(c)]
 
-    suspicious_items = ""
-    for i, c in enumerate(suspicious[:5], 1):
-        suspicious_items += _format_html_suspicious_card(
-            i,
-            c,
-            html_escape,
-            verdict_class_for,
-            check_source_text,
-            check_reason,
-            check_suspicion_score,
-            check_source_tags,
-            merged_group_html,
-            brief_text,
-            evidence_html,
-        )
-    if len(suspicious) > 5:
-        suspicious_items += f'<div class="muted">仅显示 Top 5；完整 {len(suspicious)} 条见下方全部检查项。</div>'
-    if not suspicious_items:
-        suspicious_items = '<div class="muted">未发现红旗/疑点项；仍建议人工核验关键数据、图表和引用。</div>'
+    suspicious_items = _format_html_suspicious_items(
+        suspicious,
+        html_escape,
+        verdict_class_for,
+        check_source_text,
+        check_reason,
+        check_suspicion_score,
+        check_source_tags,
+        merged_group_html,
+        brief_text,
+        evidence_html,
+    )
 
     checks_table_rows = ""
     for i, c in enumerate(checks, 1):

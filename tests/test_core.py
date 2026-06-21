@@ -4385,6 +4385,44 @@ def test_format_html_detail_card_renders_escaped_detail_evidence():
     assert "<blockquote>Figure 1</blockquote>" in card
 
 
+def test_format_html_suspicious_items_limits_to_top_five_and_fallbacks():
+    checks = [
+        {"category": "数据", "item": f"问题{i}", "verdict": "🚩红旗", "source_text": f"source {i}", "reason": f"reason {i}"}
+        for i in range(6)
+    ]
+
+    items_html = veritas.report_html_sections._format_html_suspicious_items(
+        checks,
+        paper_audit._html_escape,
+        lambda verdict: "verdict-red",
+        lambda check: check.get("source_text", ""),
+        lambda check: check.get("reason", ""),
+        lambda check: 300,
+        lambda check: ["LLM"],
+        lambda check: "",
+        paper_audit._brief_text,
+        lambda source: f"<blockquote>{paper_audit._html_escape(source)}</blockquote>",
+    )
+
+    assert 'id="suspicious-finding-5"' in items_html
+    assert 'id="suspicious-finding-6"' not in items_html
+    assert "完整 6 条见下方全部检查项" in items_html
+
+    fallback_html = veritas.report_html_sections._format_html_suspicious_items(
+        [],
+        paper_audit._html_escape,
+        lambda verdict: "verdict-red",
+        lambda check: "",
+        lambda check: "",
+        lambda check: 0,
+        lambda check: [],
+        lambda check: "",
+        paper_audit._brief_text,
+        lambda source: "",
+    )
+    assert "未发现红旗/疑点项" in fallback_html
+
+
 def test_clipboard_windows_uses_clip_exe_without_shell(monkeypatch):
     calls = []
 
