@@ -3300,6 +3300,217 @@ def _extract_directory_input(input_path, args, output_dir, use_mineru, completed
     }
 
 
+def _text_llm_schema_failure(message, details, completed_stages, retry_command):
+    return AuditFailure(
+        capability="text_llm",
+        error_class="schema_error",
+        message=message,
+        fix_hints=["检查文本LLM服务稳定性和严格证据schema输出。", "更换稳定服务或稍后重试。"],
+        completed_stages=completed_stages,
+        retry_command=retry_command,
+        details=details,
+    )
+
+
+def _run_llm_chunk_once(chunk_text, chunk_idx, total_chunks, llm_cache_dir, allow_llm_cache_write, resume_dir, retry=False):
+    chunk_cache = llm_cache_dir / f"chunk_{chunk_idx:04d}.json"
+    print(("  🔁 重试" if retry else "  📝 审查") + f"第{chunk_idx+1}/{total_chunks}块({len(chunk_text)}字符)...")
+    raw_content = call_llm(chunk_text, chunk_info=(chunk_idx, total_chunks))
+    chunk_report = parse_report(raw_content)
+    if chunk_report.get("parse_error"):
+        raise RuntimeError(f"LLM返回解析失败: {str(chunk_report.get('raw_output',''))[:180]}")
+    if allow_llm_cache_write:
+        _json_save(chunk_cache, llm_success_cache_payload(chunk_report, raw_content, chunk_index=chunk_idx, total_chunks=total_chunks, retry=retry))
+        resume_event(resume_dir, "stage3_llm_chunk", "retry_saved" if retry else "saved", f"chunk={chunk_idx+1}/{total_chunks}; chars={len(chunk_text)}", cache=str(chunk_cache))
+    return chunk_report
+
+
+def _review_llm_chunks(chunks, total_chunks, llm_cache_dir, args, allow_llm_cache_read, allow_llm_cache_write, resume_dir):
+    chunk_reports = [None] * total_chunks
+    failed_chunks = []
+    for chunk_text, chunk_idx, _ in chunks:
+        progress_bar(chunk_idx, total_chunks, f"阶段3/5 LLM审查中：第{chunk_idx+1}/{total_chunks}块")
+        cache_state = llm_chunk_cache_read_state(
+            llm_cache_dir,
+            chunk_idx,
+            total_chunks,
+            allow_llm_cache_read,
+            getattr(args, "llm_cache_only", False),
+            _json_load,
+            resume_event,
+            resume_dir,
+        )
+        chunk_cache = cache_state["cache_path"]
+        if cache_state["status"] == "cache_hit":
+            print(f"     ↳ 断点续作：复用第{chunk_idx+1}块成功LLM缓存")
+            chunk_reports[chunk_idx] = cache_state["report"]
+        elif cache_state["status"] == "cache_only_miss":
+            print(f"     ↳ cache-only：第{chunk_idx+1}块无成功缓存，跳过API调用")
+            failed_chunks.append((chunk_text, chunk_idx, cache_state["first_error"]))
+        else:
+            try:
+                chunk_reports[chunk_idx] = _run_llm_chunk_once(
+                    chunk_text,
+                    chunk_idx,
+                    total_chunks,
+                    llm_cache_dir,
+                    allow_llm_cache_write,
+                    resume_dir,
+                    retry=False,
+                )
+            except Exception as e:
+                print(f"  ⚠️ 第{chunk_idx+1}块LLM调用/解析失败，先记录并继续其他块: {e}")
+                failed_chunks.append((chunk_text, chunk_idx, str(e)))
+                if allow_llm_cache_write:
+                    save_llm_failure_cache_result(
+                        chunk_cache,
+                        e,
+                        chunk_idx,
+                        total_chunks,
+                        "failed_pending_retry",
+                        _json_save,
+                        resume_event,
+                        resume_dir,
+                    )
+        if chunk_reports[chunk_idx] and not chunk_reports[chunk_idx].get("parse_error"):
+            print(f"     → 第{chunk_idx+1}块风险: {chunk_reports[chunk_idx].get('risk_level', '未知')}")
+        progress_bar(chunk_idx + 1, total_chunks, f"阶段3/5 LLM审查完成：第{chunk_idx+1}/{total_chunks}块")
+    return chunk_reports, failed_chunks
+
+
+def _retry_failed_llm_chunks(failed_chunks, chunk_reports, total_chunks, llm_cache_dir, args, allow_llm_cache_write, resume_dir):
+    if not failed_chunks:
+        return []
+    retry_summary = llm_retry_start_summary(failed_chunks, getattr(args, "llm_cache_only", False))
+    print(f"🔁 首轮完成，按顺序重试失败块: {retry_summary['failed_chunks']}")
+    resume_event(resume_dir, "stage3_llm_retry", "start", retry_summary["event_detail"])
+    if getattr(args, "llm_cache_only", False):
+        print("⚠️ cache-only模式：不调用API重试，直接用已有成功缓存生成部分报告。")
+        return llm_cache_only_still_failed(failed_chunks)
+
+    still_failed = []
+    for chunk_text, chunk_idx, first_error in failed_chunks:
+        try:
+            chunk_reports[chunk_idx] = _run_llm_chunk_once(
+                chunk_text,
+                chunk_idx,
+                total_chunks,
+                llm_cache_dir,
+                allow_llm_cache_write,
+                resume_dir,
+                retry=True,
+            )
+            print(f"     ✅ 第{chunk_idx+1}块重试成功")
+        except Exception as e:
+            print(f"     ❌ 第{chunk_idx+1}块重试仍失败: {e}")
+            still_failed.append((chunk_idx, str(e)))
+            chunk_cache = llm_cache_dir / f"chunk_{chunk_idx:04d}.json"
+            if allow_llm_cache_write:
+                save_llm_failure_cache_result(
+                    chunk_cache,
+                    e,
+                    chunk_idx,
+                    total_chunks,
+                    "failed_final",
+                    _json_save,
+                    resume_event,
+                    resume_dir,
+                    first_error=first_error,
+                )
+    return still_failed
+
+
+def _merge_successful_llm_chunks(chunk_reports, total_chunks, chunk_size, overlap, stat_result, meta, resume_dir):
+    chunk_reports, failed_final = apply_llm_chunk_coverage_meta(meta, chunk_reports, total_chunks, chunk_size, overlap)
+    if not chunk_reports:
+        failure_summary = llm_no_success_failure_summary(failed_final)
+        resume_event(resume_dir, "stage4_merge", "skipped_no_success", failure_summary["message"])
+        return {"failure_summary": failure_summary}
+
+    progress_bar(3, 5, "阶段3/5 LLM审查完成")
+    progress_bar(3, 5, "阶段4/5 开始合并审查结果")
+    print(f"🔗 正在合并{len(chunk_reports)}块审查结果...")
+    report = merge_chunk_reports(chunk_reports, stat_result)
+    if report.get("_merged_from"):
+        print(f"✅ 合并完成: 来自{report['_merged_from']}块，共{len(report.get('checks', []))}个检查项")
+    meta["chunk_count"] = total_chunks
+    meta["chunk_size"] = chunk_size
+    meta["overlap"] = overlap
+    apply_llm_partial_report_warning(report, meta)
+    resume_event(resume_dir, "stage4_merge", "done", llm_merge_done_detail(report, meta))
+    progress_bar(4, 5, "阶段4/5 审查结果合并完成")
+    return {"report": report}
+
+
+def _run_text_llm_review_stage(audit_text, args, resume_dir, allow_llm_cache_read, allow_llm_cache_write, stat_result, meta, completed_stages, retry_command):
+    llm_stage = text_llm_stage_plan(audit_text, args.max_chars, resume_dir, LLM_API_URL, LLM_MODEL, smart_chunk_text, _text_fingerprint)
+    chunk_size = llm_stage["chunk_size"]
+    overlap = llm_stage["overlap"]
+    chunks = llm_stage["chunks"]
+    total_chunks = llm_stage["total_chunks"]
+    llm_cache_dir = llm_stage["cache_dir"]
+    resume_event(resume_dir, "stage3_llm", "start", f"chunks={total_chunks}; chunk_size={chunk_size}; overlap={overlap}", cache_dir=str(llm_cache_dir))
+
+    progress_bar(2, 5, f"阶段3/5 开始LLM审查：{total_chunks}块")
+    if total_chunks == 1:
+        print(f"🔍 论文长度({len(audit_text)}字符，已排除参考文献)在单块范围内，直接审查...")
+        try:
+            return {"report": _run_single_llm_review(audit_text, llm_cache_dir, allow_llm_cache_read, allow_llm_cache_write, resume_dir)}
+        except Exception as e:
+            print(f"❌ LLM调用失败: {e}")
+            return {"failure": AuditFailure(
+                capability="text_llm",
+                error_class="schema_error",
+                message=f"LLM语义审查失败或返回结构不符合证据schema: {e}",
+                fix_hints=["检查文本LLM服务稳定性和提示词输出格式。", "稍后重试或更换稳定的文本语义审查服务。"],
+                completed_stages=completed_stages,
+                retry_command=retry_command,
+                details={"raw_error": str(e), "chunk": "1/1"},
+            )}
+
+    print(f"🔍 论文较长({len(audit_text)}字符，已排除参考文献)，分为{total_chunks}块(每块≤{chunk_size}字符，重叠{overlap}字符)进行审查...")
+    chunk_reports, failed_chunks = _review_llm_chunks(
+        chunks,
+        total_chunks,
+        llm_cache_dir,
+        args,
+        allow_llm_cache_read,
+        allow_llm_cache_write,
+        resume_dir,
+    )
+    still_failed = _retry_failed_llm_chunks(
+        failed_chunks,
+        chunk_reports,
+        total_chunks,
+        llm_cache_dir,
+        args,
+        allow_llm_cache_write,
+        resume_dir,
+    )
+    if still_failed:
+        failure_summary = llm_retry_failure_summary(still_failed, args.strict_failed_chunks)
+        resume_event(resume_dir, "stage3_llm_retry", "still_failed", failure_summary["event_detail"])
+        return {"failure": _text_llm_schema_failure(
+            failure_summary["message"],
+            {"failed_chunks": failure_summary["failed_chunks"], "detail": failure_summary["detail"]},
+            completed_stages,
+            retry_command,
+        )}
+    if failed_chunks:
+        resume_event(resume_dir, "stage3_llm_retry", "done", "all failed chunks recovered")
+
+    merge_result = _merge_successful_llm_chunks(chunk_reports, total_chunks, chunk_size, overlap, stat_result, meta, resume_dir)
+    if merge_result.get("failure_summary"):
+        failure_summary = merge_result["failure_summary"]
+        return {"failure": _text_llm_schema_failure(
+            failure_summary["message"],
+            failure_summary["details"],
+            completed_stages,
+            retry_command,
+        )}
+    return merge_result
+
+
 
 def run_audit(run_request: RunRequest, args=None) -> RunResult:
     args = args if args is not None else run_request.to_args()
@@ -3487,165 +3698,20 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
         return failed_result
     completed_stages.append("text_llm_preflight")
 
-    llm_stage = text_llm_stage_plan(audit_text, args.max_chars, resume_dir, LLM_API_URL, LLM_MODEL, smart_chunk_text, _text_fingerprint)
-    chunk_size = llm_stage["chunk_size"]
-    overlap = llm_stage["overlap"]
-    chunks = llm_stage["chunks"]
-    total_chunks = llm_stage["total_chunks"]
-    llm_cache_dir = llm_stage["cache_dir"]
-    resume_event(resume_dir, "stage3_llm", "start", f"chunks={total_chunks}; chunk_size={chunk_size}; overlap={overlap}", cache_dir=str(llm_cache_dir))
-
-    progress_bar(2, 5, f"阶段3/5 开始LLM审查：{total_chunks}块")
-
-    if total_chunks == 1:
-        # 短论文：直接全文审查
-        print(f"🔍 论文长度({len(audit_text)}字符，已排除参考文献)在单块范围内，直接审查...")
-        try:
-            report = _run_single_llm_review(audit_text, llm_cache_dir, allow_llm_cache_read, allow_llm_cache_write, resume_dir)
-        except Exception as e:
-            print(f"❌ LLM调用失败: {e}")
-            failure = AuditFailure(
-                capability="text_llm",
-                error_class="schema_error",
-                message=f"LLM语义审查失败或返回结构不符合证据schema: {e}",
-                fix_hints=["检查文本LLM服务稳定性和提示词输出格式。", "稍后重试或更换稳定的文本语义审查服务。"],
-                completed_stages=completed_stages,
-                retry_command=retry_command,
-                details={"raw_error": str(e), "chunk": "1/1"},
-            )
-            return _fail_run(failure, diagnostics_meta=meta)
-    else:
-        # 长论文：分块审查 + 合并
-        print(f"🔍 论文较长({len(audit_text)}字符，已排除参考文献)，分为{total_chunks}块(每块≤{chunk_size}字符，重叠{overlap}字符)进行审查...")
-        chunk_reports = [None] * total_chunks
-        failed_chunks = []
-
-        def _run_chunk_once(chunk_text, chunk_idx, retry=False):
-            chunk_cache = llm_cache_dir / f"chunk_{chunk_idx:04d}.json"
-            print(("  🔁 重试" if retry else "  📝 审查") + f"第{chunk_idx+1}/{total_chunks}块({len(chunk_text)}字符)...")
-            raw_content = call_llm(chunk_text, chunk_info=(chunk_idx, total_chunks))
-            chunk_report = parse_report(raw_content)
-            if chunk_report.get("parse_error"):
-                raise RuntimeError(f"LLM返回解析失败: {str(chunk_report.get('raw_output',''))[:180]}")
-            if allow_llm_cache_write:
-                _json_save(chunk_cache, llm_success_cache_payload(chunk_report, raw_content, chunk_index=chunk_idx, total_chunks=total_chunks, retry=retry))
-                resume_event(resume_dir, "stage3_llm_chunk", "retry_saved" if retry else "saved", f"chunk={chunk_idx+1}/{total_chunks}; chars={len(chunk_text)}", cache=str(chunk_cache))
-            return chunk_report
-
-        for chunk_text, chunk_idx, _ in chunks:
-            progress_bar(chunk_idx, total_chunks, f"阶段3/5 LLM审查中：第{chunk_idx+1}/{total_chunks}块")
-            cache_state = llm_chunk_cache_read_state(
-                llm_cache_dir,
-                chunk_idx,
-                total_chunks,
-                allow_llm_cache_read,
-                getattr(args, "llm_cache_only", False),
-                _json_load,
-                resume_event,
-                resume_dir,
-            )
-            chunk_cache = cache_state["cache_path"]
-            if cache_state["status"] == "cache_hit":
-                print(f"     ↳ 断点续作：复用第{chunk_idx+1}块成功LLM缓存")
-                chunk_reports[chunk_idx] = cache_state["report"]
-            elif cache_state["status"] == "cache_only_miss":
-                print(f"     ↳ cache-only：第{chunk_idx+1}块无成功缓存，跳过API调用")
-                failed_chunks.append((chunk_text, chunk_idx, cache_state["first_error"]))
-            else:
-                try:
-                    chunk_reports[chunk_idx] = _run_chunk_once(chunk_text, chunk_idx, retry=False)
-                except Exception as e:
-                    print(f"  ⚠️ 第{chunk_idx+1}块LLM调用/解析失败，先记录并继续其他块: {e}")
-                    failed_chunks.append((chunk_text, chunk_idx, str(e)))
-                    if allow_llm_cache_write:
-                        save_llm_failure_cache_result(
-                            chunk_cache,
-                            e,
-                            chunk_idx,
-                            total_chunks,
-                            "failed_pending_retry",
-                            _json_save,
-                            resume_event,
-                            resume_dir,
-                        )
-            if chunk_reports[chunk_idx] and not chunk_reports[chunk_idx].get("parse_error"):
-                print(f"     → 第{chunk_idx+1}块风险: {chunk_reports[chunk_idx].get('risk_level', '未知')}")
-            progress_bar(chunk_idx + 1, total_chunks, f"阶段3/5 LLM审查完成：第{chunk_idx+1}/{total_chunks}块")
-
-        if failed_chunks:
-            retry_summary = llm_retry_start_summary(failed_chunks, getattr(args, "llm_cache_only", False))
-            print(f"🔁 首轮完成，按顺序重试失败块: {retry_summary['failed_chunks']}")
-            resume_event(resume_dir, "stage3_llm_retry", "start", retry_summary["event_detail"])
-            still_failed = []
-            if getattr(args, "llm_cache_only", False):
-                still_failed = llm_cache_only_still_failed(failed_chunks)
-                print("⚠️ cache-only模式：不调用API重试，直接用已有成功缓存生成部分报告。")
-            else:
-                for chunk_text, chunk_idx, first_error in failed_chunks:
-                    try:
-                        chunk_reports[chunk_idx] = _run_chunk_once(chunk_text, chunk_idx, retry=True)
-                        print(f"     ✅ 第{chunk_idx+1}块重试成功")
-                    except Exception as e:
-                        print(f"     ❌ 第{chunk_idx+1}块重试仍失败: {e}")
-                        still_failed.append((chunk_idx, str(e)))
-                        chunk_cache = llm_cache_dir / f"chunk_{chunk_idx:04d}.json"
-                        if allow_llm_cache_write:
-                            save_llm_failure_cache_result(
-                                chunk_cache,
-                                e,
-                                chunk_idx,
-                                total_chunks,
-                                "failed_final",
-                                _json_save,
-                                resume_event,
-                                resume_dir,
-                                first_error=first_error,
-                            )
-            if still_failed:
-                failure_summary = llm_retry_failure_summary(still_failed, args.strict_failed_chunks)
-                resume_event(resume_dir, "stage3_llm_retry", "still_failed", failure_summary["event_detail"])
-                failure = AuditFailure(
-                    capability="text_llm",
-                    error_class="schema_error",
-                    message=failure_summary["message"],
-                    fix_hints=["检查文本LLM服务稳定性和严格证据schema输出。", "更换稳定服务或稍后重试。"],
-                    completed_stages=completed_stages,
-                    retry_command=retry_command,
-                    details={"failed_chunks": failure_summary["failed_chunks"], "detail": failure_summary["detail"]},
-                )
-                return _fail_run(failure, diagnostics_meta=meta)
-            else:
-                resume_event(resume_dir, "stage3_llm_retry", "done", "all failed chunks recovered")
-
-        chunk_reports, failed_final = apply_llm_chunk_coverage_meta(meta, chunk_reports, total_chunks, chunk_size, overlap)
-        if not chunk_reports:
-            failure_summary = llm_no_success_failure_summary(failed_final)
-            resume_event(resume_dir, "stage4_merge", "skipped_no_success", failure_summary["message"])
-            failure = AuditFailure(
-                capability="text_llm",
-                error_class="schema_error",
-                message=failure_summary["message"],
-                fix_hints=["检查文本LLM服务和证据schema输出。", "更换稳定服务后重试。"],
-                completed_stages=completed_stages,
-                retry_command=retry_command,
-                details=failure_summary["details"],
-            )
-            return _fail_run(failure, diagnostics_meta=meta)
-        else:
-
-            progress_bar(3, 5, "阶段3/5 LLM审查完成")
-            # 合并所有块的审查结果
-            progress_bar(3, 5, "阶段4/5 开始合并审查结果")
-            print(f"🔗 正在合并{len(chunk_reports)}块审查结果...")
-            report = merge_chunk_reports(chunk_reports, stat_result)
-            if report.get("_merged_from"):
-                print(f"✅ 合并完成: 来自{report['_merged_from']}块，共{len(report.get('checks', []))}个检查项")
-            meta["chunk_count"] = total_chunks
-            meta["chunk_size"] = chunk_size
-            meta["overlap"] = overlap
-            apply_llm_partial_report_warning(report, meta)
-            resume_event(resume_dir, "stage4_merge", "done", llm_merge_done_detail(report, meta))
-            progress_bar(4, 5, "阶段4/5 审查结果合并完成")
+    llm_result = _run_text_llm_review_stage(
+        audit_text,
+        args,
+        resume_dir,
+        allow_llm_cache_read,
+        allow_llm_cache_write,
+        stat_result,
+        meta,
+        completed_stages,
+        retry_command,
+    )
+    if llm_result.get("failure"):
+        return _fail_run(llm_result["failure"], diagnostics_meta=meta)
+    report = llm_result["report"]
 
     # ─── 图像合理性检测：使用MinerU已保存zip中的图片/目录图片生成报告清单 ───
     image_audit = _run_image_audit_stage(input_path, output_dir, args, resume_dir, meta)
