@@ -7,7 +7,7 @@
 输入论文文件或目录 → 文本提取 → 本地统计检测 + LLM语义分析 → 输出md/html格式报告
 用法: python paper_audit.py <paper_path> [--mineru] [--max-chars 8000] [--output report.md]
 """
-import re, json, time, argparse, urllib.request, urllib.parse, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, hashlib, io, concurrent.futures, signal, threading, datetime
+import re, json, time, argparse, urllib.request, urllib.parse, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, hashlib, io, concurrent.futures, threading, datetime
 from pathlib import Path
 from typing import Tuple, Dict, List, Any, Callable
 
@@ -38,6 +38,7 @@ from .failed_diagnostics import (
     preflight_failure_to_audit_failure,
     save_failed_audit_diagnostics,
 )
+from .external_timeout import _ExternalCapabilityTimeout, _run_with_alarm_timeout
 from .fake_adapters import (
     FakeImageDetectorAdapter,
     FakeImageSemanticAdapter,
@@ -4891,35 +4892,6 @@ def _image_semantic_cache_key(image_path: str, api_url=None, model=None, cache_v
         model=model,
         cache_version=cache_version,
     )
-
-
-class _ExternalCapabilityTimeout(BaseException):
-    pass
-
-
-def _run_with_alarm_timeout(func, timeout, timeout_result):
-    """Bound third-party calls that may ignore socket timeouts."""
-    try:
-        seconds = max(1, int(timeout or 1))
-    except Exception:
-        seconds = 1
-    if threading.current_thread() is not threading.main_thread() or not hasattr(signal, "SIGALRM"):
-        return func()
-
-    previous_handler = signal.getsignal(signal.SIGALRM)
-
-    def _raise_timeout(signum, frame):
-        raise _ExternalCapabilityTimeout(f"operation exceeded {seconds}s")
-
-    signal.signal(signal.SIGALRM, _raise_timeout)
-    signal.alarm(seconds)
-    try:
-        return func()
-    except _ExternalCapabilityTimeout:
-        return timeout_result()
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def call_imagedetector(image_path: str, timeout=60):

@@ -27,6 +27,7 @@ veritas/
 ├── desktop_gui.py      # Desktop GUI helper boundary
 ├── evidence_chain.py   # Evidence-chain audit and evidence-cluster helpers
 ├── evidence_rendering.py # Evidence excerpt/table rendering helpers
+├── external_timeout.py # Timeout helpers for external capability calls
 ├── failed_diagnostics.py # Stable failed-audit payload, rendering, and conversion helpers
 ├── followups.py       # PubPeer/comment and journal-letter draft workflow helpers
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
@@ -165,6 +166,9 @@ tests/
   rendering, and compact evidence summary HTML. It must remain provider-free
   because MinerU extraction, reference/resource sections, and report rendering
   all reuse it.
+- `veritas/external_timeout.py` owns signal-based timeout wrappers for external
+  capability calls that may ignore socket timeouts. It must not know about any
+  specific provider payload or response schema.
 - `veritas/text_utils.py` owns shared text shortening, short text fingerprint,
   and token similarity helpers used by follow-up generation, risk rules,
   references, cache keys, evidence IDs, and renderers.

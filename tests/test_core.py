@@ -800,6 +800,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.file_utils._json_save is paper_audit._json_save
     assert veritas.file_utils._json_load is paper_audit._json_load
     assert veritas.file_utils._load_merged_json_dicts is paper_audit._load_merged_json_dicts
+    assert veritas.external_timeout._run_with_alarm_timeout is paper_audit._run_with_alarm_timeout
+    assert veritas.external_timeout._ExternalCapabilityTimeout is paper_audit._ExternalCapabilityTimeout
     assert veritas.html_utils._html_escape is paper_audit._html_escape
     assert veritas.html_utils._json_for_script_tag is paper_audit._json_for_script_tag
     assert veritas.http_client._http_request is paper_audit._http_request
