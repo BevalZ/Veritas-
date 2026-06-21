@@ -21,6 +21,14 @@ def _namespace_value(namespace, name, default=None):
     return (namespace or {}).get(name, default)
 
 
+def _format_html_parse_error_section(report, html_escape):
+    return f"""
+        <div class="section">
+            <h2>LLM报告解析失败（原始输出）</h2>
+            <pre class="error-block">{html_escape(report.get('raw_output', ''))}</pre>
+        </div>"""
+
+
 def format_html_check_sections_from_namespace(namespace, report):
     """Render LLM check summary/detail sections for the top-level HTML report."""
     html_escape = _namespace_value(namespace, "_html_escape", _html_escape)
@@ -37,11 +45,7 @@ def format_html_check_sections_from_namespace(namespace, report):
     evidence_summary_html = _namespace_value(namespace, "render_evidence_summary_html", render_evidence_summary_html)
 
     if report.get("parse_error"):
-        checks_html = f"""
-        <div class="section">
-            <h2>LLM报告解析失败（原始输出）</h2>
-            <pre class="error-block">{html_escape(report.get('raw_output', ''))}</pre>
-        </div>"""
+        checks_html = _format_html_parse_error_section(report, html_escape)
         return checks_html, ""
 
     checks = sorted(report.get("checks", []), key=check_sort_key)

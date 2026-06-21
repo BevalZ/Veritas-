@@ -4259,6 +4259,17 @@ def test_html_report_compact_skin_css_contains_risk_color_and_responsive_rules()
     assert ".checks-table { table-layout: auto; }" in css
 
 
+def test_format_html_parse_error_section_escapes_raw_output():
+    section = veritas.report_html_sections._format_html_parse_error_section(
+        {"raw_output": "<bad>&</bad>"},
+        paper_audit._html_escape,
+    )
+
+    assert "LLM报告解析失败" in section
+    assert "&lt;bad&gt;&amp;&lt;/bad&gt;" in section
+    assert "<bad>" not in section
+
+
 def test_clipboard_windows_uses_clip_exe_without_shell(monkeypatch):
     calls = []
 
