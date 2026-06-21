@@ -381,16 +381,9 @@ def _html_report_compact_skin_css(risk_color):
 """
 
 
-def build_html_report_head(risk_color):
-    """Build the top-level HTML report head and CSS."""
-    return f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>学术论文审查报告</title>
-<style>
-  :root {{
+def _html_report_base_css(risk_color):
+    """Return the base CSS for the report shell."""
+    return f"""  :root {{
     --bg: #f7f3ec;
     --paper: #fffdf8;
     --surface: #fffaf1;
@@ -1047,7 +1040,19 @@ def build_html_report_head(risk_color):
     margin-top: 32px;
     padding: 16px;
   }}
-{_html_report_compact_skin_css(risk_color)}</style>
+"""
+
+
+def build_html_report_head(risk_color):
+    """Build the top-level HTML report head and CSS."""
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学术论文审查报告</title>
+<style>
+{_html_report_base_css(risk_color)}{_html_report_compact_skin_css(risk_color)}</style>
 </head>
 """
 

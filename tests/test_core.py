@@ -4240,6 +4240,15 @@ def test_build_html_report_head_contains_shell_styles_and_risk_color():
     assert ".score-panel" in head
 
 
+def test_html_report_base_css_contains_shell_styles_and_risk_color():
+    css = veritas.report_html_fragments._html_report_base_css("#456789")
+
+    assert ":root" in css
+    assert "background: #456789;" in css
+    assert ".artifact-badge" in css
+    assert ".web-action-section" in css
+
+
 def test_html_report_compact_skin_css_contains_risk_color_and_responsive_rules():
     css = veritas.report_html_fragments._html_report_compact_skin_css("#654321")
 
