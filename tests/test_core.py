@@ -1946,6 +1946,21 @@ def test_update_patterns_uses_namespace_and_fake_llm(monkeypatch, tmp_path):
     assert saved["patterns"][0]["risk_level"] == "高"
 
 
+def test_extract_pattern_json_array_parses_embedded_array_and_errors():
+    patterns, error = veritas.pattern_updates._extract_pattern_json_array(
+        'prefix [{"id": "A", "name": "Pattern"}] suffix'
+    )
+
+    assert error is None
+    assert patterns == [{"id": "A", "name": "Pattern"}]
+    assert veritas.pattern_updates._extract_pattern_json_array("no json") == (None, "missing_json")
+
+    patterns, error = veritas.pattern_updates._extract_pattern_json_array("[bad]")
+
+    assert patterns is None
+    assert isinstance(error, json.JSONDecodeError)
+
+
 def test_http_request_uses_browser_user_agent_without_network(monkeypatch):
     calls = []
 

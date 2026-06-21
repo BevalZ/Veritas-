@@ -13,6 +13,16 @@ def _namespace_value(namespace, name, default=None):
     return (namespace or {}).get(name, default)
 
 
+def _extract_pattern_json_array(content, json_module=json, re_module=re):
+    json_match = re_module.search(r"\[[\s\S]*\]", content)
+    if not json_match:
+        return None, "missing_json"
+    try:
+        return json_module.loads(json_match.group()), None
+    except json_module.JSONDecodeError as error:
+        return None, error
+
+
 def update_patterns_from_namespace(namespace, comments_file):
     """Extract fraud patterns from PubPeer comments and update the local KB."""
     path_cls = _namespace_value(namespace, "Path", Path)
@@ -88,16 +98,13 @@ PubPeer评论内容：
         print(f"❌ LLM调用失败: {e}")
         return 1
 
-    json_match = re_module.search(r"\[[\s\S]*\]", content)
-    if not json_match:
+    new_patterns, parse_error = _extract_pattern_json_array(content, json_module, re_module)
+    if parse_error == "missing_json":
         print("❌ LLM未能输出有效的JSON格式，请重试")
         print(f"原始输出: {content[:500]}")
         return 1
-
-    try:
-        new_patterns = json_module.loads(json_match.group())
-    except json_module.JSONDecodeError as e:
-        print(f"❌ JSON解析失败: {e}")
+    if parse_error:
+        print(f"❌ JSON解析失败: {parse_error}")
         return 1
 
     if not new_patterns:
