@@ -168,6 +168,8 @@ from .run_logging import (
     image_audit_cache_state,
     image_detector_cache_save_callback,
     image_semantic_cache_save_callback,
+    llm_failure_cache_payload,
+    llm_success_cache_payload,
     online_cache_state,
     progress_bar,
     record_preflight_result,
@@ -3269,7 +3271,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                 if report.get("parse_error"):
                     raise RuntimeError(f"LLM返回结构不符合证据schema: {schema_errors}")
                 if allow_llm_cache_write:
-                    _json_save(single_cache, {"report": report, "raw_content": raw_content, "saved_at": time.strftime("%F %T")})
+                    _json_save(single_cache, llm_success_cache_payload(report, raw_content))
                     resume_event(resume_dir, "stage3_llm_chunk", "saved", "chunk=1/1", cache=str(single_cache))
             except Exception as e:
                 print(f"❌ LLM调用失败: {e}")
@@ -3306,7 +3308,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             if chunk_report.get("parse_error"):
                 raise RuntimeError(f"LLM返回解析失败: {str(chunk_report.get('raw_output',''))[:180]}")
             if allow_llm_cache_write:
-                _json_save(chunk_cache, {"report": chunk_report, "raw_content": raw_content, "saved_at": time.strftime("%F %T"), "chunk_index": chunk_idx, "total_chunks": total_chunks, "status": "ok", "retry": retry})
+                _json_save(chunk_cache, llm_success_cache_payload(chunk_report, raw_content, chunk_index=chunk_idx, total_chunks=total_chunks, retry=retry))
                 resume_event(resume_dir, "stage3_llm_chunk", "retry_saved" if retry else "saved", f"chunk={chunk_idx+1}/{total_chunks}; chars={len(chunk_text)}", cache=str(chunk_cache))
             return chunk_report
 
@@ -3329,7 +3331,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     print(f"  ⚠️ 第{chunk_idx+1}块LLM调用/解析失败，先记录并继续其他块: {e}")
                     failed_chunks.append((chunk_text, chunk_idx, str(e)))
                     if allow_llm_cache_write:
-                        _json_save(chunk_cache, {"report": {"parse_error": True, "raw_output": str(e)}, "raw_content": str(e), "saved_at": time.strftime("%F %T"), "chunk_index": chunk_idx, "total_chunks": total_chunks, "status": "failed_pending_retry"})
+                        _json_save(chunk_cache, llm_failure_cache_payload(e, chunk_idx, total_chunks, "failed_pending_retry"))
                         resume_event(resume_dir, "stage3_llm_chunk", "failed_pending_retry", f"chunk={chunk_idx+1}/{total_chunks}; error={e}", cache=str(chunk_cache))
             if chunk_reports[chunk_idx] and not chunk_reports[chunk_idx].get("parse_error"):
                 print(f"     → 第{chunk_idx+1}块风险: {chunk_reports[chunk_idx].get('risk_level', '未知')}")
@@ -3352,7 +3354,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                         still_failed.append((chunk_idx, str(e)))
                         chunk_cache = llm_cache_dir / f"chunk_{chunk_idx:04d}.json"
                         if allow_llm_cache_write:
-                            _json_save(chunk_cache, {"report": {"parse_error": True, "raw_output": str(e)}, "raw_content": str(e), "saved_at": time.strftime("%F %T"), "chunk_index": chunk_idx, "total_chunks": total_chunks, "status": "failed_final", "first_error": first_error})
+                            _json_save(chunk_cache, llm_failure_cache_payload(e, chunk_idx, total_chunks, "failed_final", first_error=first_error))
                             resume_event(resume_dir, "stage3_llm_chunk", "failed_final", f"chunk={chunk_idx+1}/{total_chunks}; error={e}", cache=str(chunk_cache))
             if still_failed:
                 failed_nums = [idx + 1 for idx, _ in still_failed]

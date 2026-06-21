@@ -837,6 +837,58 @@ def test_run_cache_use_manifest_records_versions(tmp_path):
     }
 
 
+def test_llm_success_cache_payload_preserves_single_and_chunk_shapes():
+    single = paper_audit.llm_success_cache_payload(
+        {"risk_level": "低"},
+        "raw",
+        timestamp_func=lambda: "2026-06-21 10:00:00",
+    )
+    chunk = paper_audit.llm_success_cache_payload(
+        {"risk_level": "高"},
+        "raw chunk",
+        timestamp_func=lambda: "2026-06-21 10:01:00",
+        chunk_index=2,
+        total_chunks=5,
+        retry=True,
+    )
+
+    assert single == {
+        "report": {"risk_level": "低"},
+        "raw_content": "raw",
+        "saved_at": "2026-06-21 10:00:00",
+    }
+    assert chunk == {
+        "report": {"risk_level": "高"},
+        "raw_content": "raw chunk",
+        "saved_at": "2026-06-21 10:01:00",
+        "chunk_index": 2,
+        "total_chunks": 5,
+        "status": "ok",
+        "retry": True,
+    }
+
+
+def test_llm_failure_cache_payload_records_status_and_first_error():
+    payload = paper_audit.llm_failure_cache_payload(
+        RuntimeError("schema bad"),
+        chunk_index=1,
+        total_chunks=3,
+        status="failed_final",
+        first_error="timeout",
+        timestamp_func=lambda: "2026-06-21 10:02:00",
+    )
+
+    assert payload == {
+        "report": {"parse_error": True, "raw_output": "schema bad"},
+        "raw_content": "schema bad",
+        "saved_at": "2026-06-21 10:02:00",
+        "chunk_index": 1,
+        "total_chunks": 3,
+        "status": "failed_final",
+        "first_error": "timeout",
+    }
+
+
 def test_online_cache_state_loads_resume_cache_when_enabled(tmp_path):
     resume_dir = tmp_path / ".paper_audit_resume"
     resume_dir.mkdir()
@@ -1505,6 +1557,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.extract_cache_payload is paper_audit.extract_cache_payload
     assert veritas.run_logging.save_stage1_extract_cache is paper_audit.save_stage1_extract_cache
     assert veritas.run_logging.run_cache_use_manifest is paper_audit.run_cache_use_manifest
+    assert veritas.run_logging.llm_success_cache_payload is paper_audit.llm_success_cache_payload
+    assert veritas.run_logging.llm_failure_cache_payload is paper_audit.llm_failure_cache_payload
     assert veritas.run_logging.online_cache_state is paper_audit.online_cache_state
     assert veritas.run_logging.save_online_cache_result is paper_audit.save_online_cache_result
     assert veritas.run_logging.image_audit_cache_state is paper_audit.image_audit_cache_state

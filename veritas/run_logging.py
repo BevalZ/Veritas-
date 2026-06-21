@@ -19,6 +19,8 @@ __all__ = [
     "extract_cache_payload",
     "save_stage1_extract_cache",
     "run_cache_use_manifest",
+    "llm_success_cache_payload",
+    "llm_failure_cache_payload",
     "online_cache_state",
     "save_online_cache_result",
     "image_audit_cache_state",
@@ -233,6 +235,40 @@ def run_cache_use_manifest(
         "extract_cache_version": extract_cache_version,
         "image_semantic_cache_version": image_semantic_cache_version,
     }
+
+
+def llm_success_cache_payload(report, raw_content, timestamp_func=None, chunk_index=None, total_chunks=None, retry=None):
+    """Build a successful text-LLM cache payload."""
+    timestamp = timestamp_func or (lambda: time.strftime("%F %T"))
+    payload = {
+        "report": report,
+        "raw_content": raw_content,
+        "saved_at": timestamp(),
+    }
+    if chunk_index is not None:
+        payload["chunk_index"] = chunk_index
+    if total_chunks is not None:
+        payload["total_chunks"] = total_chunks
+    if retry is not None:
+        payload["status"] = "ok"
+        payload["retry"] = bool(retry)
+    return payload
+
+
+def llm_failure_cache_payload(error, chunk_index, total_chunks, status, first_error=None, timestamp_func=None):
+    """Build a failed text-LLM cache payload."""
+    timestamp = timestamp_func or (lambda: time.strftime("%F %T"))
+    payload = {
+        "report": {"parse_error": True, "raw_output": str(error)},
+        "raw_content": str(error),
+        "saved_at": timestamp(),
+        "chunk_index": chunk_index,
+        "total_chunks": total_chunks,
+        "status": status,
+    }
+    if first_error is not None:
+        payload["first_error"] = first_error
+    return payload
 
 
 def online_cache_state(resume_dir, filename, no_resume, json_load):
