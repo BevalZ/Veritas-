@@ -832,6 +832,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert callable(veritas.image_local_analysis.analyze_image_reasonability_from_namespace)
     assert veritas.image_payloads._image_to_data_url is paper_audit._image_to_data_url
     assert veritas.image_payloads._prepare_detector_upload_file is paper_audit._prepare_detector_upload_file
+    assert callable(veritas.image_audit_builder.build_image_audit_from_namespace)
     assert veritas.image_collection._dedupe_paths is paper_audit._dedupe_paths
     assert veritas.image_collection._image_output_dir is paper_audit._image_output_dir
     assert veritas.image_collection._latest_mineru_zips is paper_audit._latest_mineru_zips

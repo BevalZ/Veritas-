@@ -32,6 +32,7 @@ veritas/
 ├── followups.py       # PubPeer/comment and journal-letter draft workflow helpers
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
 ├── http_client.py      # Shared low-level HTTP request helper
+├── image_audit_builder.py # Image audit orchestration across local checks/providers
 ├── image_cache.py      # Image audit cache key and fingerprint helpers
 ├── image_collection.py # Local image discovery and MinerU zip image extraction helpers
 ├── image_detector_provider.py # imagedetector.com provider flow
@@ -141,6 +142,11 @@ tests/
   default browser-like user agent. Provider-specific request construction,
   polling, retry behavior, and response interpretation remain outside this
   boundary.
+- `veritas/image_audit_builder.py` owns image audit orchestration across local
+  image checks, image semantic analysis, imagedetector calls, and provider cache
+  flushing. It should stay namespace-aware while compatibility wrappers live in
+  `veritas.legacy`, so tests and user scripts can still monkeypatch collection,
+  local analysis, provider calls, cache keys, and priority ordering.
 - `veritas/image_cache.py` owns deterministic image file fingerprints and image
   semantic cache key construction. Namespace-aware helpers let `veritas.legacy`
   preserve historical monkeypatch behavior for image semantic endpoint, model,

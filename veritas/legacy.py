@@ -69,6 +69,7 @@ from .followups import (
 )
 from .html_utils import _html_escape, _json_for_script_tag
 from .http_client import _http_request
+from .image_audit_builder import build_image_audit_from_namespace
 from .image_cache import _image_file_fingerprint_from_namespace, _image_semantic_cache_key_from_namespace
 from .image_collection import (
     _dedupe_paths,
@@ -4829,62 +4830,22 @@ def build_image_audit(
     detector_cache=None,
     detector_cache_save=None,
 ):
-    images = collect_image_files(input_path, include_pdf=False, include_mineru=True, output_dir=output_dir)
-    analyses = sorted((analyze_image_reasonability(path) for path in images), key=_image_audit_sort_key)
-    analyses = analyses[:_effective_limit(limit, len(analyses))]
-    semantic_cache = semantic_cache if isinstance(semantic_cache, dict) else {}
-    detector_cache = detector_cache if isinstance(detector_cache, dict) else {}
-    semantic_checked = 0
-    if semantic:
-        semantic_candidates = sorted(analyses, key=_image_semantic_priority_key)
-        semantic_queue = semantic_candidates[:_effective_limit(semantic_limit, len(semantic_candidates))]
-        for idx, item in enumerate(semantic_queue, 1):
-            cache_key = _image_semantic_cache_key(item.get("path", ""))
-            semantic_result = semantic_cache.get(cache_key)
-            if isinstance(semantic_result, dict) and semantic_result.get("status") == "error":
-                semantic_cache.pop(cache_key, None)
-                _flush_image_cache(semantic_cache_save, "图像语义")
-                semantic_result = None
-            if not semantic_result:
-                print(f"  🖼️ 图像语义分析 [{idx}/{len(semantic_queue)}] {item.get('file', '')}")
-                semantic_result = call_glm_image_semantics(item.get("path", ""), timeout=semantic_timeout)
-                if semantic_result.get("status") != "error":
-                    semantic_cache[cache_key] = semantic_result
-                    _flush_image_cache(semantic_cache_save, "图像语义")
-            item["semantic"] = semantic_result
-            semantic_checked += 1
-    detector_checked = 0
-    if detector:
-        detector_candidates = sorted(analyses, key=_image_detector_priority_key)
-        detector_queue = detector_candidates[:_effective_limit(detector_limit, len(detector_candidates))]
-        for idx, item in enumerate(detector_queue, 1):
-            cache_key = _image_file_fingerprint(item.get("path", "")) + ":imagedetector_v1"
-            detector_result = detector_cache.get(cache_key)
-            if isinstance(detector_result, dict) and detector_result.get("status") == "error":
-                detector_cache.pop(cache_key, None)
-                _flush_image_cache(detector_cache_save, "imagedetector")
-                detector_result = None
-            if not detector_result:
-                print(f"  🖼️ imagedetector自动检测 [{idx}/{len(detector_queue)}] {item.get('file', '')}")
-                detector_result = call_imagedetector(item.get("path", ""), timeout=detector_timeout)
-                if detector_result.get("status") != "error":
-                    detector_cache[cache_key] = detector_result
-                    _flush_image_cache(detector_cache_save, "imagedetector")
-            item["detector"] = detector_result
-            detector_checked += 1
-    return {
-        "enabled": bool(analyses),
-        "site": IMAGE_DETECT_URL,
-        "semantic_enabled": bool(semantic),
-        "semantic_model": GLM_VISION_MODEL,
-        "semantic_checked": semantic_checked,
-        "detector_enabled": bool(detector),
-        "detector_checked": detector_checked,
-        "image_count": len(images),
-        "checked_count": len(analyses),
-        "images": analyses,
-        "note": "本地做尺寸、空白、噪声/对比度筛查；图像语义分析模型做图片语义理解；imagedetector.com子工具自动上传并记录AI概率。",
-    }
+    return build_image_audit_from_namespace(
+        globals(),
+        input_path,
+        output_dir=output_dir,
+        limit=limit,
+        semantic=semantic,
+        semantic_limit=semantic_limit,
+        semantic_timeout=semantic_timeout,
+        semantic_cache=semantic_cache,
+        semantic_cache_save=semantic_cache_save,
+        detector=detector,
+        detector_limit=detector_limit,
+        detector_timeout=detector_timeout,
+        detector_cache=detector_cache,
+        detector_cache_save=detector_cache_save,
+    )
 
 
 def format_image_audit_html(image_audit):
