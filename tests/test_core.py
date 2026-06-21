@@ -1142,6 +1142,17 @@ def test_llm_no_success_failure_summary_builds_message_and_details():
     }
 
 
+def test_llm_merge_done_detail_counts_checks_and_records_coverage():
+    assert paper_audit.llm_merge_done_detail(
+        {"checks": [{"id": "a"}, {"id": "b"}]},
+        {"llm_coverage": "2/3"},
+    ) == "checks=2; coverage=2/3"
+    assert paper_audit.llm_merge_done_detail(
+        "not-a-report",
+        {"llm_coverage": "0/3"},
+    ) == "checks=N/A; coverage=0/3"
+
+
 def test_online_cache_state_loads_resume_cache_when_enabled(tmp_path):
     resume_dir = tmp_path / ".paper_audit_resume"
     resume_dir.mkdir()
@@ -1819,6 +1830,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.save_llm_failure_cache_result is paper_audit.save_llm_failure_cache_result
     assert veritas.run_logging.llm_retry_failure_summary is paper_audit.llm_retry_failure_summary
     assert veritas.run_logging.llm_no_success_failure_summary is paper_audit.llm_no_success_failure_summary
+    assert veritas.run_logging.llm_merge_done_detail is paper_audit.llm_merge_done_detail
     assert veritas.run_logging.online_cache_state is paper_audit.online_cache_state
     assert veritas.run_logging.save_online_cache_result is paper_audit.save_online_cache_result
     assert veritas.run_logging.image_audit_cache_state is paper_audit.image_audit_cache_state

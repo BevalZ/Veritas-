@@ -172,6 +172,7 @@ from .run_logging import (
     image_semantic_cache_save_callback,
     llm_chunk_cache_read_state,
     llm_failure_cache_payload,
+    llm_merge_done_detail,
     llm_no_success_failure_summary,
     llm_retry_failure_summary,
     llm_success_cache_payload,
@@ -3446,7 +3447,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             meta["chunk_size"] = chunk_size
             meta["overlap"] = overlap
             apply_llm_partial_report_warning(report, meta)
-            resume_event(resume_dir, "stage4_merge", "done", f"checks={len(report.get('checks', [])) if isinstance(report, dict) else 'N/A'}; coverage={meta.get('llm_coverage')}")
+            resume_event(resume_dir, "stage4_merge", "done", llm_merge_done_detail(report, meta))
             progress_bar(4, 5, "阶段4/5 审查结果合并完成")
 
     # ─── 图像合理性检测：使用MinerU已保存zip中的图片/目录图片生成报告清单 ───

@@ -28,6 +28,7 @@ __all__ = [
     "save_llm_failure_cache_result",
     "llm_retry_failure_summary",
     "llm_no_success_failure_summary",
+    "llm_merge_done_detail",
     "online_cache_state",
     "save_online_cache_result",
     "image_audit_cache_state",
@@ -425,6 +426,12 @@ def llm_no_success_failure_summary(failed_chunks):
         "message": message,
         "details": {"failed_chunks": failed_chunks},
     }
+
+
+def llm_merge_done_detail(report, meta):
+    """Build the resume-event detail for successful text-LLM merge completion."""
+    checks_count = len(report.get("checks", [])) if isinstance(report, dict) else "N/A"
+    return f"checks={checks_count}; coverage={meta.get('llm_coverage')}"
 
 
 def online_cache_state(resume_dir, filename, no_resume, json_load):
