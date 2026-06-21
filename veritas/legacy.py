@@ -4380,13 +4380,14 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                 completed_stages=completed_stages,
                 retry_command=retry_command,
             )
-            md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs)
-            record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
-            return RunResult.failed(
+            return save_failed_run_result(
                 failure,
-                {"markdown": str(md_path), "json": str(json_path)},
-                workspace=run_workspace,
-                meta={"input_path": str(input_path)},
+                input_path,
+                run_workspace,
+                save_failed_audit_diagnostics,
+                record_run_workspace_artifacts,
+                completed_stages=completed_stages,
+                failed_artifact_kwargs=failed_artifact_kwargs,
             )
 
         if single_suffix != ".pdf":
@@ -4406,13 +4407,14 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     retry_command=retry_command,
                     details={"dependency": dependency, "install_command": install_command, "resume_dir": str(resume_dir)},
                 )
-                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs)
-                record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
-                return RunResult.failed(
+                return save_failed_run_result(
                     failure,
-                    {"markdown": str(md_path), "json": str(json_path)},
-                    workspace=run_workspace,
-                    meta={"input_path": str(input_path)},
+                    input_path,
+                    run_workspace,
+                    save_failed_audit_diagnostics,
+                    record_run_workspace_artifacts,
+                    completed_stages=completed_stages,
+                    failed_artifact_kwargs=failed_artifact_kwargs,
                 )
             print(f"📖 正在提取{single_suffix}文件文本: {pdf_path}")
             full_text = extract_text_from_file(
@@ -4432,13 +4434,14 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     completed_stages=completed_stages,
                     retry_command=retry_command,
                 )
-                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs)
-                record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
-                return RunResult.failed(
+                return save_failed_run_result(
                     failure,
-                    {"markdown": str(md_path), "json": str(json_path)},
-                    workspace=run_workspace,
-                    meta={"input_path": str(input_path)},
+                    input_path,
+                    run_workspace,
+                    save_failed_audit_diagnostics,
+                    record_run_workspace_artifacts,
+                    completed_stages=completed_stages,
+                    failed_artifact_kwargs=failed_artifact_kwargs,
                 )
             meta = {
                 "input_type": "file",
@@ -4503,13 +4506,14 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     completed_stages=completed_stages,
                     retry_command=retry_command,
                 )
-                md_path, json_path = save_failed_audit_diagnostics(failure, input_path, **failed_artifact_kwargs)
-                record_run_workspace_artifacts(run_workspace, "failed", [md_path, json_path], meta={"completed_stages": completed_stages})
-                return RunResult.failed(
+                return save_failed_run_result(
                     failure,
-                    {"markdown": str(md_path), "json": str(json_path)},
-                    workspace=run_workspace,
-                    meta={"input_path": str(input_path)},
+                    input_path,
+                    run_workspace,
+                    save_failed_audit_diagnostics,
+                    record_run_workspace_artifacts,
+                    completed_stages=completed_stages,
+                    failed_artifact_kwargs=failed_artifact_kwargs,
                 )
             print(f"✅ 提取完成: {meta['total_chars']} 字符（全文保留）")
             extracted_file_texts = [{
