@@ -181,6 +181,14 @@ def dropped_local_path_from_uri_text(text):
     return ""
 
 
+def web_runner_cors_headers():
+    return {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }
+
+
 __all__ = [
     "_web_runner_now",
     "_web_runner_history_path",
@@ -196,4 +204,5 @@ __all__ = [
     "web_runner_config_status_from_namespace",
     "pick_local_path",
     "dropped_local_path_from_uri_text",
+    "web_runner_cors_headers",
 ]

@@ -856,6 +856,11 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.report_action_context._report_action_context is paper_audit._report_action_context
     assert veritas.report_action_panel.report_action_service_url is paper_audit.report_action_service_url
     assert veritas.report_action_panel.format_web_action_panel_html is paper_audit.format_web_action_panel_html
+    assert veritas.report_action_service.report_action_service_health is paper_audit.report_action_service_health
+    assert veritas.report_action_service._report_action_entrypoint is paper_audit._report_action_entrypoint
+    assert callable(veritas.report_action_service.ensure_report_action_service_from_namespace)
+    assert veritas.report_action_service.open_html_artifact is paper_audit.open_html_artifact
+    assert veritas.report_action_service._read_json_request_body is paper_audit._read_json_request_body
     assert veritas.followups.normalize_followup_language is paper_audit.normalize_followup_language
     assert veritas.followups.normalize_followup_tone is paper_audit.normalize_followup_tone
     assert veritas.followups.normalize_article_identity is paper_audit.normalize_article_identity
@@ -942,6 +947,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.web_runner._web_runner_report_summary_from_payload is paper_audit._web_runner_report_summary_from_payload
     assert veritas.web_runner.pick_local_path is paper_audit.pick_local_path
     assert veritas.web_runner.dropped_local_path_from_uri_text is paper_audit.dropped_local_path_from_uri_text
+    assert veritas.web_runner.web_runner_cors_headers is paper_audit.web_runner_cors_headers
     assert callable(veritas.web_runner.web_runner_default_output_stem_from_namespace)
     assert callable(veritas.web_runner.web_runner_config_status_from_namespace)
 

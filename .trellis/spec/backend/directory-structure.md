@@ -48,6 +48,7 @@ veritas/
 ├── renderers.py        # Markdown/HTML renderer boundary
 ├── report_action_context.py # HTML follow-up/report action context helpers
 ├── report_action_panel.py # HTML follow-up/report action panel rendering helpers
+├── report_action_service.py # Local report action service health/startup helpers
 ├── report_checks.py    # Deterministic LLM finding scoring/display helpers
 ├── review_overview.py  # Review overview and action-priority rendering helpers
 ├── resource_parsing.py # Resource URL extraction and classification helpers
@@ -200,6 +201,11 @@ tests/
 - `veritas/report_action_panel.py` owns deterministic HTML rendering for the
   saved-report PubPeer/comment and journal-letter action panel. Local action
   service process management and HTTP handlers remain outside this boundary.
+- `veritas/report_action_service.py` owns local report action service health
+  checks, background startup, HTML artifact opening, and shared JSON request
+  parsing. `veritas.legacy` should wrap namespace-aware startup helpers so
+  historical monkeypatches of service health and subprocess spawning continue
+  to affect GUI/report-action behavior.
 - `veritas/report_checks.py` owns deterministic LLM finding suspicion scoring,
   source tags, source/reason extraction, merged-finding summary HTML, and check
   sort/verdict helpers shared by report rendering and evidence-chain clustering.
@@ -253,7 +259,8 @@ tests/
   filesystem-local and must not call providers.
 - `veritas/web_runner.py` owns local Web Runner helper functions that do not
   require the `WebRunnerState` class: run timestamps/ids, history paths, safe
-  run serialization, artifact summary extraction, local path picking, dropped
-  file URI parsing, and namespace-aware config/default-output helpers.
+  run serialization, artifact summary extraction, local CORS headers, local
+  path picking, dropped file URI parsing, and namespace-aware
+  config/default-output helpers.
   `veritas.legacy` may keep `WebRunnerState` and wrap namespace-aware helpers
   with its globals while the state machine remains in the compatibility layer.

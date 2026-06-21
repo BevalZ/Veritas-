@@ -252,6 +252,13 @@ from .report_checks import (
 )
 from .report_action_context import _report_action_context
 from .report_action_panel import format_web_action_panel_html, report_action_service_url
+from .report_action_service import (
+    _read_json_request_body,
+    _report_action_entrypoint,
+    ensure_report_action_service_from_namespace,
+    open_html_artifact,
+    report_action_service_health,
+)
 from .review_overview import (
     build_audit_action_items,
     build_review_overview,
@@ -307,6 +314,7 @@ from .web_runner import (
     dropped_local_path_from_uri_text,
     pick_local_path,
     web_runner_config_status_from_namespace,
+    web_runner_cors_headers,
     web_runner_default_output_stem_from_namespace,
 )
 from .workspace import (
@@ -1079,78 +1087,8 @@ def generate_followup_draft(kind, context, language="zh", tone=None, timeout=Non
     return generate_followup_draft_from_namespace(globals(), kind, context, language=language, tone=tone, timeout=timeout)
 
 
-def report_action_service_health(host="127.0.0.1", port=8765, timeout=0.5):
-    """Return the local report action service health payload, or None when unavailable."""
-    try:
-        with urllib.request.urlopen(f"{report_action_service_url(host, port)}/health", timeout=timeout) as resp:
-            if resp.status != 200:
-                return None
-            payload = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
-            if payload.get("ok"):
-                return payload
-    except Exception:
-        return None
-    return None
-
-
-def _report_action_entrypoint():
-    candidate = Path(__file__).resolve().parents[1] / "paper_audit.py"
-    if candidate.exists():
-        return candidate
-    return Path(sys.argv[0]).resolve()
-
-
 def ensure_report_action_service(host="127.0.0.1", port=8765, log_path: Path = None, startup_timeout=2.0):
-    """Start or reuse the localhost action service used by generated HTML reports."""
-    existing = report_action_service_health(host=host, port=port, timeout=0.3)
-    if existing:
-        return {"ok": True, "status": "already_running", "url": report_action_service_url(host, port), "health": existing}
-
-    command = [
-        sys.executable,
-        str(_report_action_entrypoint()),
-        "--serve-report-actions",
-        "--report-actions-port",
-        str(int(port)),
-    ]
-    popen_kwargs = {
-        "stdin": subprocess.DEVNULL,
-        "start_new_session": True,
-    }
-    if log_path:
-        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
-        log_file = open(log_path, "a", encoding="utf-8")
-        popen_kwargs["stdout"] = log_file
-        popen_kwargs["stderr"] = subprocess.STDOUT
-    else:
-        log_file = None
-        popen_kwargs["stdout"] = subprocess.DEVNULL
-        popen_kwargs["stderr"] = subprocess.DEVNULL
-
-    try:
-        process = subprocess.Popen(command, **popen_kwargs)
-    except Exception as e:
-        if log_file:
-            log_file.close()
-        return {"ok": False, "status": "start_failed", "url": report_action_service_url(host, port), "error": f"{type(e).__name__}: {_brief_text(str(e), 240)}"}
-    finally:
-        if log_file:
-            log_file.close()
-
-    deadline = time.time() + float(startup_timeout)
-    while time.time() < deadline:
-        health = report_action_service_health(host=host, port=port, timeout=0.3)
-        if health:
-            return {"ok": True, "status": "started", "url": report_action_service_url(host, port), "pid": process.pid, "health": health}
-        if process.poll() is not None:
-            return {"ok": False, "status": "exited", "url": report_action_service_url(host, port), "pid": process.pid, "returncode": process.returncode}
-        time.sleep(0.1)
-    return {"ok": True, "status": "starting", "url": report_action_service_url(host, port), "pid": process.pid}
-
-
-def open_html_artifact(html_path: Path):
-    html_abs = str(Path(html_path).resolve())
-    webbrowser.open(f"file:///{html_abs}" if platform.system() == "Windows" else f"file://{html_abs}")
+    return ensure_report_action_service_from_namespace(globals(), host=host, port=port, log_path=log_path, startup_timeout=startup_timeout)
 
 
 def _report_action_api_response(route, payload):
@@ -1180,14 +1118,6 @@ def _report_action_api_response(route, payload):
         "text": result.get("text"),
         "paths": result.get("paths"),
     }
-
-
-def _read_json_request_body(handler, max_bytes=2_000_000):
-    length = int(handler.headers.get("Content-Length", "0") or "0")
-    if length > max_bytes:
-        raise ValueError("request_too_large")
-    body = handler.rfile.read(length).decode("utf-8", errors="replace")
-    return json.loads(body or "{}")
 
 
 def serve_report_actions(host="127.0.0.1", port=8765):
@@ -2805,14 +2735,6 @@ refreshRuns();
 </script>
 </body>
 </html>"""
-
-
-def web_runner_cors_headers():
-    return {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-    }
 
 
 def serve_web_runner(host="127.0.0.1", port=8765, open_browser=True, history_path=None):
