@@ -90,6 +90,27 @@ def _markdown_local_statistics_lines(stat_result):
     return lines
 
 
+def _markdown_report_summary_lines(report, risk_icons):
+    """Build summary, risk, and score-breakdown lines for a complete Markdown report."""
+    lines = [
+        f"## 总评: {report.get('summary', 'N/A')}",
+    ]
+    risk = report.get("risk_level", "未知")
+    lines.append(f"**复核优先级**: {risk_icons.get(risk, '⚪')} {risk}")
+    lines.append(f"**证据风险分**: {report.get('detection_score', 0)} / 100 (辅助排序指标，越高表示越需要优先复核)")
+    breakdown = report.get("score_breakdown") or {}
+    if breakdown:
+        lines.append(
+            "**计分拆解**: "
+            f"红旗 {breakdown.get('red_flags', 0)}；"
+            f"证据型疑点 {breakdown.get('evidence_warnings', 0)}；"
+            f"提取质量疑点 {breakdown.get('extraction_warnings', 0)}；"
+            f"统计调整 {', '.join(breakdown.get('stat_adjustments') or []) or '无'}"
+        )
+    lines.append("")
+    return lines
+
+
 def format_report_from_namespace(namespace, report, pdf_path, meta, stat_result):
     """Format the audit result as a Markdown report."""
     normalize_meta = _namespace_value(namespace, "normalize_run_meta", normalize_run_meta)
@@ -138,20 +159,7 @@ def format_report_from_namespace(namespace, report, pdf_path, meta, stat_result)
         lines.append(f"```\n{report['raw_output']}\n```")
         return "\n".join(lines)
 
-    lines.append(f"## 总评: {report.get('summary', 'N/A')}")
-    risk = report.get("risk_level", "未知")
-    lines.append(f"**复核优先级**: {risk_icons.get(risk, '⚪')} {risk}")
-    lines.append(f"**证据风险分**: {report.get('detection_score', 0)} / 100 (辅助排序指标，越高表示越需要优先复核)")
-    breakdown = report.get("score_breakdown") or {}
-    if breakdown:
-        lines.append(
-            "**计分拆解**: "
-            f"红旗 {breakdown.get('red_flags', 0)}；"
-            f"证据型疑点 {breakdown.get('evidence_warnings', 0)}；"
-            f"提取质量疑点 {breakdown.get('extraction_warnings', 0)}；"
-            f"统计调整 {', '.join(breakdown.get('stat_adjustments') or []) or '无'}"
-        )
-    lines.append("")
+    lines.extend(_markdown_report_summary_lines(report, risk_icons))
     lines.extend(action_summary(report, meta, stat_result))
 
     checks = sorted(report.get("checks", []), key=check_sort_key)

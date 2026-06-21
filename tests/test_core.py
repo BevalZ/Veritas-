@@ -4650,6 +4650,29 @@ def test_markdown_local_statistics_lines_include_numeric_status_rows():
     assert "| 数字自洽性 | Methods n=42, Results n=24 | ⚠️矛盾 |" in joined
 
 
+def test_markdown_report_summary_lines_include_risk_icon_and_breakdown():
+    lines = veritas.report_markdown._markdown_report_summary_lines(
+        {
+            "summary": "needs review",
+            "risk_level": "中",
+            "detection_score": 62,
+            "score_breakdown": {
+                "red_flags": 1,
+                "evidence_warnings": 2,
+                "extraction_warnings": 3,
+                "stat_adjustments": ["p值异常"],
+            },
+        },
+        {"中": "🟡"},
+    )
+
+    joined = "\n".join(lines)
+    assert "## 总评: needs review" in joined
+    assert "**复核优先级**: 🟡 中" in joined
+    assert "**证据风险分**: 62 / 100" in joined
+    assert "红旗 1；证据型疑点 2；提取质量疑点 3；统计调整 p值异常" in joined
+
+
 def test_reports_include_review_overview_and_internal_evidence_links(tmp_path):
     stat = {
         "benford_deviation": None,
