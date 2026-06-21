@@ -144,10 +144,12 @@ tests/
   preserve historical monkeypatch behavior for image semantic endpoint, model,
   and cache-version globals.
 - `veritas/image_collection.py` owns local filesystem image discovery, path
-  de-duplication, image output-directory selection, MinerU ZIP image extraction,
-  and newest-per-source MinerU ZIP selection. It must not call image providers;
+  de-duplication, image output-directory selection, PDF image extraction,
+  MinerU ZIP image extraction, newest-per-source MinerU ZIP selection, and
+  namespace-aware image collection. It must not call image providers;
   `veritas.legacy` may wrap namespace-aware helpers so historical monkeypatches
-  of image size/extension constants continue to affect collection.
+  of image size/extension constants and collector hooks continue to affect
+  collection.
 - `veritas/image_local_analysis.py` owns local image sanity checks before
   provider review. It may use optional Pillow for local dimensions/statistics
   but must not call image providers; legacy wrappers preserve `MIN_IMAGE_BYTES`

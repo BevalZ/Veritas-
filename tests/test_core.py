@@ -831,8 +831,10 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.image_collection._dedupe_paths is paper_audit._dedupe_paths
     assert veritas.image_collection._image_output_dir is paper_audit._image_output_dir
     assert veritas.image_collection._latest_mineru_zips is paper_audit._latest_mineru_zips
+    assert veritas.image_collection.extract_images_from_pdf is paper_audit.extract_images_from_pdf
     assert callable(veritas.image_collection._extract_images_from_mineru_zip_from_namespace)
     assert callable(veritas.image_collection.collect_mineru_image_files_from_namespace)
+    assert callable(veritas.image_collection.collect_image_files_from_namespace)
     assert veritas.image_selection._image_audit_sort_key is paper_audit._image_audit_sort_key
     assert veritas.image_selection._image_semantic_priority_key is paper_audit._image_semantic_priority_key
     assert veritas.image_selection._image_detector_priority_key is paper_audit._image_detector_priority_key
@@ -2340,6 +2342,19 @@ def test_analyze_image_reasonability_preserves_min_size_monkeypatch(monkeypatch,
 
     assert "too_small" in small["issues"]
     assert "too_small" not in large_enough["issues"]
+
+
+def test_collect_image_files_preserves_min_size_monkeypatch(monkeypatch, tmp_path):
+    image_path = tmp_path / "figure.png"
+    image_path.write_bytes(b"x" * 10)
+
+    monkeypatch.setattr(paper_audit, "MIN_IMAGE_BYTES", 100)
+    too_small = paper_audit.collect_image_files(str(tmp_path), include_pdf=False, include_mineru=False)
+    monkeypatch.setattr(paper_audit, "MIN_IMAGE_BYTES", 1)
+    accepted = paper_audit.collect_image_files(str(tmp_path), include_pdf=False, include_mineru=False)
+
+    assert too_small == []
+    assert accepted == [str(image_path.resolve())]
 
 
 def test_call_imagedetector_uses_web_upload_flow(monkeypatch, tmp_path):

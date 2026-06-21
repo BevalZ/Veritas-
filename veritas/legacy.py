@@ -75,7 +75,9 @@ from .image_collection import (
     _extract_images_from_mineru_zip_from_namespace,
     _image_output_dir,
     _latest_mineru_zips,
+    collect_image_files_from_namespace,
     collect_mineru_image_files_from_namespace,
+    extract_images_from_pdf,
 )
 from .image_local_analysis import analyze_image_reasonability_from_namespace
 from .image_payloads import _image_to_data_url, _prepare_detector_upload_file
@@ -5031,94 +5033,14 @@ def save_image_review_manifest(image_audit, output_dir):
     return _save_image_review_manifest(image_audit, output_dir, image_detect_url=IMAGE_DETECT_URL)
 
 
-def extract_images_from_pdf(pdf_path: str) -> List[str]:
-    """从PDF中提取内嵌图片到临时目录，返回图片路径列表
-
-    优先使用PyMuPDF(fitz)，降级使用pdf2image整页渲染
-    """
-    images = []
-    tmp_dir = os.path.join(os.path.dirname(pdf_path), "_veritas_images_tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-
-    # 方案1：PyMuPDF提取内嵌图片
-    try:
-        import fitz  # PyMuPDF
-        doc = fitz.open(pdf_path)
-        img_count = 0
-        for page_idx in range(len(doc)):
-            page = doc[page_idx]
-            img_list = page.get_images(full=True)
-            for img_idx, img_info in enumerate(img_list):
-                xref = img_info[0]
-                try:
-                    base_image = doc.extract_image(xref)
-                    if base_image and base_image.get("image"):
-                        ext = base_image.get("ext", "png")
-                        if ext not in ("png", "jpg", "jpeg", "bmp", "tiff", "webp"):
-                            ext = "png"
-                        fname = f"page{page_idx + 1}_img{img_idx + 1}.{ext}"
-                        fpath = os.path.join(tmp_dir, fname)
-                        with open(fpath, "wb") as f:
-                            f.write(base_image["image"])
-                        # 过滤掉太小的图片（图标、装饰等）
-                        if os.path.getsize(fpath) > 5000:
-                            images.append(fpath)
-                            img_count += 1
-                except Exception:
-                    continue
-        doc.close()
-        if img_count > 0:
-            print(f"  📎 PyMuPDF提取 {img_count} 张内嵌图片 → {tmp_dir}")
-            return images
-    except ImportError:
-        pass
-    except Exception as e:
-        print(f"  ⚠️ PyMuPDF提取失败: {e}")
-
-    # 方案2：pdf2image整页渲染
-    try:
-        from pdf2image import convert_from_path
-        pages = convert_from_path(pdf_path, dpi=200)
-        for i, page_img in enumerate(pages):
-            fname = f"page{i + 1}_full.png"
-            fpath = os.path.join(tmp_dir, fname)
-            page_img.save(fpath, "PNG")
-            if os.path.getsize(fpath) > 10000:
-                images.append(fpath)
-        if images:
-            print(f"  📎 pdf2image渲染 {len(images)} 页 → {tmp_dir}")
-            return images
-    except ImportError:
-        pass
-    except Exception as e:
-        print(f"  ⚠️ pdf2image渲染失败: {e}")
-
-    return images
-
-
 def collect_image_files(input_path: str, include_pdf=True, include_mineru=True, output_dir=None) -> List[str]:
-    """收集论文相关图片文件：目录图片、PDF内嵌图，以及MinerU zip中的图片。"""
-    images = []
-    p = Path(input_path)
-
-    if include_mineru:
-        images.extend(collect_mineru_image_files(input_path, output_dir=output_dir))
-
-    if include_pdf and p.is_file() and p.suffix.lower() == ".pdf":
-        # PDF文件：提取内嵌图片
-        print("  📸 从PDF中提取图片...")
-        extracted = extract_images_from_pdf(str(p))
-        images.extend(extracted)
-    elif p.is_dir():
-        # 目录：扫描所有图片文件
-        for ext in IMAGE_EXTENSIONS:
-            for f in p.rglob(f"*{ext}"):
-                if ".paper_audit_resume" in str(f) or "_paper_audit_images" in str(f):
-                    continue
-                if f.stat().st_size > MIN_IMAGE_BYTES:  # 过滤小图标
-                    images.append(str(f))
-
-    return _dedupe_paths(images)
+    return collect_image_files_from_namespace(
+        globals(),
+        input_path,
+        include_pdf=include_pdf,
+        include_mineru=include_mineru,
+        output_dir=output_dir,
+    )
 
 
 def launch_image_ai_detect(

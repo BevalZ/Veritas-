@@ -1,5 +1,6 @@
 """Local image collection helpers for audit inputs and MinerU artifacts."""
 
+import os
 import re
 from pathlib import Path
 from typing import Iterable, List
@@ -16,6 +17,8 @@ __all__ = [
     "_image_output_dir",
     "_extract_images_from_mineru_zip",
     "_extract_images_from_mineru_zip_from_namespace",
+    "extract_images_from_pdf",
+    "collect_image_files_from_namespace",
     "collect_mineru_image_files",
     "collect_mineru_image_files_from_namespace",
     "_latest_mineru_zips",
@@ -134,6 +137,91 @@ def collect_mineru_image_files_from_namespace(namespace, input_path: str, output
         image_extensions=_namespace_value(namespace, "IMAGE_EXTENSIONS", DEFAULT_IMAGE_EXTENSIONS),
         min_image_bytes=_namespace_value(namespace, "MIN_IMAGE_BYTES", DEFAULT_MIN_IMAGE_BYTES),
     )
+
+
+def extract_images_from_pdf(pdf_path: str) -> List[str]:
+    """Extract embedded or rendered images from a PDF into a temporary folder."""
+    images = []
+    tmp_dir = os.path.join(os.path.dirname(pdf_path), "_veritas_images_tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(pdf_path)
+        img_count = 0
+        for page_idx in range(len(doc)):
+            page = doc[page_idx]
+            img_list = page.get_images(full=True)
+            for img_idx, img_info in enumerate(img_list):
+                xref = img_info[0]
+                try:
+                    base_image = doc.extract_image(xref)
+                    if base_image and base_image.get("image"):
+                        ext = base_image.get("ext", "png")
+                        if ext not in ("png", "jpg", "jpeg", "bmp", "tiff", "webp"):
+                            ext = "png"
+                        fname = f"page{page_idx + 1}_img{img_idx + 1}.{ext}"
+                        fpath = os.path.join(tmp_dir, fname)
+                        with open(fpath, "wb") as f:
+                            f.write(base_image["image"])
+                        if os.path.getsize(fpath) > 5000:
+                            images.append(fpath)
+                            img_count += 1
+                except Exception:
+                    continue
+        doc.close()
+        if img_count > 0:
+            print(f"  📎 PyMuPDF提取 {img_count} 张内嵌图片 → {tmp_dir}")
+            return images
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"  ⚠️ PyMuPDF提取失败: {e}")
+
+    try:
+        from pdf2image import convert_from_path
+        pages = convert_from_path(pdf_path, dpi=200)
+        for i, page_img in enumerate(pages):
+            fname = f"page{i + 1}_full.png"
+            fpath = os.path.join(tmp_dir, fname)
+            page_img.save(fpath, "PNG")
+            if os.path.getsize(fpath) > 10000:
+                images.append(fpath)
+        if images:
+            print(f"  📎 pdf2image渲染 {len(images)} 页 → {tmp_dir}")
+            return images
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"  ⚠️ pdf2image渲染失败: {e}")
+
+    return images
+
+
+def collect_image_files_from_namespace(namespace, input_path: str, include_pdf=True, include_mineru=True, output_dir=None) -> List[str]:
+    """Collect local paper-related image files from directories, PDFs, and MinerU artifacts."""
+    images = []
+    p = Path(input_path)
+    extensions = set(_namespace_value(namespace, "IMAGE_EXTENSIONS", DEFAULT_IMAGE_EXTENSIONS))
+    min_image_bytes = _namespace_value(namespace, "MIN_IMAGE_BYTES", DEFAULT_MIN_IMAGE_BYTES)
+    mineru_collector = _namespace_value(namespace, "collect_mineru_image_files", collect_mineru_image_files)
+    pdf_extractor = _namespace_value(namespace, "extract_images_from_pdf", extract_images_from_pdf)
+
+    if include_mineru:
+        images.extend(mineru_collector(input_path, output_dir=output_dir))
+
+    if include_pdf and p.is_file() and p.suffix.lower() == ".pdf":
+        print("  📸 从PDF中提取图片...")
+        images.extend(pdf_extractor(str(p)))
+    elif p.is_dir():
+        for ext in extensions:
+            for image_path in p.rglob(f"*{ext}"):
+                if ".paper_audit_resume" in str(image_path) or "_paper_audit_images" in str(image_path):
+                    continue
+                if image_path.stat().st_size > min_image_bytes:
+                    images.append(str(image_path))
+
+    return _dedupe_paths(images)
 
 
 def _latest_mineru_zips(paths):
