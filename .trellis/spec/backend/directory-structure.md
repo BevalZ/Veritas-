@@ -31,6 +31,7 @@ veritas/
 ├── followups.py       # PubPeer/comment and journal-letter draft workflow helpers
 ├── html_utils.py       # HTML escaping and script-safe JSON helpers
 ├── image_cache.py      # Image audit cache key and fingerprint helpers
+├── image_collection.py # Local image discovery and MinerU zip image extraction helpers
 ├── image_reporting.py  # Image audit report and review-manifest rendering helpers
 ├── image_results.py    # Image provider response normalization helpers
 ├── image_selection.py  # Image audit selection and cache-flush helpers
@@ -130,6 +131,11 @@ tests/
   semantic cache key construction. Namespace-aware helpers let `veritas.legacy`
   preserve historical monkeypatch behavior for image semantic endpoint, model,
   and cache-version globals.
+- `veritas/image_collection.py` owns local filesystem image discovery, path
+  de-duplication, image output-directory selection, MinerU ZIP image extraction,
+  and newest-per-source MinerU ZIP selection. It must not call image providers;
+  `veritas.legacy` may wrap namespace-aware helpers so historical monkeypatches
+  of image size/extension constants continue to affect collection.
 - `veritas/image_reporting.py` owns deterministic rendering of image audit
   display summaries, Markdown/HTML report sections, and the standalone
   `image_ai_review_manifest.html` review checklist. Provider calls and image
