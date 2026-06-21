@@ -7,6 +7,7 @@ import threading
 import time
 from pathlib import Path
 import zipfile
+import zlib
 
 import paper_audit
 import veritas
@@ -718,6 +719,19 @@ def test_optional_dependency_for_extension_preserves_legacy_dependency_flags(mon
     assert xlsx_dependency == (None, None)
 
 
+def test_extract_pdf_text_fallback_reads_compressed_text_stream(tmp_path):
+    pdf_path = tmp_path / "paper.pdf"
+    compressed = zlib.compress(b"BT (Fallback PDF text) Tj ET")
+    pdf_path.write_bytes(b"%PDF-1.4\nstream\n" + compressed + b"\nendstream\n%%EOF")
+
+    text, meta, raw = paper_audit.extract_pdf_text(pdf_path, max_chars=12)
+
+    assert text == "Fallback PDF"
+    assert meta["extraction_method"] == "raw_pdf_stream"
+    assert meta["total_chars"] >= len("Fallback PDF text")
+    assert raw.startswith(b"%PDF-1.4")
+
+
 def test_run_audit_rejects_direct_legacy_doc_file_input(monkeypatch, tmp_path):
     doc_path = tmp_path / "paper.doc"
     doc_path.write_bytes(b"legacy-doc")
@@ -817,6 +831,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.image_selection._image_semantic_priority_key is paper_audit._image_semantic_priority_key
     assert veritas.image_selection._image_detector_priority_key is paper_audit._image_detector_priority_key
     assert veritas.limit_utils._effective_limit is paper_audit._effective_limit
+    assert veritas.text_extraction.extract_pdf_text is paper_audit.extract_pdf_text
     assert veritas.text_utils._brief_text is paper_audit._brief_text
     assert veritas.text_utils._text_fingerprint is paper_audit._text_fingerprint
     assert veritas.text_utils._normalize_title is paper_audit._normalize_title

@@ -57,6 +57,7 @@ veritas/
 ├── risk_rules.py       # Versioned final risk scoring boundary
 ├── run.py              # Run request/result and orchestration boundary
 ├── run_logging.py      # Run log, progress, resume-event, and MinerU artifact helpers
+├── text_extraction.py  # Local standard-library text extraction fallbacks
 ├── text_utils.py       # Shared text shortening and token similarity helpers
 ├── versions.py         # Prompt/schema/adapter/risk-rule version constants
 ├── web_runner.py       # Local Web Runner helper boundary
@@ -259,6 +260,9 @@ tests/
   selection, tee logging, resume event JSONL writes, progress printing, LLM
   cache-read policy, and saved MinerU URL/ZIP artifacts. It should stay
   filesystem-local and must not call providers.
+- `veritas/text_extraction.py` owns local standard-library text extraction
+  fallbacks such as raw PDF stream text extraction. It must not call MinerU,
+  LLMs, or network providers.
 - `veritas/web_runner.py` owns local Web Runner helper functions that do not
   require the `WebRunnerState` class: run timestamps/ids, history paths, safe
   run serialization, artifact summary extraction, local CORS headers, local

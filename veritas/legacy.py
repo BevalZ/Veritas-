@@ -158,6 +158,7 @@ from .run_logging import (
 from . import risk_rules as _risk_rules
 from .markdown_utils import _md_escape_cell
 from .text_utils import _brief_text, _normalize_title, _text_fingerprint, _title_tokens, _token_similarity
+from .text_extraction import extract_pdf_text
 from .models import (
     AuditFailure,
     AuditReportModel,
@@ -922,35 +923,6 @@ def extract_text_from_file(file_path: Path, max_chars_per_file=None, use_mineru=
 
 def optional_dependency_for_extension(ext: str):
     return optional_dependency_for_extension_from_namespace(globals(), ext)
-
-
-# ══════════════════════════════════════════════════════════════
-# PDF原始提取模块（MinerU不可用时的降级方案）
-# ══════════════════════════════════════════════════════════════
-
-def extract_pdf_text(filepath, max_chars=8000):
-    """从PDF文件中提取文本（纯标准库实现，MinerU的降级方案）"""
-    with open(filepath, "rb") as f:
-        raw = f.read()
-    parts = []
-    for s in re.findall(rb"stream\r?\n(.*?)\r?\nendstream", raw, re.DOTALL):
-        try:
-            dec = zlib.decompress(s)
-            for x in re.findall(rb"\((.*?)\)\s*Tj", dec):
-                d = x.decode("latin-1", errors="ignore")
-                if len(d.strip()) > 1:
-                    parts.append(d)
-            for bt in re.findall(rb"BT(.*?)ET", dec, re.DOTALL):
-                for x in re.findall(rb"\((.*?)\)", bt):
-                    d = x.decode("latin-1", errors="ignore")
-                    if len(d.strip()) > 1:
-                        parts.append(d)
-        except:
-            pass
-    text = re.sub(r"\s+", " ", " ".join(parts)).strip()
-    meta = {"size_mb": round(len(raw) / 1024 / 1024, 2), "total_chars": len(text),
-            "extraction_method": "raw_pdf_stream"}
-    return text[:max_chars], meta, raw
 
 
 # ══════════════════════════════════════════════════════════════
