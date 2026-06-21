@@ -53,6 +53,39 @@ def _run_semantic_image_checks(
     return semantic_checked
 
 
+def _run_detector_image_checks(
+    analyses,
+    detector_limit,
+    detector_timeout,
+    detector_cache,
+    detector_cache_save,
+    detector_priority_key,
+    effective_limit,
+    image_fingerprint,
+    flush_image_cache,
+    call_detector,
+):
+    detector_checked = 0
+    detector_candidates = sorted(analyses, key=detector_priority_key)
+    detector_queue = detector_candidates[:effective_limit(detector_limit, len(detector_candidates))]
+    for idx, item in enumerate(detector_queue, 1):
+        cache_key = image_fingerprint(item.get("path", "")) + ":imagedetector_v1"
+        detector_result = detector_cache.get(cache_key)
+        if isinstance(detector_result, dict) and detector_result.get("status") == "error":
+            detector_cache.pop(cache_key, None)
+            flush_image_cache(detector_cache_save, "imagedetector")
+            detector_result = None
+        if not detector_result:
+            print(f"  🖼️ imagedetector自动检测 [{idx}/{len(detector_queue)}] {item.get('file', '')}")
+            detector_result = call_detector(item.get("path", ""), timeout=detector_timeout)
+            if detector_result.get("status") != "error":
+                detector_cache[cache_key] = detector_result
+                flush_image_cache(detector_cache_save, "imagedetector")
+        item["detector"] = detector_result
+        detector_checked += 1
+    return detector_checked
+
+
 def build_image_audit_from_namespace(
     namespace,
     input_path: str,
@@ -115,23 +148,18 @@ def build_image_audit_from_namespace(
         )
     detector_checked = 0
     if detector:
-        detector_candidates = sorted(analyses, key=detector_priority_key)
-        detector_queue = detector_candidates[:effective_limit(detector_limit, len(detector_candidates))]
-        for idx, item in enumerate(detector_queue, 1):
-            cache_key = image_fingerprint(item.get("path", "")) + ":imagedetector_v1"
-            detector_result = detector_cache.get(cache_key)
-            if isinstance(detector_result, dict) and detector_result.get("status") == "error":
-                detector_cache.pop(cache_key, None)
-                flush_image_cache(detector_cache_save, "imagedetector")
-                detector_result = None
-            if not detector_result:
-                print(f"  🖼️ imagedetector自动检测 [{idx}/{len(detector_queue)}] {item.get('file', '')}")
-                detector_result = call_detector(item.get("path", ""), timeout=detector_timeout)
-                if detector_result.get("status") != "error":
-                    detector_cache[cache_key] = detector_result
-                    flush_image_cache(detector_cache_save, "imagedetector")
-            item["detector"] = detector_result
-            detector_checked += 1
+        detector_checked = _run_detector_image_checks(
+            analyses,
+            detector_limit,
+            detector_timeout,
+            detector_cache,
+            detector_cache_save,
+            detector_priority_key,
+            effective_limit,
+            image_fingerprint,
+            flush_image_cache,
+            call_detector,
+        )
     return {
         "enabled": bool(analyses),
         "site": _namespace_value(namespace, "IMAGE_DETECT_URL", DEFAULT_IMAGE_DETECT_URL),

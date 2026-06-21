@@ -3632,6 +3632,36 @@ def test_build_image_audit_uses_detector_cache(monkeypatch, tmp_path):
     assert calls["count"] == 1
 
 
+def test_run_detector_image_checks_invalidates_error_cache_and_flushes_success():
+    analyses = [{"path": "img-a.png", "file": "img-a.png"}, {"path": "img-b.png", "file": "img-b.png"}]
+    cache = {
+        "fp:img-a.png:imagedetector_v1": {"status": "error", "message": "old error"},
+        "fp:img-b.png:imagedetector_v1": {"status": "ok", "score": 12.0},
+    }
+    flushes = []
+    calls = []
+
+    checked = veritas.image_audit_builder._run_detector_image_checks(
+        analyses,
+        detector_limit=None,
+        detector_timeout=11,
+        detector_cache=cache,
+        detector_cache_save=lambda: None,
+        detector_priority_key=lambda item: item["file"],
+        effective_limit=lambda limit, count: count,
+        image_fingerprint=lambda path: f"fp:{path}",
+        flush_image_cache=lambda callback, label: flushes.append(label),
+        call_detector=lambda path, timeout=60: (calls.append((path, timeout)) or {"status": "ok", "score": 91.0}),
+    )
+
+    assert checked == 2
+    assert calls == [("img-a.png", 11)]
+    assert flushes == ["imagedetector", "imagedetector"]
+    assert cache["fp:img-a.png:imagedetector_v1"] == {"status": "ok", "score": 91.0}
+    assert analyses[0]["detector"] == {"status": "ok", "score": 91.0}
+    assert analyses[1]["detector"] == {"status": "ok", "score": 12.0}
+
+
 def test_build_image_audit_flushes_detector_cache_after_each_success(monkeypatch, tmp_path):
     first_image = tmp_path / "a.png"
     second_image = tmp_path / "b.png"
