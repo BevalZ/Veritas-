@@ -39,6 +39,7 @@ veritas/
 ├── image_payloads.py   # Local image payload preparation helpers
 ├── image_reporting.py  # Image audit report and review-manifest rendering helpers
 ├── image_results.py    # Image provider response normalization helpers
+├── image_semantic_provider.py # OpenAI-compatible image semantic provider flow
 ├── image_selection.py  # Image audit selection and cache-flush helpers
 ├── limit_utils.py      # Shared item-limit normalization helpers
 ├── local_analysis.py   # Local statistics and text chunking helpers
@@ -170,6 +171,11 @@ tests/
 - `veritas/image_results.py` owns deterministic normalization of image semantic
   model responses, imagedetector responses, provider timeout result payloads,
   and JSON-object extraction from model text. It must not perform network I/O.
+- `veritas/image_semantic_provider.py` owns the OpenAI-compatible image
+  semantic HTTP flow. It should stay namespace-aware while compatibility
+  wrappers live in `veritas.legacy`, so tests and user scripts can still
+  monkeypatch `_http_request`, payload preparation, timeout behavior, result
+  normalizers, and provider endpoint/model constants.
 - `veritas/image_selection.py` owns deterministic image audit sorting,
   semantic/detector priority keys, and cache flush callback handling. It must
   not collect images or call providers.

@@ -827,6 +827,8 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.image_results._extract_json_object is paper_audit._extract_json_object
     assert callable(veritas.image_detector_provider.call_imagedetector_from_namespace)
     assert callable(veritas.image_detector_provider._call_imagedetector_unbounded_from_namespace)
+    assert callable(veritas.image_semantic_provider.call_glm_image_semantics_from_namespace)
+    assert callable(veritas.image_semantic_provider._call_glm_image_semantics_unbounded_from_namespace)
     assert callable(veritas.image_local_analysis.analyze_image_reasonability_from_namespace)
     assert veritas.image_payloads._image_to_data_url is paper_audit._image_to_data_url
     assert veritas.image_payloads._prepare_detector_upload_file is paper_audit._prepare_detector_upload_file
@@ -2297,6 +2299,50 @@ def test_call_glm_image_semantics_accepts_reasoning_content_response(monkeypatch
     assert result["summary"] == "一张标题为Sample 2的水平条形图"
     assert result["visible_text"] == "Sample 2, From Node, Output"
     assert result["confidence"] == 0.74
+
+
+def test_image_semantic_provider_uses_namespace_hooks(tmp_path):
+    image_path = tmp_path / "figure.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    payload = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "summary": "namespace ok",
+                    "reasonability": "合理",
+                    "risks": [],
+                    "manual_checks": [],
+                    "confidence": 0.5,
+                })
+            }
+        }]
+    }
+    calls = {}
+
+    def fake_http(url, method="GET", headers=None, data=None, timeout=60):
+        calls["url"] = url
+        calls["method"] = method
+        calls["body"] = json.loads(data.decode("utf-8"))
+        return json.dumps(payload).encode("utf-8"), 200
+
+    namespace = {
+        "GLM_API_KEY": "ns-key",
+        "GLM_API_URL": "https://vision.example.test/v1",
+        "GLM_VISION_MODEL": "ns-model",
+        "_http_request": fake_http,
+        "_chat_completions_endpoint": lambda url: f"{url.rstrip('/')}/custom-chat",
+        "_image_to_data_url": lambda path: f"data:image/png;base64,{Path(path).name}",
+        "_run_with_alarm_timeout": lambda func, timeout, timeout_result: func(),
+    }
+
+    result = veritas.image_semantic_provider.call_glm_image_semantics_from_namespace(namespace, str(image_path))
+
+    assert result["status"] == "ok"
+    assert result["summary"] == "namespace ok"
+    assert calls["url"] == "https://vision.example.test/v1/custom-chat"
+    assert calls["method"] == "POST"
+    assert calls["body"]["model"] == "ns-model"
+    assert calls["body"]["messages"][0]["content"][1]["image_url"]["url"].endswith("figure.png")
 
 
 def test_image_semantic_display_includes_visual_fields():

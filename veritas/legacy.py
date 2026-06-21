@@ -80,6 +80,10 @@ from .image_collection import (
     extract_images_from_pdf,
 )
 from .image_detector_provider import call_imagedetector_from_namespace, _call_imagedetector_unbounded_from_namespace
+from .image_semantic_provider import (
+    _call_glm_image_semantics_unbounded_from_namespace,
+    call_glm_image_semantics_from_namespace,
+)
 from .image_local_analysis import analyze_image_reasonability_from_namespace
 from .image_payloads import _image_to_data_url, _prepare_detector_upload_file
 from .image_reporting import (
@@ -4791,91 +4795,23 @@ def _call_imagedetector_unbounded(image_path: str, timeout=60):
 
 
 def call_glm_image_semantics(image_path: str, timeout=45, api_key=None, model=None):
-    """Use the configured image semantic model to flag visual reasonability risks."""
-    api_key = api_key or GLM_API_KEY
-    model = model or GLM_VISION_MODEL
-
-    def _call():
-        return _call_glm_image_semantics_unbounded(image_path, timeout=timeout, api_key=api_key, model=model)
-
-    return _run_with_alarm_timeout(_call, timeout, lambda: _glm_timeout_result(model, timeout))
+    return call_glm_image_semantics_from_namespace(
+        globals(),
+        image_path,
+        timeout=timeout,
+        api_key=api_key,
+        model=model,
+    )
 
 
 def _call_glm_image_semantics_unbounded(image_path: str, timeout=45, api_key=None, model=None):
-    """Unbounded implementation; call through call_glm_image_semantics in orchestration."""
-    path = Path(image_path)
-    if not api_key:
-        return {
-            "status": "skipped",
-            "model": model,
-            "summary": "图像语义分析API Key未配置，已跳过图像语义分析。",
-            "risks": ["glm_key_missing"],
-            "confidence": 0,
-        }
-    try:
-        if path.exists() and path.stat().st_size > GLM_IMAGE_MAX_BYTES:
-            return {
-                "status": "skipped",
-                "model": model,
-                "summary": "图片超过图像语义分析的本地压缩前安全上限，已跳过。",
-                "reasonability": "需人工核对",
-                "risks": ["glm_image_too_large"],
-                "manual_checks": ["人工核对该图原图、图注和正文结论是否一致。"],
-                "confidence": 0,
-            }
-    except Exception:
-        pass
-
-    prompt = (
-        "你是科研论文图像审查助手。请只基于这张图片本身做语义理解与合理性审查。"
-        "不要输出推理过程、解释、Markdown或代码块；只返回一个合法JSON对象。"
-        "不要把低分辨率、OCR错误、压缩噪声、表格截断或排版问题直接当作造假证据。"
-        "如果图片是表格/局部截图，请重点说明可读内容和截断风险。"
-        "reasonability字段必须严格取值为：合理、需人工核对、可疑。"
-        "请返回严格JSON："
-        "{\"summary\":\"一句话描述图片内容\","
-        "\"image_type\":\"图/表/显微图/热图/流程图/照片/其他\","
-        "\"scientific_context\":\"可能对应的科研用途\","
-        "\"visible_text\":\"能读出的关键文字，读不出写空字符串\","
-        "\"reasonability\":\"合理/需人工核对/可疑\","
-        "\"risks\":[\"可疑点短语\"],"
-        "\"manual_checks\":[\"建议人工核对事项\"],"
-        "\"confidence\":0到1}"
+    return _call_glm_image_semantics_unbounded_from_namespace(
+        globals(),
+        image_path,
+        timeout=timeout,
+        api_key=api_key,
+        model=model,
     )
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": _image_to_data_url(image_path)}},
-                ],
-            }
-        ],
-        "temperature": 0.1,
-        "max_tokens": 10000,
-    }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    try:
-        data, _ = _http_request(_chat_completions_endpoint(GLM_API_URL), "POST", headers=headers, data=json.dumps(payload).encode("utf-8"), timeout=timeout)
-        result = json.loads(data.decode("utf-8", errors="replace"))
-        message = ((result.get("choices") or [{}])[0].get("message") or {})
-        content = (
-            message.get("content")
-            or message.get("reasoning_content")
-            or message.get("reasoning")
-            or ""
-        ).strip()
-        parsed = _extract_json_object(content)
-        if not isinstance(parsed, dict):
-            parsed = {"summary": _brief_text(content, 260), "risks": ["glm_json_parse_failed"], "confidence": 0}
-        return _normalize_glm_image_result(parsed, model)
-    except Exception as e:
-        return _glm_error_result(e, model)
 
 
 def build_image_audit(
