@@ -244,15 +244,9 @@ def dropped_local_path_from_uri_text(text):
     return ""
 
 
-def render_web_runner_page():
-    return """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Veritas Web Runner</title>
-<style>
-:root { color-scheme: light; --bg:#f5f5f3; --panel:#ffffff; --line:#d8d8d3; --text:#191919; --muted:#6a6a64; --accent:#155e75; --danger:#b42318; --ok:#237a4b; --warn:#9a5b00; --soft:#f0f7f8; }
+def web_runner_page_styles():
+    """Return the static CSS used by the local Web Runner page."""
+    return """:root { color-scheme: light; --bg:#f5f5f3; --panel:#ffffff; --line:#d8d8d3; --text:#191919; --muted:#6a6a64; --accent:#155e75; --danger:#b42318; --ok:#237a4b; --warn:#9a5b00; --soft:#f0f7f8; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif; font-size:14px; letter-spacing:0; }
 header { height:54px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; }
@@ -311,7 +305,18 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 .feedback { min-height:34px; border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:10px; background:#fbfbfa; color:#2f2f2c; overflow-wrap:anywhere; }
 .feedback.failed { border-color:#e3aaa5; color:var(--danger); background:#fff7f6; }
 .feedback.succeeded { border-color:#9bc7ad; color:var(--ok); background:#f3faf6; }
-@media (max-width:900px) { main { grid-template-columns:1fr; padding:10px; } header { padding:0 12px; } #log { height:320px; } .hero-strip, .report-grid { grid-template-columns:1fr; } }
+@media (max-width:900px) { main { grid-template-columns:1fr; padding:10px; } header { padding:0 12px; } #log { height:320px; } .hero-strip, .report-grid { grid-template-columns:1fr; } }"""
+
+
+def render_web_runner_page():
+    return """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veritas Web Runner</title>
+<style>
+""" + web_runner_page_styles() + """
 </style>
 </head>
 <body>
@@ -734,6 +739,7 @@ __all__ = [
     "web_runner_start_command_from_namespace",
     "pick_local_path",
     "dropped_local_path_from_uri_text",
+    "web_runner_page_styles",
     "render_web_runner_page",
     "web_runner_cors_headers",
 ]

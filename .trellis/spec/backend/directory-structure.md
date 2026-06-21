@@ -377,7 +377,7 @@ tests/
 - `veritas/web_runner.py` owns local Web Runner helper functions that do not
   require the `WebRunnerState` class: run timestamps/ids, history paths, safe
   run serialization, artifact summary extraction, local CORS headers, local
-  path picking, dropped file URI parsing, static Web Runner workbench HTML
+  path picking, dropped file URI parsing, static Web Runner workbench CSS/HTML
   rendering, Web Runner audit subprocess command preparation, and
   namespace-aware config/default-output helpers.
   `veritas.legacy` may keep `WebRunnerState` and wrap namespace-aware helpers

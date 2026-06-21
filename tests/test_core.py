@@ -1886,6 +1886,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.web_runner._web_runner_report_summary_from_payload is paper_audit._web_runner_report_summary_from_payload
     assert veritas.web_runner.pick_local_path is paper_audit.pick_local_path
     assert veritas.web_runner.dropped_local_path_from_uri_text is paper_audit.dropped_local_path_from_uri_text
+    assert veritas.web_runner.web_runner_page_styles is paper_audit.web_runner_page_styles
     assert veritas.web_runner.render_web_runner_page is paper_audit.render_web_runner_page
     assert veritas.web_runner.web_runner_cors_headers is paper_audit.web_runner_cors_headers
     assert callable(veritas.web_runner.web_runner_default_output_stem_from_namespace)
@@ -5107,6 +5108,9 @@ def test_web_runner_page_contains_workbench_controls():
     rendered = paper_audit.render_web_runner_page()
 
     assert "Veritas Web Runner" in rendered
+    assert paper_audit.web_runner_page_styles() in rendered
+    assert ".drop-zone.dragover" in paper_audit.web_runner_page_styles()
+    assert "@media (max-width:900px)" in paper_audit.web_runner_page_styles()
     assert 'id="inputDropZone"' in rendered
     assert 'id="inputPath"' in rendered
     assert 'id="pickFileBtn"' in rendered
