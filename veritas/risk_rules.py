@@ -78,8 +78,7 @@ def apply_risk_rules(report: Dict[str, Any], stat_result=None, image_audit=None)
     return report
 
 
-def merge_chunk_reports(reports, stat_result=None):
-    """Merge chunk reports, deduplicate findings, and recalculate final risk."""
+def _collect_chunk_checks(reports):
     all_checks = []
     for index, report in enumerate(reports):
         if report.get("parse_error"):
@@ -96,6 +95,12 @@ def merge_chunk_reports(reports, stat_result=None):
             else:
                 candidate["_source_chunks"] = [index + 1]
                 all_checks.append(candidate)
+    return all_checks
+
+
+def merge_chunk_reports(reports, stat_result=None):
+    """Merge chunk reports, deduplicate findings, and recalculate final risk."""
+    all_checks = _collect_chunk_checks(reports)
 
     all_checks = _downgrade_unverified_future_publication_checks(all_checks, current_year=runtime_utc_year())
     all_checks = _downgrade_extraction_red_flags(all_checks)

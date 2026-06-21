@@ -4043,6 +4043,25 @@ def test_merge_chunk_reports_keeps_more_severe_duplicate_verdict():
     assert merged["checks"][0]["verdict"] == "🚩红旗"
 
 
+def test_collect_chunk_checks_skips_parse_errors_and_merges_duplicates():
+    reports = [
+        {"parse_error": True, "checks": [{"category": "跳过", "item": "skip", "verdict": "🚩红旗"}]},
+        {
+            "checks": [
+                {"category": "数据", "item": "样本量", "verdict": "⚠️疑点", "source_text": "n=42"},
+                "bad",
+            ]
+        },
+        {"checks": [{"category": "数据", "item": "样本量", "verdict": "🚩红旗", "source_text": "n=24"}]},
+    ]
+
+    checks = veritas.risk_rules._collect_chunk_checks(reports)
+
+    assert len(checks) == 1
+    assert checks[0]["verdict"] == "🚩红旗"
+    assert checks[0]["_source_chunks"] == [2, 3]
+
+
 def test_merge_chunk_reports_consolidates_similar_findings():
     reports = [
         {
