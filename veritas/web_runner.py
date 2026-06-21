@@ -645,35 +645,9 @@ function renderRun(run) {
 }"""
 
 
-def render_web_runner_page():
-    return web_runner_page_head_markup() + web_runner_page_body_markup() + web_runner_page_script_markup("""
-const $ = (id) => document.getElementById(id);
-let activeRunId = null;
-let logOffset = 0;
-let timer = null;
-let selectedInputKind = '';
-let lastRun = null;
-async function api(path, options={}) {
-  const res = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...options});
-  const data = await res.json();
-  if (!res.ok) throw data;
-  return data;
-}
-function setStatus(text, cls='') {
-  const el = $('runStatus');
-  el.className = 'status ' + cls;
-  el.textContent = text;
-}
-function setFeedback(text, cls='') {
-  const el = $('runFeedback');
-  if (!el) return;
-  el.className = 'feedback ' + cls;
-  el.textContent = text || '选择输入后点击 Start，生成的报告会在这里显示。';
-}
-""" + web_runner_page_path_script() + """
-""" + web_runner_page_input_script() + """
-""" + web_runner_page_report_script() + """
-async function startRunWithPayload(payload) {
+def web_runner_page_run_script():
+    """Return run start, config refresh, and log polling JavaScript."""
+    return """async function startRunWithPayload(payload) {
   $('log').textContent = '';
   logOffset = 0;
   try {
@@ -744,7 +718,38 @@ async function pollLogs() {
   } catch (e) {
     setStatus(e.error || 'error', 'failed');
   }
+}"""
+
+
+def render_web_runner_page():
+    return web_runner_page_head_markup() + web_runner_page_body_markup() + web_runner_page_script_markup("""
+const $ = (id) => document.getElementById(id);
+let activeRunId = null;
+let logOffset = 0;
+let timer = null;
+let selectedInputKind = '';
+let lastRun = null;
+async function api(path, options={}) {
+  const res = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...options});
+  const data = await res.json();
+  if (!res.ok) throw data;
+  return data;
 }
+function setStatus(text, cls='') {
+  const el = $('runStatus');
+  el.className = 'status ' + cls;
+  el.textContent = text;
+}
+function setFeedback(text, cls='') {
+  const el = $('runFeedback');
+  if (!el) return;
+  el.className = 'feedback ' + cls;
+  el.textContent = text || '选择输入后点击 Start，生成的报告会在这里显示。';
+}
+""" + web_runner_page_path_script() + """
+""" + web_runner_page_input_script() + """
+""" + web_runner_page_report_script() + """
+""" + web_runner_page_run_script() + """
 """ + web_runner_page_bootstrap_script())
 
 
@@ -780,6 +785,7 @@ __all__ = [
     "web_runner_page_path_script",
     "web_runner_page_input_script",
     "web_runner_page_report_script",
+    "web_runner_page_run_script",
     "render_web_runner_page",
     "web_runner_cors_headers",
 ]

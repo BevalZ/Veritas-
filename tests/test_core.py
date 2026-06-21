@@ -1894,6 +1894,7 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.web_runner.web_runner_page_path_script is paper_audit.web_runner_page_path_script
     assert veritas.web_runner.web_runner_page_input_script is paper_audit.web_runner_page_input_script
     assert veritas.web_runner.web_runner_page_report_script is paper_audit.web_runner_page_report_script
+    assert veritas.web_runner.web_runner_page_run_script is paper_audit.web_runner_page_run_script
     assert veritas.web_runner.render_web_runner_page is paper_audit.render_web_runner_page
     assert veritas.web_runner.web_runner_cors_headers is paper_audit.web_runner_cors_headers
     assert callable(veritas.web_runner.web_runner_default_output_stem_from_namespace)
@@ -5123,6 +5124,7 @@ def test_web_runner_page_contains_workbench_controls():
     assert paper_audit.web_runner_page_path_script() in rendered
     assert paper_audit.web_runner_page_input_script() in rendered
     assert paper_audit.web_runner_page_report_script() in rendered
+    assert paper_audit.web_runner_page_run_script() in rendered
     assert "startRunWithPayload(startPayloadFromForm())" in paper_audit.web_runner_page_bootstrap_script()
     assert "dropZone.addEventListener" in paper_audit.web_runner_page_bootstrap_script()
     assert "defaultOutputStemForInput" in paper_audit.web_runner_page_path_script()
@@ -5131,6 +5133,8 @@ def test_web_runner_page_contains_workbench_controls():
     assert "chooseLocalPath" in paper_audit.web_runner_page_input_script()
     assert "renderReportPanel" in paper_audit.web_runner_page_report_script()
     assert "artifactLinks" in paper_audit.web_runner_page_report_script()
+    assert "startRunWithPayload" in paper_audit.web_runner_page_run_script()
+    assert "pollLogs" in paper_audit.web_runner_page_run_script()
     assert "custom-css" in paper_audit.web_runner_page_head_markup("custom-css")
     assert ".drop-zone.dragover" in paper_audit.web_runner_page_styles()
     assert "@media (max-width:900px)" in paper_audit.web_runner_page_styles()
