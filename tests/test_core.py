@@ -796,6 +796,105 @@ def test_run_cache_use_manifest_records_versions(tmp_path):
     }
 
 
+def test_image_audit_cache_state_merges_visible_and_resume_semantic_cache(tmp_path):
+    output_dir = tmp_path / "out"
+    resume_dir = output_dir / ".paper_audit_resume"
+    output_dir.mkdir()
+    resume_dir.mkdir()
+    paper_audit._json_save(output_dir / "image_semantic_cache.json", {
+        "visible_only": {"status": "ok"},
+        "shared": {"status": "visible"},
+    })
+    paper_audit._json_save(resume_dir / "image_semantic_cache.json", {
+        "resume_only": {"status": "ok"},
+        "shared": {"status": "resume"},
+    })
+    paper_audit._json_save(resume_dir / "image_detector_cache.json", {
+        "detector": {"status": "ok"},
+    })
+
+    state = paper_audit.image_audit_cache_state(
+        output_dir,
+        resume_dir,
+        no_resume=False,
+        json_load=paper_audit._json_load,
+        load_merged_json_dicts=paper_audit._load_merged_json_dicts,
+    )
+
+    assert state["semantic_cache"] == {
+        "visible_only": {"status": "ok"},
+        "resume_only": {"status": "ok"},
+        "shared": {"status": "resume"},
+    }
+    assert state["detector_cache"] == {"detector": {"status": "ok"}}
+    assert state["semantic_local_path"] == output_dir / "image_semantic_cache.json"
+    assert state["semantic_resume_path"] == resume_dir / "image_semantic_cache.json"
+    assert state["detector_path"] == resume_dir / "image_detector_cache.json"
+
+
+def test_image_audit_cache_state_ignores_existing_files_when_resume_disabled(tmp_path):
+    output_dir = tmp_path / "out"
+    resume_dir = output_dir / ".paper_audit_resume"
+    output_dir.mkdir()
+    resume_dir.mkdir()
+    paper_audit._json_save(output_dir / "image_semantic_cache.json", {"visible": True})
+    paper_audit._json_save(resume_dir / "image_detector_cache.json", {"detector": True})
+
+    state = paper_audit.image_audit_cache_state(
+        output_dir,
+        resume_dir,
+        no_resume=True,
+        json_load=paper_audit._json_load,
+        load_merged_json_dicts=paper_audit._load_merged_json_dicts,
+    )
+
+    assert state["semantic_cache"] == {}
+    assert state["detector_cache"] == {}
+    assert state["no_resume"] is True
+
+
+def test_image_cache_save_callbacks_persist_resume_and_visible_files(tmp_path):
+    output_dir = tmp_path / "out"
+    resume_dir = output_dir / ".paper_audit_resume"
+    state = paper_audit.image_audit_cache_state(
+        output_dir,
+        resume_dir,
+        no_resume=False,
+        json_load=paper_audit._json_load,
+        load_merged_json_dicts=paper_audit._load_merged_json_dicts,
+    )
+    state["semantic_cache"]["image-a"] = {"status": "ok"}
+    state["detector_cache"]["image-b"] = {"status": "ok"}
+
+    semantic_save = paper_audit.image_semantic_cache_save_callback(state, paper_audit._json_save)
+    detector_save = paper_audit.image_detector_cache_save_callback(state, paper_audit._json_save)
+    semantic_save()
+    detector_save()
+
+    assert paper_audit._json_load(output_dir / "image_semantic_cache.json") == {
+        "image-a": {"status": "ok"},
+    }
+    assert paper_audit._json_load(resume_dir / "image_semantic_cache.json") == {
+        "image-a": {"status": "ok"},
+    }
+    assert paper_audit._json_load(resume_dir / "image_detector_cache.json") == {
+        "image-b": {"status": "ok"},
+    }
+
+
+def test_image_cache_save_callbacks_disabled_without_resume(tmp_path):
+    state = paper_audit.image_audit_cache_state(
+        tmp_path / "out",
+        tmp_path / "out" / ".paper_audit_resume",
+        no_resume=True,
+        json_load=paper_audit._json_load,
+        load_merged_json_dicts=paper_audit._load_merged_json_dicts,
+    )
+
+    assert paper_audit.image_semantic_cache_save_callback(state, paper_audit._json_save) is None
+    assert paper_audit.image_detector_cache_save_callback(state, paper_audit._json_save) is None
+
+
 def test_record_preflight_result_persists_workspace_and_resume_event(tmp_path):
     preflight_results = []
     recorded_json = {}
@@ -1270,6 +1369,9 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.run_logging.stage1_extract_cache_state is paper_audit.stage1_extract_cache_state
     assert veritas.run_logging.extract_cache_payload is paper_audit.extract_cache_payload
     assert veritas.run_logging.run_cache_use_manifest is paper_audit.run_cache_use_manifest
+    assert veritas.run_logging.image_audit_cache_state is paper_audit.image_audit_cache_state
+    assert veritas.run_logging.image_semantic_cache_save_callback is paper_audit.image_semantic_cache_save_callback
+    assert veritas.run_logging.image_detector_cache_save_callback is paper_audit.image_detector_cache_save_callback
     assert veritas.run_logging.run_input_manifest is paper_audit.run_input_manifest
     assert veritas.run_logging.run_extraction_route is paper_audit.run_extraction_route
     assert veritas.run_logging.run_scope_flags_from_args is paper_audit.run_scope_flags_from_args

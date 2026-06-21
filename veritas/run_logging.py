@@ -18,6 +18,9 @@ __all__ = [
     "stage1_extract_cache_state",
     "extract_cache_payload",
     "run_cache_use_manifest",
+    "image_audit_cache_state",
+    "image_semantic_cache_save_callback",
+    "image_detector_cache_save_callback",
     "run_input_manifest",
     "record_preflight_result",
     "run_extraction_route",
@@ -190,6 +193,52 @@ def run_cache_use_manifest(
         "extract_cache_version": extract_cache_version,
         "image_semantic_cache_version": image_semantic_cache_version,
     }
+
+
+def image_audit_cache_state(output_dir, resume_dir, no_resume, json_load, load_merged_json_dicts):
+    """Build image-audit cache paths and load resume-visible cache state."""
+    output_dir = Path(output_dir)
+    resume_dir = Path(resume_dir)
+    semantic_resume_path = resume_dir / "image_semantic_cache.json"
+    semantic_local_path = output_dir / "image_semantic_cache.json"
+    detector_path = resume_dir / "image_detector_cache.json"
+    if no_resume:
+        semantic_cache = {}
+        detector_cache = {}
+    else:
+        semantic_cache = load_merged_json_dicts(semantic_local_path, semantic_resume_path)
+        detector_cache = json_load(detector_path, {}) or {}
+    return {
+        "no_resume": bool(no_resume),
+        "semantic_resume_path": semantic_resume_path,
+        "semantic_local_path": semantic_local_path,
+        "detector_path": detector_path,
+        "semantic_cache": semantic_cache,
+        "detector_cache": detector_cache,
+    }
+
+
+def image_semantic_cache_save_callback(cache_state, json_save):
+    """Return a callback that saves image semantic cache to resume and visible files."""
+    if not cache_state or cache_state.get("no_resume"):
+        return None
+
+    def save():
+        json_save(cache_state["semantic_resume_path"], cache_state["semantic_cache"])
+        json_save(cache_state["semantic_local_path"], cache_state["semantic_cache"])
+
+    return save
+
+
+def image_detector_cache_save_callback(cache_state, json_save):
+    """Return a callback that saves the image detector resume cache."""
+    if not cache_state or cache_state.get("no_resume"):
+        return None
+
+    def save():
+        json_save(cache_state["detector_path"], cache_state["detector_cache"])
+
+    return save
 
 
 def record_preflight_result(

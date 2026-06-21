@@ -165,6 +165,9 @@ from .run_logging import (
     extract_cache_payload,
     get_output_base,
     get_resume_dir,
+    image_audit_cache_state,
+    image_detector_cache_save_callback,
+    image_semantic_cache_save_callback,
     progress_bar,
     record_preflight_result,
     resume_event,
@@ -4863,26 +4866,18 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             progress_bar(4, 5, "阶段4/5 审查结果合并完成")
 
     # ─── 图像合理性检测：使用MinerU已保存zip中的图片/目录图片生成报告清单 ───
-    image_semantic_cache_path = resume_dir / "image_semantic_cache.json"
-    image_semantic_local_cache_path = output_dir / "image_semantic_cache.json"
-    image_semantic_cache = {} if args.no_resume else _load_merged_json_dicts(
-        image_semantic_local_cache_path,
-        image_semantic_cache_path,
-    )
-    image_detector_cache_path = resume_dir / "image_detector_cache.json"
-    image_detector_cache = {} if args.no_resume else (_json_load(image_detector_cache_path, {}) or {})
+    image_cache_state = image_audit_cache_state(output_dir, resume_dir, args.no_resume, _json_load, _load_merged_json_dicts)
+    image_semantic_cache_path = image_cache_state["semantic_resume_path"]
+    image_semantic_local_cache_path = image_cache_state["semantic_local_path"]
+    image_semantic_cache = image_cache_state["semantic_cache"]
+    image_detector_cache_path = image_cache_state["detector_path"]
+    image_detector_cache = image_cache_state["detector_cache"]
     image_semantic_enabled = not args.no_image_semantic and bool(GLM_API_KEY)
     image_detector_enabled = not args.no_image_detector
     if not args.no_image_semantic and not GLM_API_KEY:
         print("⚠️ 图像语义分析API Key未配置，图像语义分析将跳过；本地合理性检测和imagedetector清单仍会生成")
-    image_semantic_cache_save = None
-    if image_semantic_enabled and not args.no_resume:
-        def image_semantic_cache_save():
-            _json_save(image_semantic_cache_path, image_semantic_cache)
-            _json_save(image_semantic_local_cache_path, image_semantic_cache)
-    image_detector_cache_save = None
-    if image_detector_enabled and not args.no_resume:
-        image_detector_cache_save = lambda: _json_save(image_detector_cache_path, image_detector_cache)
+    image_semantic_cache_save = image_semantic_cache_save_callback(image_cache_state, _json_save) if image_semantic_enabled else None
+    image_detector_cache_save = image_detector_cache_save_callback(image_cache_state, _json_save) if image_detector_enabled else None
     image_audit = build_image_audit(
         str(input_path),
         output_dir=output_dir,
@@ -4899,8 +4894,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
         detector_cache_save=image_detector_cache_save,
     )
     if image_semantic_enabled and not args.no_resume:
-        _json_save(image_semantic_cache_path, image_semantic_cache)
-        _json_save(image_semantic_local_cache_path, image_semantic_cache)
+        image_semantic_cache_save()
         resume_event(
             resume_dir,
             "stage4_image_semantic",
@@ -4909,7 +4903,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             cache=str(image_semantic_cache_path),
         )
     if image_detector_enabled and not args.no_resume:
-        _json_save(image_detector_cache_path, image_detector_cache)
+        image_detector_cache_save()
         resume_event(
             resume_dir,
             "stage4_image_detector",

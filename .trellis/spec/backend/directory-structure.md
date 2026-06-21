@@ -360,10 +360,11 @@ tests/
 - `veritas/run_logging.py` owns local run-output helpers: output base
   selection, tee logging, resume event JSONL writes, progress printing, LLM
   cache-read policy, extraction-cache matching/state normalization/payload
-  construction, run-summary input/route/scope helpers, workspace input and
-  cache-use manifest construction, preflight workspace/resume-event recording,
-  and saved MinerU URL/ZIP artifacts. It should stay filesystem-local and must
-  not call providers.
+  construction, image-audit cache path/state/save-callback construction,
+  run-summary input/route/scope helpers, workspace input and cache-use manifest
+  construction, preflight workspace/resume-event recording, and saved MinerU
+  URL/ZIP artifacts. It should stay filesystem-local and must not call
+  providers.
 - `veritas/text_extraction.py` owns local standard-library text extraction
   fallbacks such as raw PDF stream text extraction. It must not call MinerU,
   LLMs, or network providers.
