@@ -3149,6 +3149,19 @@ def test_call_glm_image_semantics_parses_json_response(monkeypatch, tmp_path):
     assert result["confidence"] == 0.82
 
 
+def test_glm_image_semantic_payload_contains_prompt_and_image_url():
+    payload = veritas.image_semantic_provider._glm_image_semantic_payload("vision-model", "data:image/png;base64,abc")
+
+    assert payload["model"] == "vision-model"
+    assert payload["temperature"] == 0.1
+    assert payload["max_tokens"] == 10000
+    content = payload["messages"][0]["content"]
+    assert content[0]["type"] == "text"
+    assert "只返回一个合法JSON对象" in content[0]["text"]
+    assert "reasonability字段必须严格取值" in content[0]["text"]
+    assert content[1] == {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}}
+
+
 def test_call_glm_image_semantics_reports_rate_limit(monkeypatch, tmp_path):
     image_path = tmp_path / "figure.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)

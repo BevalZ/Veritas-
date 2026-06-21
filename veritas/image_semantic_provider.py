@@ -27,6 +27,42 @@ def _namespace_value(namespace, name, default=None):
     return (namespace or {}).get(name, default)
 
 
+def _glm_image_semantic_prompt():
+    return (
+        "你是科研论文图像审查助手。请只基于这张图片本身做语义理解与合理性审查。"
+        "不要输出推理过程、解释、Markdown或代码块；只返回一个合法JSON对象。"
+        "不要把低分辨率、OCR错误、压缩噪声、表格截断或排版问题直接当作造假证据。"
+        "如果图片是表格/局部截图，请重点说明可读内容和截断风险。"
+        "reasonability字段必须严格取值为：合理、需人工核对、可疑。"
+        "请返回严格JSON："
+        "{\"summary\":\"一句话描述图片内容\","
+        "\"image_type\":\"图/表/显微图/热图/流程图/照片/其他\","
+        "\"scientific_context\":\"可能对应的科研用途\","
+        "\"visible_text\":\"能读出的关键文字，读不出写空字符串\","
+        "\"reasonability\":\"合理/需人工核对/可疑\","
+        "\"risks\":[\"可疑点短语\"],"
+        "\"manual_checks\":[\"建议人工核对事项\"],"
+        "\"confidence\":0到1}"
+    )
+
+
+def _glm_image_semantic_payload(model, image_data_url):
+    return {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _glm_image_semantic_prompt()},
+                    {"type": "image_url", "image_url": {"url": image_data_url}},
+                ],
+            }
+        ],
+        "temperature": 0.1,
+        "max_tokens": 10000,
+    }
+
+
 def call_glm_image_semantics_from_namespace(namespace, image_path: str, timeout=45, api_key=None, model=None):
     """Use the configured image semantic model to flag visual reasonability risks."""
     selected_api_key = api_key or _namespace_value(namespace, "GLM_API_KEY", "")
@@ -83,36 +119,7 @@ def _call_glm_image_semantics_unbounded_from_namespace(namespace, image_path: st
     except Exception:
         pass
 
-    prompt = (
-        "你是科研论文图像审查助手。请只基于这张图片本身做语义理解与合理性审查。"
-        "不要输出推理过程、解释、Markdown或代码块；只返回一个合法JSON对象。"
-        "不要把低分辨率、OCR错误、压缩噪声、表格截断或排版问题直接当作造假证据。"
-        "如果图片是表格/局部截图，请重点说明可读内容和截断风险。"
-        "reasonability字段必须严格取值为：合理、需人工核对、可疑。"
-        "请返回严格JSON："
-        "{\"summary\":\"一句话描述图片内容\","
-        "\"image_type\":\"图/表/显微图/热图/流程图/照片/其他\","
-        "\"scientific_context\":\"可能对应的科研用途\","
-        "\"visible_text\":\"能读出的关键文字，读不出写空字符串\","
-        "\"reasonability\":\"合理/需人工核对/可疑\","
-        "\"risks\":[\"可疑点短语\"],"
-        "\"manual_checks\":[\"建议人工核对事项\"],"
-        "\"confidence\":0到1}"
-    )
-    payload = {
-        "model": selected_model,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": image_to_data_url(image_path)}},
-                ],
-            }
-        ],
-        "temperature": 0.1,
-        "max_tokens": 10000,
-    }
+    payload = _glm_image_semantic_payload(selected_model, image_to_data_url(image_path))
     headers = {
         "Authorization": f"Bearer {selected_api_key}",
         "Content-Type": "application/json",
