@@ -904,6 +904,13 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.risk_rules.apply_risk_rules is paper_audit.apply_risk_rules
     assert veritas.risk_rules.merge_chunk_reports is paper_audit.merge_chunk_reports
     assert veritas.risk_rules.RISK_RULE_VERSION == paper_audit.RISK_RULE_VERSION
+    assert veritas.run_logging.get_output_base is paper_audit.get_output_base
+    assert veritas.run_logging.setup_run_logging is paper_audit.setup_run_logging
+    assert veritas.run_logging.get_resume_dir is paper_audit.get_resume_dir
+    assert veritas.run_logging.resume_event is paper_audit.resume_event
+    assert veritas.run_logging._allow_llm_cache_read is paper_audit._allow_llm_cache_read
+    assert veritas.run_logging.progress_bar is paper_audit.progress_bar
+    assert veritas.run_logging.save_mineru_artifacts is paper_audit.save_mineru_artifacts
     assert veritas.adapter_types.AdapterResult is paper_audit.AdapterResult
     assert veritas.adapters.AdapterResult is paper_audit.AdapterResult
     assert veritas.adapter_types.AuditAdapters is paper_audit.AuditAdapters

@@ -7,7 +7,7 @@
 输入论文文件或目录 → 文本提取 → 本地统计检测 + LLM语义分析 → 输出md/html格式报告
 用法: python paper_audit.py <paper_path> [--mineru] [--max-chars 8000] [--output report.md]
 """
-import re, json, time, argparse, urllib.request, urllib.parse, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, builtins, hashlib, html, base64, io, concurrent.futures, signal, threading, datetime
+import re, json, time, argparse, urllib.request, urllib.parse, zlib, math, collections, os, mimetypes, fnmatch, csv, platform, webbrowser, subprocess, sys, requests, hashlib, html, base64, io, concurrent.futures, signal, threading, datetime
 from pathlib import Path
 from typing import Tuple, Dict, List, Any, Callable
 
@@ -136,6 +136,16 @@ from .evidence_rendering import (
     render_evidence_summary_html,
 )
 from .runtime_metadata import ensure_runtime_meta, runtime_metadata, runtime_utc_year
+from . import run_logging as _run_logging
+from .run_logging import (
+    _allow_llm_cache_read,
+    get_output_base,
+    get_resume_dir,
+    progress_bar,
+    resume_event,
+    save_mineru_artifacts,
+    setup_run_logging,
+)
 from . import risk_rules as _risk_rules
 from .text_utils import _brief_text, _normalize_title, _text_fingerprint, _title_tokens, _token_similarity
 from .models import (
@@ -310,82 +320,6 @@ except Exception:
     pass
 
 
-# ══════════════════════════════════════════════════════════════
-# 运行日志 / 进度条 / 输出目录控制
-# ══════════════════════════════════════════════════════════════
-_ORIGINAL_PRINT = builtins.print
-_RUN_LOG_FILE = None
-_RUN_OUTPUT_DIR = None
-_RUN_OUTPUT_STEM = None
-_RESUME_EVENTS_ENABLED = True
-
-
-def get_output_base(input_path: Path):
-    """返回所有运行产物的基准目录和名称。
-
-    规则：输入文件→文件所在目录；输入目录→该目录本身。
-    """
-    input_path = Path(input_path)
-    if input_path.is_dir():
-        return input_path, input_path.name or "audit_report"
-    return input_path.parent, input_path.stem
-
-
-def setup_run_logging(input_path: Path):
-    """把print同时写到控制台和同目录log文件。"""
-    global _RUN_LOG_FILE, _RUN_OUTPUT_DIR, _RUN_OUTPUT_STEM
-    out_dir, stem = get_output_base(Path(input_path))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    _RUN_OUTPUT_DIR = out_dir
-    _RUN_OUTPUT_STEM = _safe_name(stem)
-    _RUN_LOG_FILE = out_dir / f"{_RUN_OUTPUT_STEM}.paper_audit.log"
-    _RUN_LOG_FILE.write_text(
-        f"Paper Audit Log\nSTART {time.strftime('%F %T')}\nINPUT {Path(input_path)}\nOUTPUT_DIR {out_dir}\n\n",
-        encoding="utf-8"
-    )
-
-    def tee_print(*args, **kwargs):
-        _ORIGINAL_PRINT(*args, **kwargs)
-        try:
-            sep = kwargs.get("sep", " ")
-            end = kwargs.get("end", "\n")
-            msg = sep.join(str(a) for a in args) + end
-            with _RUN_LOG_FILE.open("a", encoding="utf-8", errors="replace") as f:
-                f.write(msg)
-        except Exception:
-            pass
-    builtins.print = tee_print
-    print(f"🧾 日志文件: {_RUN_LOG_FILE}")
-    return _RUN_LOG_FILE
-
-
-def get_resume_dir(output_dir: Path, output_stem: str):
-    """断点续作缓存目录。"""
-    d = Path(output_dir) / f".{_safe_name(output_stem)}.paper_audit_resume"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def resume_event(resume_dir: Path, step: str, status: str, detail: str = "", **extra):
-    """记录可断点续作的步骤清单，同时写入普通log。"""
-    if not _RESUME_EVENTS_ENABLED:
-        return
-    try:
-        event = {"time": time.strftime("%F %T"), "step": step, "status": status, "detail": detail}
-        event.update(extra)
-        manifest = Path(resume_dir) / "resume_manifest.jsonl"
-        manifest.parent.mkdir(parents=True, exist_ok=True)
-        with manifest.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(event, ensure_ascii=False) + "\n")
-        print(f"🧭 断点记录: {step} | {status} | {detail}")
-    except Exception as e:
-        print(f"⚠️ 写入断点记录失败: {e}")
-
-
-def _allow_llm_cache_read(no_resume=False, llm_cache_only=False):
-    return (not bool(no_resume)) or bool(llm_cache_only)
-
-
 # LLM运行参数：由CLI覆盖。默认保守，避免一次请求无限阻塞。
 LLM_TIMEOUT = 45
 LLM_RETRIES = 1
@@ -393,33 +327,6 @@ EXTRACT_CACHE_VERSION = 7
 MIN_IMAGE_BYTES = 5000
 IMAGE_SEMANTIC_CACHE_VERSION = 3
 
-
-def progress_bar(current, total, label="", width=28):
-    """打印一行文本进度条；日志中保留每次更新。"""
-    try:
-        total = max(int(total), 1)
-        current = max(0, min(int(current), total))
-        filled = int(width * current / total)
-        bar = "█" * filled + "░" * (width - filled)
-        pct = current * 100 / total
-        print(f"📊 [{bar}] {current}/{total} {pct:5.1f}% {label}")
-    except Exception:
-        print(f"📊 {current}/{total} {label}")
-
-
-def save_mineru_artifacts(zip_url: str, zip_data: bytes, source_name: str, output_dir=None, batch_id=None):
-    """把MinerU下载链接和zip保存到与输入文件/目录一致的位置。"""
-    out_dir = Path(output_dir) if output_dir else (_RUN_OUTPUT_DIR or Path.cwd())
-    out_dir.mkdir(parents=True, exist_ok=True)
-    stem = _safe_name(Path(source_name).stem if source_name else (batch_id or "mineru"))
-    suffix = f".{_safe_name(batch_id)}" if batch_id else ""
-    link_path = out_dir / f"{stem}{suffix}.mineru_url.txt"
-    zip_path = out_dir / f"{stem}{suffix}.mineru.zip"
-    link_path.write_text(zip_url + "\n", encoding="utf-8")
-    zip_path.write_bytes(zip_data)
-    print(f"  🔗 MinerU下载链接已保存: {link_path}")
-    print(f"  📦 MinerU zip已保存: {zip_path} ({len(zip_data)/1024/1024:.2f}MB)")
-    return zip_path, link_path
 
 # 可选依赖：处理Word/Excel/Supplement文件
 try:
@@ -724,7 +631,7 @@ def mineru_precision_extract_by_url(pdf_url, model_version="vlm", language="ch",
             markdown = _download_zip_and_extract_md(zip_url, output_dir=output_dir, source_name="url_input", batch_id=batch_id)
             if markdown:
                 meta = {"source": "mineru_precision", "batch_id": batch_id,
-                        "zip_url": zip_url, "zip_saved_dir": str(output_dir) if output_dir else str(_RUN_OUTPUT_DIR) if _RUN_OUTPUT_DIR else None,
+                        "zip_url": zip_url, "zip_saved_dir": str(output_dir) if output_dir else str(_run_logging._RUN_OUTPUT_DIR) if _run_logging._RUN_OUTPUT_DIR else None,
                         "model": model_version, "chars": len(markdown)}
                 return markdown, meta
             else:
@@ -835,7 +742,7 @@ def mineru_extract_file(file_path, model_version="vlm", language="ch",
             if markdown:
                 return markdown, {"source": "mineru_v4", "batch_id": batch_id,
                                   "zip_url": zip_url, "model": model_version,
-                                  "zip_saved_dir": str(output_dir) if output_dir else str(_RUN_OUTPUT_DIR) if _RUN_OUTPUT_DIR else None,
+                                  "zip_saved_dir": str(output_dir) if output_dir else str(_run_logging._RUN_OUTPUT_DIR) if _run_logging._RUN_OUTPUT_DIR else None,
                                   "chars": len(markdown)}
             return None, {"error": "下载或解压zip失败", "batch_id": batch_id,
                           "zip_url": zip_url}
@@ -862,7 +769,7 @@ def _download_zip_and_extract_md(zip_url, output_dir=None, source_name=None, bat
             if attempt:
                 print(f"  ↻ MinerU zip下载重试 {attempt}/2...")
             zip_data, _ = _http_request(zip_url, "GET", timeout=180)
-            if output_dir or _RUN_OUTPUT_DIR:
+            if output_dir or _run_logging._RUN_OUTPUT_DIR:
                 save_mineru_artifacts(zip_url, zip_data, source_name or "mineru", output_dir=output_dir, batch_id=batch_id)
             break
         except Exception as e:
@@ -5961,7 +5868,6 @@ def _failed_artifact_options(input_path: Path, output_dir: Path, args) -> Dict[s
 
 
 def run_audit(run_request: RunRequest, args=None) -> RunResult:
-    global _RESUME_EVENTS_ENABLED
     args = args if args is not None else run_request.to_args()
     input_path = run_request.input_path
     if not input_path.exists():
@@ -5984,7 +5890,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
         detail = "; ".join(f"{e['capability']}.{e['field']}" for e in config_errors)
         print(f"⚠️ 关键配置缺失: {detail}。关键能力预检会在对应正式阶段前停止并生成失败诊断。")
     resume_dir = get_resume_dir(output_dir, output_stem)
-    _RESUME_EVENTS_ENABLED = not bool(getattr(args, "no_resume", False))
+    _run_logging._RESUME_EVENTS_ENABLED = not bool(getattr(args, "no_resume", False))
     if getattr(args, "fresh", False):
         import shutil
         print(f"🧹 --fresh: 清空断点续作缓存目录 {resume_dir}")
@@ -6972,7 +6878,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
 
     resume_event(resume_dir, "all", "done", "audit completed")
     progress_bar(5, 5, "阶段5/5 全部完成")
-    print(f"🧾 完整日志: {_RUN_LOG_FILE}")
+    print(f"🧾 完整日志: {_run_logging._RUN_LOG_FILE}")
 
     # 自动打开HTML报告
     if args.no_open:

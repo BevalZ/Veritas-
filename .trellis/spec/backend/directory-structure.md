@@ -52,6 +52,7 @@ veritas/
 ├── risk_rule_helpers.py # Shared risk scoring/merge helpers for rules/rendering
 ├── risk_rules.py       # Versioned final risk scoring boundary
 ├── run.py              # Run request/result and orchestration boundary
+├── run_logging.py      # Run log, progress, resume-event, and MinerU artifact helpers
 ├── text_utils.py       # Shared text shortening and token similarity helpers
 ├── versions.py         # Prompt/schema/adapter/risk-rule version constants
 ├── web_runner.py       # Local Web Runner helper boundary
@@ -232,6 +233,10 @@ tests/
 - `veritas/run.py` exposes the run orchestration boundary without requiring
   callers to import the legacy module directly; the legacy run engine is loaded
   only when `run_audit(...)` is called.
+- `veritas/run_logging.py` owns local run-output helpers: output base
+  selection, tee logging, resume event JSONL writes, progress printing, LLM
+  cache-read policy, and saved MinerU URL/ZIP artifacts. It should stay
+  filesystem-local and must not call providers.
 - `veritas/web_runner.py` owns local Web Runner helper functions that do not
   require the `WebRunnerState` class: run timestamps/ids, history paths, safe
   run serialization, artifact summary extraction, local path picking, dropped
