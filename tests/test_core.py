@@ -4295,6 +4295,23 @@ def test_format_html_suspicious_card_renders_escaped_evidence_summary():
     assert "Mismatch &lt;risk&gt;" in card
 
 
+def test_format_html_check_table_row_escapes_fields_and_uses_summary_renderer():
+    row = veritas.report_html_sections._format_html_check_table_row(
+        3,
+        {"category": "数据<组>", "item": "样本量", "verdict": "⚠️存疑", "source_text": "Methods n=42"},
+        paper_audit._html_escape,
+        lambda verdict: "verdict-warning",
+        lambda check: check.get("source_text", ""),
+        lambda source, limit: f"<em>{paper_audit._html_escape(source)}:{limit}</em>",
+    )
+
+    assert "<td>3</td>" in row
+    assert "数据&lt;组&gt;" in row
+    assert "<td>样本量</td>" in row
+    assert '<span class="verdict-warning">⚠️存疑</span>' in row
+    assert '<td class="evidence-cell"><em>Methods n=42:120</em></td>' in row
+
+
 def test_clipboard_windows_uses_clip_exe_without_shell(monkeypatch):
     calls = []
 

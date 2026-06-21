@@ -69,6 +69,26 @@ def _format_html_suspicious_card(
             </details>"""
 
 
+def _format_html_check_table_row(
+    index,
+    check,
+    html_escape,
+    verdict_class_for,
+    check_source_text,
+    evidence_summary_html,
+):
+    verdict = check.get("verdict", "N/A")
+    verdict_class = verdict_class_for(verdict)
+    return f"""
+            <tr>
+                <td>{index}</td>
+                <td>{html_escape(check.get('category', 'N/A'))}</td>
+                <td>{html_escape(check.get('item', 'N/A'))}</td>
+                <td><span class="{verdict_class}">{html_escape(verdict)}</span></td>
+                <td class="evidence-cell">{evidence_summary_html(check_source_text(check), 120)}</td>
+            </tr>"""
+
+
 def format_html_check_sections_from_namespace(namespace, report):
     """Render LLM check summary/detail sections for the top-level HTML report."""
     html_escape = _namespace_value(namespace, "_html_escape", _html_escape)
@@ -113,16 +133,14 @@ def format_html_check_sections_from_namespace(namespace, report):
 
     checks_table_rows = ""
     for i, c in enumerate(checks, 1):
-        verdict = c.get("verdict", "N/A")
-        verdict_class = verdict_class_for(verdict)
-        checks_table_rows += f"""
-            <tr>
-                <td>{i}</td>
-                <td>{html_escape(c.get('category', 'N/A'))}</td>
-                <td>{html_escape(c.get('item', 'N/A'))}</td>
-                <td><span class="{verdict_class}">{html_escape(verdict)}</span></td>
-                <td class="evidence-cell">{evidence_summary_html(check_source_text(c), 120)}</td>
-            </tr>"""
+        checks_table_rows += _format_html_check_table_row(
+            i,
+            c,
+            html_escape,
+            verdict_class_for,
+            check_source_text,
+            evidence_summary_html,
+        )
 
     detail_cards = ""
     for i, c in enumerate(checks, 1):
