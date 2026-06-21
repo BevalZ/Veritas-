@@ -822,6 +822,12 @@ def test_package_boundaries_export_existing_compatibility_surface():
     assert veritas.report_checks._check_source_tags is paper_audit._check_source_tags
     assert veritas.report_checks._check_reason is paper_audit._check_reason
     assert veritas.report_checks._merged_group_html is paper_audit._merged_group_html
+    assert veritas.review_overview.build_audit_action_items is paper_audit.build_audit_action_items
+    assert veritas.review_overview.format_audit_action_summary_html is paper_audit.format_audit_action_summary_html
+    assert veritas.review_overview.format_audit_action_summary_markdown is paper_audit.format_audit_action_summary_markdown
+    assert veritas.review_overview.build_review_overview is paper_audit.build_review_overview
+    assert veritas.review_overview.format_review_overview_html is paper_audit.format_review_overview_html
+    assert veritas.review_overview.format_review_overview_markdown is paper_audit.format_review_overview_markdown
     assert veritas.evidence_chain.build_evidence_chain_audit is paper_audit.build_evidence_chain_audit
     assert veritas.evidence_chain._build_evidence_clusters is paper_audit._build_evidence_clusters
     assert veritas.evidence_chain.format_evidence_chain_audit_html is paper_audit.format_evidence_chain_audit_html
