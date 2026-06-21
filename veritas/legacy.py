@@ -2849,6 +2849,20 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             resume_event,
         )
 
+    def _fail_run(failure, diagnostics_meta=None, workspace_meta=None, result_meta=None):
+        return save_failed_run_result(
+            failure,
+            input_path,
+            run_workspace,
+            save_failed_audit_diagnostics,
+            record_run_workspace_artifacts,
+            completed_stages=completed_stages,
+            failed_artifact_kwargs=failed_artifact_kwargs,
+            diagnostics_meta=diagnostics_meta,
+            workspace_meta=workspace_meta,
+            result_meta=result_meta,
+        )
+
     if use_mineru_default:
         print("🧪 关键能力预检: MinerU")
         mineru_preflight = run_preflight_once(preflight_state, "mineru", lambda: preflight_mineru(timeout=10))
@@ -2859,14 +2873,8 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                 retry_command,
                 completed_stages,
             )
-            failed_result = save_failed_run_result(
+            failed_result = _fail_run(
                 failure,
-                input_path,
-                run_workspace,
-                save_failed_audit_diagnostics,
-                record_run_workspace_artifacts,
-                completed_stages=completed_stages,
-                failed_artifact_kwargs=failed_artifact_kwargs,
                 diagnostics_meta={"preflight_results": preflight_results},
                 workspace_meta={"preflight_results": preflight_results},
                 result_meta={"preflight_results": preflight_results},
@@ -2948,14 +2956,8 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                         "resume_dir": str(resume_dir),
                     },
                 )
-                return save_failed_run_result(
+                return _fail_run(
                     failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
                     diagnostics_meta={"runtime": run_runtime, "preflight_results": preflight_results},
                 )
             file_content = extract_text_from_file(file_path, max_chars_per_file=None,
@@ -2979,14 +2981,8 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                         "resume_dir": str(resume_dir),
                     },
                 )
-                return save_failed_run_result(
+                return _fail_run(
                     failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
                     diagnostics_meta={"runtime": run_runtime, "preflight_results": preflight_results},
                 )
             try:
@@ -3022,14 +3018,8 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                         "resume_dir": str(resume_dir),
                     },
                 )
-                return save_failed_run_result(
+                return _fail_run(
                     failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
                     diagnostics_meta={"runtime": run_runtime, "preflight_results": preflight_results},
                 )
             reference_content = extract_text_from_file(file_path, max_chars_per_file=None,
@@ -3046,14 +3036,8 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     retry_command=retry_command,
                     details={"file": str(file_path), "extension": file_path.suffix.lower(), "resume_dir": str(resume_dir)},
                 )
-                return save_failed_run_result(
+                return _fail_run(
                     failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
                     diagnostics_meta={"runtime": run_runtime, "preflight_results": preflight_results},
                 )
             reference_file_texts.append(reference_content)
@@ -3105,15 +3089,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                 completed_stages=completed_stages,
                 retry_command=retry_command,
             )
-            return save_failed_run_result(
-                failure,
-                input_path,
-                run_workspace,
-                save_failed_audit_diagnostics,
-                record_run_workspace_artifacts,
-                completed_stages=completed_stages,
-                failed_artifact_kwargs=failed_artifact_kwargs,
-            )
+            return _fail_run(failure)
 
         if single_suffix != ".pdf":
             missing_dependency = (
@@ -3132,15 +3108,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     retry_command=retry_command,
                     details={"dependency": dependency, "install_command": install_command, "resume_dir": str(resume_dir)},
                 )
-                return save_failed_run_result(
-                    failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
-                )
+                return _fail_run(failure)
             print(f"📖 正在提取{single_suffix}文件文本: {pdf_path}")
             full_text = extract_text_from_file(
                 pdf_path,
@@ -3159,15 +3127,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     completed_stages=completed_stages,
                     retry_command=retry_command,
                 )
-                return save_failed_run_result(
-                    failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
-                )
+                return _fail_run(failure)
             meta = {
                 "input_type": "file",
                 "source_file": pdf_path.name,
@@ -3231,15 +3191,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     completed_stages=completed_stages,
                     retry_command=retry_command,
                 )
-                return save_failed_run_result(
-                    failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
-                )
+                return _fail_run(failure)
             print(f"✅ 提取完成: {meta['total_chars']} 字符（全文保留）")
             extracted_file_texts = [{
                 "file": pdf_path.name,
@@ -3350,14 +3302,8 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             retry_command,
             completed_stages,
         )
-        failed_result = save_failed_run_result(
+        failed_result = _fail_run(
             failure,
-            input_path,
-            run_workspace,
-            save_failed_audit_diagnostics,
-            record_run_workspace_artifacts,
-            completed_stages=completed_stages,
-            failed_artifact_kwargs=failed_artifact_kwargs,
             diagnostics_meta=meta,
             workspace_meta={"preflight_results": preflight_results},
             result_meta={"preflight_results": preflight_results},
@@ -3417,16 +3363,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     retry_command=retry_command,
                     details={"raw_error": str(e), "chunk": "1/1"},
                 )
-                return save_failed_run_result(
-                    failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
-                    diagnostics_meta=meta,
-                )
+                return _fail_run(failure, diagnostics_meta=meta)
     else:
         # 长论文：分块审查 + 合并
         print(f"🔍 论文较长({len(audit_text)}字符，已排除参考文献)，分为{total_chunks}块(每块≤{chunk_size}字符，重叠{overlap}字符)进行审查...")
@@ -3526,16 +3463,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                     retry_command=retry_command,
                     details={"failed_chunks": failure_summary["failed_chunks"], "detail": failure_summary["detail"]},
                 )
-                return save_failed_run_result(
-                    failure,
-                    input_path,
-                    run_workspace,
-                    save_failed_audit_diagnostics,
-                    record_run_workspace_artifacts,
-                    completed_stages=completed_stages,
-                    failed_artifact_kwargs=failed_artifact_kwargs,
-                    diagnostics_meta=meta,
-                )
+                return _fail_run(failure, diagnostics_meta=meta)
             else:
                 resume_event(resume_dir, "stage3_llm_retry", "done", "all failed chunks recovered")
 
@@ -3552,16 +3480,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
                 retry_command=retry_command,
                 details=failure_summary["details"],
             )
-            return save_failed_run_result(
-                failure,
-                input_path,
-                run_workspace,
-                save_failed_audit_diagnostics,
-                record_run_workspace_artifacts,
-                completed_stages=completed_stages,
-                failed_artifact_kwargs=failed_artifact_kwargs,
-                diagnostics_meta=meta,
-            )
+            return _fail_run(failure, diagnostics_meta=meta)
         else:
 
             progress_bar(3, 5, "阶段3/5 LLM审查完成")
@@ -3642,16 +3561,7 @@ def run_audit(run_request: RunRequest, args=None) -> RunResult:
             retry_command=retry_command,
             details=failed_details,
         )
-        return save_failed_run_result(
-            failure,
-            input_path,
-            run_workspace,
-            save_failed_audit_diagnostics,
-            record_run_workspace_artifacts,
-            completed_stages=completed_stages,
-            failed_artifact_kwargs=failed_artifact_kwargs,
-            diagnostics_meta=meta,
-        )
+        return _fail_run(failure, diagnostics_meta=meta)
     report = apply_risk_rules(report, stat_result=stat_result, image_audit=meta.get("image_audit"))
     meta["risk_rule_version"] = RISK_RULE_VERSION
     meta["evidence_chain_audit"] = build_evidence_chain_audit(
