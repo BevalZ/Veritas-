@@ -51,6 +51,7 @@ veritas/
 ├── preflight.py        # Critical capability preflight boundary
 ├── project_files.py    # Project file discovery and run metadata helpers
 ├── reference_audit.py  # Reference plausibility audit orchestration
+├── reference_online.py # Crossref/OpenAlex/PubMed/official-site reference lookups
 ├── reference_parsing.py # Reference section parsing and query-building helpers
 ├── reference_reporting.py # Reference audit Markdown/HTML rendering helpers
 ├── renderers.py        # Markdown/HTML renderer boundary
@@ -221,6 +222,12 @@ tests/
   compatibility wrappers live in `veritas.legacy`, so tests and user scripts can
   still monkeypatch parsers, online lookup, cache keys, runtime clock, and text
   shortening.
+- `veritas/reference_online.py` owns Crossref, OpenAlex, PubMed, DOI landing
+  page, and official publisher-site network lookups plus multi-source online
+  verification status selection. It should stay namespace-aware while
+  compatibility wrappers live in `veritas.legacy`, so tests and user scripts can
+  still monkeypatch `_http_request`, `_reference_get_json`, lookup functions,
+  query builders, and match scoring.
 - `veritas/cross_file_consistency.py` owns deterministic cross-file text
   segmentation, sample-size/group-label/supplement-reference consistency
   findings, and Markdown/HTML rendering for the cross-file audit section. It
